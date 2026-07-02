@@ -31,10 +31,12 @@ class ClipController extends ChangeNotifier with ClipboardListener {
   WebSocketClipStore? _store;
   StreamSubscription? _historySub;
   StreamSubscription? _incomingSub;
+  StreamSubscription? _connectedSub;
   bool _watching = false;
 
   List<HistoryItem> history = const [];
   bool ready = false;
+  bool connected = false;
 
   bool get isDesktop =>
       defaultTargetPlatform == TargetPlatform.macOS ||
@@ -66,6 +68,11 @@ class ClipController extends ChangeNotifier with ClipboardListener {
         // OfferRestore is intentionally not auto-applied.
       }
     });
+    _connectedSub = _store!.connected.listen((up) {
+      connected = up;
+      notifyListeners();
+    });
+    connected = _store!.isConnected; // catch the initial state
 
     if (isDesktop) {
       clipboardWatcher.addListener(this);
@@ -110,6 +117,7 @@ class ClipController extends ChangeNotifier with ClipboardListener {
     }
     _historySub?.cancel();
     _incomingSub?.cancel();
+    _connectedSub?.cancel();
     _store?.close();
     super.dispose();
   }

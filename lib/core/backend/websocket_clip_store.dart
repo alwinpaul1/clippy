@@ -1,47 +1,48 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:web_socket_channel/web_socket_channel.dart';
-
 import '../models/encrypted_clip.dart';
 import '../models/remote_clip.dart';
+import 'relay_transport.dart';
 
 /// Client for the Clippy relay. Joins a room, keeps the room's clip history in
-/// order, and streams incoming clips. The relay routes only E2E-encrypted
-/// payloads by opaque room token, so this class never handles plaintext.
+/// order, streams incoming clips, and **auto-reconnects** with exponential
+/// backoff (re-joining and refreshing history on each reconnect). The relay
+/// routes only E2E-encrypted payloads by opaque room token, so this class never
+/// handles plaintext.
 ///
-/// The primary constructor takes an injected message channel so it is unit
-/// testable without a socket; [WebSocketClipStore.connect] wires it to a real
-/// WebSocket.
+/// The transport is injected as a factory so it is unit-testable without a
+/// socket; [WebSocketClipStore.connect] wires it to a real WebSocket.
 class WebSocketClipStore {
-  final void Function(String) _send;
-  final Future<void> Function()? _closer;
+  static const _minBackoffMs = 500;
+  static const _maxBackoffMs = 15000;
+
+  final String roomToken;
+  final RelayTransport Function() _transportFactory;
+
+  RelayTransport? _transport;
+  StreamSubscription<String>? _sub;
+  bool _closed = false;
+  int _backoffMs = _minBackoffMs;
 
   final List<RemoteClip> _history = [];
   final _historyController = StreamController<List<RemoteClip>>.broadcast();
   final _incomingController = StreamController<RemoteClip>.broadcast();
-  late final StreamSubscription<String> _sub;
+  final _connectedController = StreamController<bool>.broadcast();
+  bool _connected = false;
 
   WebSocketClipStore({
-    required Stream<String> incoming,
-    required void Function(String) send,
-    required String roomToken,
-    Future<void> Function()? closer,
-  })  : _send = send,
-        _closer = closer {
-    _sub = incoming.listen(_onMessage, cancelOnError: false);
-    _send(jsonEncode({'type': 'join', 'room': roomToken}));
+    required this.roomToken,
+    required RelayTransport Function() transportFactory,
+  }) : _transportFactory = transportFactory {
+    _open();
   }
 
-  factory WebSocketClipStore.connect(Uri url, String roomToken) {
-    final channel = WebSocketChannel.connect(url);
-    return WebSocketClipStore(
-      incoming: channel.stream.map((d) => d as String),
-      send: channel.sink.add,
-      roomToken: roomToken,
-      closer: () => channel.sink.close(),
-    );
-  }
+  factory WebSocketClipStore.connect(Uri url, String roomToken) =>
+      WebSocketClipStore(
+        roomToken: roomToken,
+        transportFactory: () => WebSocketRelayTransport(url),
+      );
 
   /// The full ordered room history, re-emitted whenever it changes.
   Stream<List<RemoteClip>> get history => _historyController.stream;
@@ -49,10 +50,44 @@ class WebSocketClipStore {
   /// Each clip as it arrives (newest), for the SyncEngine's apply decision.
   Stream<RemoteClip> get incoming => _incomingController.stream;
 
+  /// Connection status changes (true = connected, false = reconnecting).
+  Stream<bool> get connected => _connectedController.stream;
+  bool get isConnected => _connected;
+
   /// The current history snapshot.
   List<RemoteClip> get current => List.unmodifiable(_history);
 
+  void _open() {
+    final transport = _transportFactory();
+    _transport = transport;
+    _sub = transport.messages.listen(
+      _onMessage,
+      onDone: _onDrop,
+      onError: (_) => _onDrop(),
+      cancelOnError: true,
+    );
+    transport.send(jsonEncode({'type': 'join', 'room': roomToken}));
+    _setConnected(true);
+  }
+
+  void _onDrop() {
+    _sub?.cancel();
+    if (_closed) return;
+    _setConnected(false);
+    final delay = _backoffMs;
+    _backoffMs = (_backoffMs * 2).clamp(_minBackoffMs, _maxBackoffMs);
+    Timer(Duration(milliseconds: delay), () {
+      if (!_closed) _open();
+    });
+  }
+
+  void _setConnected(bool value) {
+    _connected = value;
+    if (!_connectedController.isClosed) _connectedController.add(value);
+  }
+
   void _onMessage(String raw) {
+    _backoffMs = _minBackoffMs; // healthy traffic resets backoff
     Map<String, dynamic> msg;
     try {
       msg = jsonDecode(raw) as Map<String, dynamic>;
@@ -83,17 +118,22 @@ class WebSocketClipStore {
     );
   }
 
-  void _emitHistory() =>
+  void _emitHistory() {
+    if (!_historyController.isClosed) {
       _historyController.add(List.unmodifiable(_history));
+    }
+  }
 
   /// Send a sealed clip to the room.
   Future<void> append(EncryptedClip clip) async =>
-      _send(jsonEncode({'type': 'clip', 'clip': clip.toMap()}));
+      _transport?.send(jsonEncode({'type': 'clip', 'clip': clip.toMap()}));
 
   Future<void> close() async {
-    await _sub.cancel();
-    await _closer?.call();
+    _closed = true;
+    await _sub?.cancel();
+    await _transport?.close();
     await _historyController.close();
     await _incomingController.close();
+    await _connectedController.close();
   }
 }

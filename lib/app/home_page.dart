@@ -78,7 +78,9 @@ class HomePage extends StatelessWidget {
           }
           return Column(
             children: [
-              _StatusBanner(isDesktop: controller.isDesktop),
+              _StatusBanner(
+                  isDesktop: controller.isDesktop,
+                  connected: controller.connected),
               const Divider(height: 1),
               Expanded(
                 child: controller.history.isEmpty
@@ -127,23 +129,30 @@ class HomePage extends StatelessWidget {
 
 class _StatusBanner extends StatelessWidget {
   final bool isDesktop;
-  const _StatusBanner({required this.isDesktop});
+  final bool connected;
+  const _StatusBanner({required this.isDesktop, required this.connected});
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final reconnecting = !connected;
     return Container(
       width: double.infinity,
-      color: Theme.of(context).colorScheme.primaryContainer,
+      color: reconnecting
+          ? scheme.errorContainer
+          : scheme.primaryContainer,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          const Icon(Icons.sync, size: 18),
+          Icon(reconnecting ? Icons.cloud_off : Icons.sync, size: 18),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              isDesktop
-                  ? 'Auto-syncing — anything you copy here appears on your other devices.'
-                  : 'Synced. Incoming clips land on your clipboard; add one below to send.',
+              reconnecting
+                  ? 'Reconnecting…'
+                  : isDesktop
+                      ? 'Auto-syncing — anything you copy here appears on your other devices.'
+                      : 'Synced. Incoming clips land on your clipboard; add one below to send.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),

@@ -1,18 +1,43 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:clippy/core/backend/relay_transport.dart';
 import 'package:clippy/core/backend/websocket_clip_store.dart';
 import 'package:clippy/core/models/encrypted_clip.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// Controllable in-memory transport for tests.
+class FakeTransport implements RelayTransport {
+  final _controller = StreamController<String>();
+  final List<String> sent = [];
+  bool closed = false;
+
+  @override
+  Stream<String> get messages => _controller.stream;
+
+  @override
+  void send(String message) => sent.add(message);
+
+  @override
+  Future<void> close() async {
+    closed = true;
+    if (!_controller.isClosed) await _controller.close();
+  }
+
+  void emit(String message) => _controller.add(message);
+  void drop() => _controller.close(); // fires onDone → triggers reconnect
+}
+
 void main() {
-  late StreamController<String> incoming;
-  late List<String> sent;
+  late List<FakeTransport> transports;
 
   WebSocketClipStore build() => WebSocketClipStore(
-        incoming: incoming.stream,
-        send: sent.add,
         roomToken: 'ROOM',
+        transportFactory: () {
+          final t = FakeTransport();
+          transports.add(t);
+          return t;
+        },
       );
 
   String historyMsg(List<String> texts) => jsonEncode({
@@ -40,21 +65,18 @@ void main() {
         },
       });
 
-  setUp(() {
-    incoming = StreamController<String>();
-    sent = [];
-  });
+  setUp(() => transports = []);
 
   test('sends a join with the room token on construction', () {
     build();
-    expect(sent, hasLength(1));
-    expect(jsonDecode(sent.single), {'type': 'join', 'room': 'ROOM'});
+    expect(transports, hasLength(1));
+    expect(jsonDecode(transports[0].sent.single), {'type': 'join', 'room': 'ROOM'});
   });
 
   test('a history message becomes an ordered history snapshot', () async {
     final store = build();
     final future = store.history.first;
-    incoming.add(historyMsg(['a', 'b']));
+    transports[0].emit(historyMsg(['a', 'b']));
     final snapshot = await future;
     expect(snapshot.map((c) => c.ciphertext).toList(), ['enc:a', 'enc:b']);
     expect(snapshot.first.timestamp, DateTime.utc(2026, 7, 2));
@@ -66,31 +88,45 @@ void main() {
     final incomingFuture = store.incoming.first;
     final historyFuture =
         store.history.firstWhere((h) => h.any((c) => c.hash == 'h:new'));
-    incoming.add(clipMsg('new'));
-    final clip = await incomingFuture;
-    expect(clip.ciphertext, 'enc:new');
-    final h = await historyFuture;
-    expect(h.last.ciphertext, 'enc:new');
+    transports[0].emit(clipMsg('new'));
+    expect((await incomingFuture).ciphertext, 'enc:new');
+    expect((await historyFuture).last.ciphertext, 'enc:new');
   });
 
   test('a clip with the same hash as the newest is not double-added', () async {
     final store = build();
-    incoming.add(historyMsg(['dup']));
+    transports[0].emit(historyMsg(['dup']));
     await store.history.first;
-    incoming.add(clipMsg('dup')); // same hash as newest
-    // Give the event loop a turn.
+    transports[0].emit(clipMsg('dup'));
     await Future<void>.delayed(Duration.zero);
     expect(store.current.where((c) => c.hash == 'h:dup').length, 1);
   });
 
   test('append sends a clip frame carrying the sealed payload', () async {
     final store = build();
-    sent.clear();
+    transports[0].sent.clear();
     await store.append(const EncryptedClip(
         ciphertext: 'enc:x', iv: 'iv', hash: 'h:x', source: 'me'));
-    expect(jsonDecode(sent.single), {
+    expect(jsonDecode(transports[0].sent.single), {
       'type': 'clip',
       'clip': {'ciphertext': 'enc:x', 'iv': 'iv', 'hash': 'h:x', 'source': 'me'},
     });
+  });
+
+  test('reconnects and rejoins after the transport drops', () async {
+    final store = build();
+    expect(transports, hasLength(1));
+    final drops = <bool>[];
+    store.connected.listen(drops.add);
+
+    transports[0].drop(); // connection lost
+    // Wait past the minimum backoff (500ms).
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+
+    expect(transports, hasLength(2), reason: 'should have reconnected');
+    expect(jsonDecode(transports[1].sent.single)['type'], 'join',
+        reason: 'should rejoin the room');
+    expect(drops, contains(false), reason: 'should report disconnect');
+    await store.close();
   });
 }
