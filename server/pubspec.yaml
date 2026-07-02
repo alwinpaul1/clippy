@@ -1,0 +1,10 @@
+name: clippy_relay
+description: Zero-knowledge WebSocket relay for Clippy — routes E2E-encrypted clips between paired devices by room token.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.5.0
+
+dev_dependencies:
+  test: ^1.25.0
