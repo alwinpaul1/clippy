@@ -7,10 +7,12 @@ import 'app/clip_controller.dart';
 import 'app/home_page.dart';
 import 'app/pairing_page.dart';
 import 'core/pairing/pairing_key.dart';
+import 'platform/foreground_service.dart';
 import 'platform/secure_key_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  ForegroundServiceManager.init();
   runApp(const ClippyApp());
 }
 
@@ -91,6 +93,7 @@ class _ClippyRootState extends State<ClippyRoot> {
   }
 
   Future<void> _onUnpair() async {
+    await ForegroundServiceManager.stop();
     await _keyStore.clear();
     _controller?.dispose();
     setState(() {

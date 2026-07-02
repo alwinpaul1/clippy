@@ -14,6 +14,7 @@ import '../core/state/prefs_state_store.dart';
 import '../core/sync/sync_action.dart';
 import '../core/sync/sync_engine.dart';
 import '../platform/flutter_clipboard_writer.dart';
+import '../platform/foreground_service.dart';
 import 'relay_config.dart';
 
 /// Orchestrates the whole client: pairing key → content keys + room token →
@@ -78,6 +79,9 @@ class ClipController extends ChangeNotifier with ClipboardListener {
       clipboardWatcher.addListener(this);
       await clipboardWatcher.start();
       _watching = true;
+    } else {
+      // Keep the relay connection alive when Clippy is backgrounded.
+      await ForegroundServiceManager.start();
     }
 
     ready = true;
