@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../core/pairing/pairing_key.dart';
+import 'qr_scanner_page.dart';
 
 /// First-run pairing. One device creates a group key; other devices join by
 /// entering the same key. The key never touches the relay — it only groups your
@@ -18,8 +21,28 @@ class _PairingPageState extends State<PairingPage> {
   final _controller = TextEditingController();
   bool _busy = false;
 
+  bool get _isDesktop =>
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.linux;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() => setState(() {}));
+  }
+
   void _generate() {
-    setState(() => _controller.text = PairingKey.generate().toQrPayload());
+    _controller.text = PairingKey.generate().toQrPayload();
+  }
+
+  Future<void> _scan() async {
+    final result = await Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => const QrScannerPage()));
+    if (result != null && mounted) {
+      _controller.text = result.trim();
+    }
   }
 
   Future<void> _pair() async {
@@ -93,12 +116,42 @@ class _PairingPageState extends State<PairingPage> {
                       ),
                     ),
                   ),
+                  if (_controller.text.trim().isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: QrImageView(
+                          data: _controller.text.trim(),
+                          size: 176,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Scan this on your other device',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
                     onPressed: _busy ? null : _generate,
                     icon: const Icon(Icons.vpn_key),
                     label: const Text('Generate a new key'),
                   ),
+                  if (!_isDesktop) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : _scan,
+                      icon: const Icon(Icons.qr_code_scanner),
+                      label: const Text('Scan QR code'),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   FilledButton(
                     onPressed: _busy ? null : _pair,

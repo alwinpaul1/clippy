@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../core/pairing/pairing_key.dart';
 import 'clip_controller.dart';
@@ -27,11 +28,20 @@ class HomePage extends StatelessWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Paste this key into Clippy on your other device:'),
-            const SizedBox(height: 12),
+            const Text('Scan this on your other device, or paste the key:'),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: QrImageView(data: payload, size: 200),
+            ),
+            const SizedBox(height: 16),
             SelectableText(
               payload,
-              style: const TextStyle(fontFamily: 'monospace'),
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
             ),
           ],
         ),
