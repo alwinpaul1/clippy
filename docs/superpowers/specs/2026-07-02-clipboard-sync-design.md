@@ -196,6 +196,7 @@ Prevents the three data-loss/loop bugs: infinite echo, permanent re-copy suppres
 - **Permission auto-revoke / app hibernation (Android 11+):** prompt to disable "remove permissions if unused" / `setAutoRevokeWhitelisted`.
 - **ADB/Shizuku grants are not permanent:** `READ_LOGS` survives reboot but is wiped on uninstall; ADB-started Shizuku must be re-activated each boot. Document the re-grant flow.
 - **Clipboard-access toast (Android 12+):** reading surfaces "Clippy pasted from clipboard"; Samsung One UI blocks hiding it. Harmless; note it in onboarding.
+- **Samsung Keyboard clipboard-history panel expectation:** v1 sets the *system* primary clip, so a synced clip is always the next thing you paste (long-press → Paste). Whether it also appears as a tile in Samsung's own clipboard-*history* grid is undocumented and One-UI-version-dependent — treat as test-on-device, not a guarantee. v1 is single-latest, not a synced history; browsable cross-device history is a v2 feature (§12) and would need an in-app clipboard UI (we cannot reliably inject tiles into Samsung's panel).
 
 ---
 
