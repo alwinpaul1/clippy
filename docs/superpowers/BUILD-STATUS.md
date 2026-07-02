@@ -58,6 +58,18 @@ These need your credentials or hardware. I've written the exact steps.
 | macOS app: `ClipboardPort` (NSPasteboard), menu-bar shell + history | Gate 3 | can run on this Mac once signed |
 | Android app: tiered capture engine, FGS, floating bubble, pairing scan | Gate 1+4 | |
 
+## CI/CD (`.github/workflows/ci.yml`)
+
+On every push/PR to `main`:
+1. **analyze-test** — `flutter analyze` + `flutter test` (the 44 Dart tests).
+2. **firestore-rules** — spins up the Firestore emulator and runs the 9 rules tests.
+3. **deploy-rules** — on push to `main` (after 1+2 pass), deploys `firestore.rules` to your Firebase project. **No-ops until you add these repo secrets** (Settings → Secrets and variables → Actions):
+   - `FIREBASE_PROJECT_ID` — your real project id (e.g. `clippy`).
+   - `FIREBASE_TOKEN` — from `! firebase login:ci` (paste the printed token).
+   *(Token auth is simplest for a personal project; a service-account secret is the production-grade upgrade later.)*
+
+Note: CI does not build the macOS/Android apps (they need your git-ignored Firebase config + signing). It validates the Dart core and the rules — the parts that must stay correct on every change.
+
 ## Notes
 - Backend decision: **Firebase now, Railway relay when going public** — swap is contained to `ClipStore` (see spec §4.5, decisions log).
 - Multi-user: architecture is per-uid isolated + per-user E2E keys from day one (spec §1).
