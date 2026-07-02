@@ -1,0 +1,17 @@
+rules_version = '2';
+
+// Clippy security rules (spec §5). Each account's clips live under its own uid;
+// items are immutable and size-capped. A user can only touch their own path.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /clips/{uid}/items/{item} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.ciphertext is string
+        && request.resource.data.ciphertext.size() < 150000; // ~100KB plaintext
+      allow delete: if request.auth != null && request.auth.uid == uid; // trimming
+      allow update: if false; // items are immutable
+    }
+  }
+}

@@ -9,6 +9,15 @@ build/
 # IDE
 .idea/
 
+# Node (Firestore rules tests)
+node_modules/
+
+# Firebase emulator logs
+*-debug.log
+firebase-debug.log
+firestore-debug.log
+.firebase/
+
 # Firebase secrets (never commit)
 google-services.json
 GoogleService-Info.plist
