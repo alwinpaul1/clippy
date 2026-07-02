@@ -29,6 +29,14 @@ subprojects {
                     .getMethod("setNdkVersion", String::class.java)
                     .invoke(ext, "27.1.12297006")
             }
+            // Some plugins (e.g. clipboard_watcher) compile against SDK 33, but
+            // their androidx deps require 34+. Force all modules to the
+            // installed SDK 36.
+            runCatching {
+                ext.javaClass
+                    .getMethod("compileSdkVersion", Int::class.javaPrimitiveType)
+                    .invoke(ext, 36)
+            }
         }
     }
 }
