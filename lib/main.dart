@@ -62,7 +62,15 @@ class _ClippyRootState extends State<ClippyRoot> {
   }
 
   Future<void> _bootstrap() async {
-    final key = await _keyStore.load();
+    PairingKey? key;
+    // Dev/test hook: pass --dart-define=CLIPPY_DEV_KEY=<base64> to auto-pair
+    // without touching the keychain (works on unsigned local builds).
+    const devKey = String.fromEnvironment('CLIPPY_DEV_KEY');
+    if (devKey.isNotEmpty) {
+      key = PairingKey.fromQrPayload(devKey);
+    } else {
+      key = await _keyStore.load();
+    }
     if (key != null) {
       await _startWith(key);
     }
