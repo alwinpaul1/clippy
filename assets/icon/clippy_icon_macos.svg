@@ -12,20 +12,22 @@
 
   <!-- Opaque full-bleed background (no alpha, required by the macOS generator) -->
   <rect width="1024" height="1024" fill="url(#bg)"/>
-  <rect width="1024" height="1024" fill="#FFFFFF" opacity="0.06"/>
+  <rect x="176" y="176" width="672" height="672" rx="170" fill="#FFFFFF" opacity="0.14"/>
 
-  <g transform="rotate(-10 512 512)"
-     fill="none" stroke="url(#clip)" stroke-width="72"
-     stroke-linecap="round" stroke-linejoin="round">
-    <rect x="356" y="236" width="312" height="600" rx="156"/>
-    <rect x="430" y="236" width="164" height="452" rx="82"/>
-  </g>
-  <g>
-    <circle cx="470" cy="356" r="52" fill="#FFFFFF" stroke="#1E2A5A" stroke-width="9"/>
-    <circle cx="478" cy="366" r="25" fill="#1E2A5A"/>
-    <circle cx="468" cy="356" r="9" fill="#FFFFFF"/>
-    <circle cx="588" cy="335" r="52" fill="#FFFFFF" stroke="#1E2A5A" stroke-width="9"/>
-    <circle cx="596" cy="345" r="25" fill="#1E2A5A"/>
-    <circle cx="586" cy="335" r="9" fill="#FFFFFF"/>
+  <g transform="translate(512 512) scale(1.18) translate(-512 -512)">
+    <g transform="rotate(-8 512 512)"
+       fill="none" stroke="url(#clip)" stroke-width="70"
+       stroke-linecap="round" stroke-linejoin="round">
+      <rect x="356" y="236" width="312" height="600" rx="156"/>
+      <rect x="430" y="236" width="164" height="452" rx="82"/>
+    </g>
+    <g>
+      <circle cx="470" cy="356" r="52" fill="#FFFFFF" stroke="#1E2A5A" stroke-width="9"/>
+      <circle cx="478" cy="366" r="25" fill="#1E2A5A"/>
+      <circle cx="468" cy="356" r="9" fill="#FFFFFF"/>
+      <circle cx="588" cy="335" r="52" fill="#FFFFFF" stroke="#1E2A5A" stroke-width="9"/>
+      <circle cx="596" cy="345" r="25" fill="#1E2A5A"/>
+      <circle cx="586" cy="335" r="9" fill="#FFFFFF"/>
+    </g>
   </g>
 </svg>

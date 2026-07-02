@@ -5,10 +5,12 @@
       <stop offset="1" stop-color="#DCE6FF"/>
     </linearGradient>
   </defs>
-  <!-- Transparent background; content scaled into the adaptive safe zone -->
-  <g transform="translate(512 512) scale(0.60) translate(-512 -536)">
-    <g transform="rotate(-10 512 512)"
-       fill="none" stroke="url(#clip)" stroke-width="72"
+  <!-- Transparent background; content bigger, inside the adaptive safe zone -->
+  <g transform="translate(512 512) scale(0.72) translate(-512 -536)">
+    <!-- Highlighted panel behind the clip -->
+    <rect x="196" y="216" width="632" height="632" rx="150" fill="#FFFFFF" opacity="0.16"/>
+    <g transform="rotate(-8 512 512)"
+       fill="none" stroke="url(#clip)" stroke-width="70"
        stroke-linecap="round" stroke-linejoin="round">
       <rect x="356" y="236" width="312" height="600" rx="156"/>
       <rect x="430" y="236" width="164" height="452" rx="82"/>
