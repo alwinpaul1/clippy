@@ -30,7 +30,8 @@ void main() {
   int port() => server.port;
 
   setUp(() async {
-    rooms.clear();
+    repository = InMemoryClipRepository();
+    roomClients.clear();
     nowIso = () => '2026-07-02T00:00:00.000Z';
     server = await startServer(0);
   });

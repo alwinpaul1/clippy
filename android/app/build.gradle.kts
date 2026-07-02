@@ -7,7 +7,9 @@ plugins {
 android {
     namespace = "dev.alwin.clippy"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // Pin to the locally-installed, valid NDK (Flutter's default 28.2.x was
+    // only partially downloaded and lacks source.properties).
+    ndkVersion = "27.1.12297006"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

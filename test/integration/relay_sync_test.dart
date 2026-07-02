@@ -15,7 +15,8 @@ void main() {
   Uri url() => Uri.parse('ws://localhost:${server.port}');
 
   setUp(() async {
-    relay.rooms.clear();
+    relay.repository = relay.InMemoryClipRepository();
+    relay.roomClients.clear();
     server = await relay.startServer(0);
   });
 

@@ -7,36 +7,93 @@ import 'dart:io';
 /// Devices that scanned the same pairing QR share a 256-bit master key. From it
 /// each derives an opaque `room` token (HMAC(masterKey, "…room…")) and the
 /// content keys. This server only ever sees the room token and E2E-encrypted
-/// payloads — never the master key, never plaintext, never any identity. It is
-/// a dumb encrypted-message router that also keeps the last N clips per room so
-/// a reconnecting device catches up.
+/// payloads — never the master key, plaintext, or any identity. It is a dumb
+/// encrypted-message router that also keeps the last N clips per room (durably,
+/// see [ClipRepository]) so a reconnecting device catches up.
 const int maxHistory = 25;
 const int maxCiphertextChars = 200000; // ~150KB plaintext, base64-encoded
 const int maxRoomTokenChars = 512;
 
-class Room {
-  final Set<WebSocket> clients = {};
-  final List<Map<String, dynamic>> history = [];
+/// Per-room clip history storage. Consecutive duplicate hashes collapse and the
+/// list is capped at [maxHistory].
+abstract class ClipRepository {
+  List<Map<String, dynamic>> recent(String room);
+  void add(String room, Map<String, dynamic> clip);
+}
 
-  void remember(Map<String, dynamic> clip) {
-    if (history.isNotEmpty && history.last['hash'] == clip['hash']) {
-      return; // collapse consecutive duplicates
-    }
-    history.add(clip);
-    if (history.length > maxHistory) {
-      history.removeRange(0, history.length - maxHistory);
+class InMemoryClipRepository implements ClipRepository {
+  final Map<String, List<Map<String, dynamic>>> rooms = {};
+
+  @override
+  List<Map<String, dynamic>> recent(String room) =>
+      List.of(rooms[room] ?? const []);
+
+  @override
+  void add(String room, Map<String, dynamic> clip) {
+    final list = rooms.putIfAbsent(room, () => []);
+    if (list.isNotEmpty && list.last['hash'] == clip['hash']) return;
+    list.add(clip);
+    if (list.length > maxHistory) {
+      list.removeRange(0, list.length - maxHistory);
     }
   }
 }
 
-/// In-memory room table. History lives as long as the relay process runs;
-/// durable per-room persistence (SQLite on a Railway volume) is a follow-up.
-final Map<String, Room> rooms = {};
+/// Persists history to a JSON file (atomic temp-write + rename) so it survives
+/// restarts. Falls back to serving from memory if the path is unwritable, so
+/// the relay never crashes on a missing/unmounted volume.
+class FileClipRepository extends InMemoryClipRepository {
+  final String path;
+
+  FileClipRepository(this.path) {
+    _load();
+  }
+
+  void _load() {
+    try {
+      final f = File(path);
+      if (!f.existsSync()) return;
+      final data = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+      data.forEach((room, clips) {
+        rooms[room] = (clips as List)
+            .map((c) => (c as Map).cast<String, dynamic>())
+            .toList();
+      });
+    } catch (_) {
+      // Corrupt/absent file → start empty.
+    }
+  }
+
+  void _persist() {
+    try {
+      final dir = File(path).parent;
+      if (!dir.existsSync()) dir.createSync(recursive: true);
+      final tmp = File('$path.tmp');
+      tmp.writeAsStringSync(jsonEncode(rooms));
+      tmp.renameSync(path);
+    } catch (_) {
+      // Keep serving from memory if the volume is unavailable.
+    }
+  }
+
+  @override
+  void add(String room, Map<String, dynamic> clip) {
+    super.add(room, clip);
+    _persist();
+  }
+}
+
+/// Live WebSocket connections per room (not persisted).
+final Map<String, Set<WebSocket>> roomClients = {};
+
+/// The active history store. Tests reset this to a fresh in-memory instance.
+ClipRepository repository = InMemoryClipRepository();
 
 /// Injectable clock so tests are deterministic; real runtime uses wall time.
 String Function() nowIso = () => DateTime.now().toUtc().toIso8601String();
 
-Future<HttpServer> startServer(int port) async {
+Future<HttpServer> startServer(int port, {ClipRepository? repo}) async {
+  if (repo != null) repository = repo;
   final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
   server.listen(_handleRequest);
   return server;
@@ -63,7 +120,11 @@ Future<void> _handleRequest(HttpRequest req) async {
 }
 
 void _handleSocket(WebSocket ws) {
-  Room? room;
+  String? room;
+
+  void leave() {
+    if (room != null) roomClients[room]?.remove(ws);
+  }
 
   ws.listen(
     (dynamic raw) {
@@ -84,8 +145,9 @@ void _handleSocket(WebSocket ws) {
             ws.close(WebSocketStatus.policyViolation, 'bad room');
             return;
           }
-          room = rooms.putIfAbsent(token, Room.new)..clients.add(ws);
-          ws.add(jsonEncode({'type': 'history', 'clips': room!.history}));
+          room = token;
+          roomClients.putIfAbsent(token, () => {}).add(ws);
+          ws.add(jsonEncode({'type': 'history', 'clips': repository.recent(token)}));
           break;
 
         case 'clip':
@@ -98,8 +160,8 @@ void _handleSocket(WebSocket ws) {
               ciphertext.length > maxCiphertextChars) {
             return;
           }
-          // Server stamps the authoritative timestamp; ordering never trusts
-          // a device clock.
+          // Server stamps the authoritative timestamp; ordering never trusts a
+          // device clock.
           final stored = <String, dynamic>{
             'ciphertext': ciphertext,
             'iv': clip['iv'],
@@ -107,13 +169,13 @@ void _handleSocket(WebSocket ws) {
             'source': clip['source'],
             'timestamp': nowIso(),
           };
-          r.remember(stored);
+          repository.add(r, stored);
           // Broadcast to ALL room members including the sender, so every device
           // sees uniform server-stamped clips. A device ignores its own clips
           // for the clipboard-apply decision (SyncEngine source check) but still
           // shows them in history.
           final out = jsonEncode({'type': 'clip', 'clip': stored});
-          for (final peer in r.clients) {
+          for (final peer in roomClients[r] ?? const <WebSocket>{}) {
             if (peer.readyState == WebSocket.open) {
               peer.add(out);
             }
@@ -121,8 +183,8 @@ void _handleSocket(WebSocket ws) {
           break;
       }
     },
-    onDone: () => room?.clients.remove(ws),
-    onError: (_) => room?.clients.remove(ws),
+    onDone: leave,
+    onError: (_) => leave(),
     cancelOnError: true,
   );
 }
