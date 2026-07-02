@@ -277,7 +277,8 @@ Run `flutterfire configure` to pin mutually compatible Firebase versions rather 
 - **Clippy keyboard (IME):** an in-keyboard history view that also captures Android copies for free (keyboards bypass the clipboard focus gate) — the deferred "history in a keyboard" experience, at the cost of a large keyboard build.
 - **v2 content:** images (blob storage / chunked), then files.
 - **Bigger/pinned history, search, favorites** over the capped list.
-- **LAN fast-path:** mDNS + direct TLS as a same-network optimization layered under the Firebase channel.
+- **Railway relay migration (planned):** replace the Firestore `ClipStore` with a Dart WebSocket relay + SQLite-on-volume on Railway Hobby ($5, ~$3 usage). Flat/predictable cost, container-scaled for multi-user, a held-open WebSocket from the Android FGS for instant background delivery (no Blaze/FCM), server-side Google ID-token verification. Contained to the `ClipStore` implementation; `SyncEngine` and UI unaffected.
+- **LAN fast-path:** mDNS + direct TLS as a same-network optimization layered under the sync channel.
 - **Windows/Linux:** blocked on `google_sign_in` (no desktop-Linux/Windows support) — would need a different auth path.
 
 ---
@@ -289,6 +290,7 @@ Run `flutterfire configure` to pin mutually compatible Firebase versions rather 
 | Audience | Personal now, product later | Email-scoped path already isolates per-account. |
 | Framework | Flutter, one codebase | "Compatible everywhere"; single Dart `SyncEngine`. |
 | Backend | Firebase Spark (free) | Zero cost; comfortably within limits incl. capped history. |
+| Backend timing | Firebase now, **Railway relay when going public** | Test fast on the free tier; the `ClipStore` interface (§4.5) + transport-agnostic `SyncEngine` (§7) are the migration seam, so the swap is one implementation class, not a rewrite. A persistent-WebSocket relay also removes the Android background-listener risk and the need for Blaze-gated FCM at that point. |
 | Auth | Google Sign-In → Firebase uid | "Same email = same clipboard." |
 | Content | Text only (v1) | Covers the vast majority of copy/paste; images deferred. |
 | Sync model | **Latest → system clipboard + Clippy-owned browsable history** | Latest item flows into any keyboard (incl. Samsung) with no taps; full history browsable in Clippy since keyboard panels are closed (§1.1). |
