@@ -6,6 +6,9 @@ build/
 .flutter-plugins-dependencies
 *.iml
 
+# IDE
+.idea/
+
 # Firebase secrets (never commit)
 google-services.json
 GoogleService-Info.plist
