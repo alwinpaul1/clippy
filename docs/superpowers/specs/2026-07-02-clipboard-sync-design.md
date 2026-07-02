@@ -3,7 +3,7 @@
 **Date:** 2026-07-02
 **Author:** Alwin (with Claude)
 **Status:** Approved for planning
-**Scope of this spec:** v1 — text-only, two personal devices (one macOS, one Android), same Google account, with a synced **browsable clipboard history**. Structured so a multi-user product is a later, additive phase, not a rewrite.
+**Scope of this spec:** text-only, **N devices** per account (not just two), same Google account, with a synced **browsable clipboard history**. **v1 builds macOS + Android** (fully supported, least custom code); **Windows and iOS are phased additions on the same free stack** (see §13). Structured so a multi-user product is a later, additive phase, not a rewrite. Everything targets **$0 cost** (Firebase free tier); the price of full cross-platform is *more code*, not a subscription.
 
 ---
 
@@ -14,7 +14,7 @@ Log in with the same Google account on a Mac and an Android phone. Copy text on 
 1. **Latest clip → system clipboard.** The most-recent copy is placed on the other device's *system clipboard*, so it's the current clip your normal keyboard pastes — on Android that means it's available in the Samsung keyboard (or any keyboard) with no extra taps.
 2. **Full history → Clippy.** Clippy keeps a synced, browsable list of your recent clips on both devices, because Android's per-keyboard clipboard-history panels are closed to third-party apps (see §1.1). You browse this history in the Clippy app, a macOS menu-bar list, and an Android floating bubble you can tap while typing.
 
-**In scope (v1):** plain text and URLs; automatic Mac → Android; best-effort-automatic Android → Mac (via one-time elevated setup); synced browsable history (capped at the most recent N items); end-to-end encryption; sensitive-clip skipping.
+**In scope (v1):** plain text and URLs; automatic Mac → Android; best-effort-automatic Android → Mac (via one-time elevated setup); synced browsable history (capped at the most recent N items); **N devices per account** (pairing is repeatable — §4.7); end-to-end encryption; sensitive-clip skipping. **Phased (post-v1, same free stack):** Windows and iOS (§13).
 
 **Out of scope (v1):** images, files, multi-user sign-ups, Windows/Linux, web, a Clippy keyboard (IME). These are deliberately deferred (YAGNI) and the design leaves room for each.
 
@@ -106,8 +106,9 @@ Each component has one purpose, a defined interface, and known dependencies. Des
 - **Interface:** `Future<User?> signIn()`, `Future<void> signOut()`, `Stream<User?> authState`.
 
 ### 4.7 `PairingController` (shared Dart + platform)
-- **Does:** first-run device pairing. Mac generates the AES key and shows a QR (key + salt); Android scans it and stores the same key. Manual-code fallback if no camera.
-- **Interface:** `Future<void> showPairingQr()` (Mac), `Future<void> scanPairingQr()` (Android).
+- **Does:** device-group pairing. The **first** device generates the AES-256 group key. **Every additional device** (2nd, 3rd, … Nth) joins by scanning a QR shown on *any already-paired device* to receive the same group key — so pairing is **repeatable to support N devices**, not a one-time two-device handshake. Manual-code fallback if no camera. All devices in the group hold one shared key; Firebase never sees it.
+- **Interface:** `Future<void> showPairingQr()` (any paired device), `Future<void> joinWithQr()` / `Future<void> joinWithCode(String)` (a new device).
+- **Note (revocation):** one shared group key means removing a lost device requires re-keying the group (re-pair remaining devices). Acceptable for personal N-device use; per-device envelope keys are the product-phase upgrade (§8, §12).
 
 ### 4.8 History surfaces (platform UI)
 - **macOS:** menu-bar dropdown lists recent history; click an item → copy to clipboard. Menu-bar-only app (`LSUIElement=1`; `tray_manager`). Always-running accessory → the Firestore listener lives in the **main isolate**.
@@ -279,7 +280,52 @@ Run `flutterfire configure` to pin mutually compatible Firebase versions rather 
 - **Bigger/pinned history, search, favorites** over the capped list.
 - **Railway relay migration (planned):** replace the Firestore `ClipStore` with a Dart WebSocket relay + SQLite-on-volume on Railway Hobby ($5, ~$3 usage). Flat/predictable cost, container-scaled for multi-user, a held-open WebSocket from the Android FGS for instant background delivery (no Blaze/FCM), server-side Google ID-token verification. Contained to the `ClipStore` implementation; `SyncEngine` and UI unaffected.
 - **LAN fast-path:** mDNS + direct TLS as a same-network optimization layered under the sync channel.
-- **Windows/Linux:** blocked on `google_sign_in` (no desktop-Linux/Windows support) — would need a different auth path.
+- **Windows (Phase 2):** free — Win32 background clipboard listener + browser/loopback Google OAuth + Firebase REST (§13). Windows' clipboard is the easiest of all platforms; only auth needs the non-plugin path.
+- **iOS/iPad (Phase 3):** free — receive + send-on-open now; a share extension / Clippy keyboard for background-ish capture (Apple limits, §13).
+- **Linux:** same approach as Windows (loopback OAuth), later.
+
+---
+
+## 13. Platform Support Matrix (all $0 / Firebase free tier)
+
+Flutter unifies the UI and the shared Dart core across every target. The
+*capabilities* below are OS-level, not Flutter features, so they differ per
+platform. None of these require paid infrastructure — the cost of full
+coverage is custom code, not a subscription.
+
+| Platform | Background clipboard **read** | Clipboard **write** | Google sign-in (free) | Verdict | Phase |
+|----------|------------------------------|---------------------|-----------------------|---------|-------|
+| **macOS** | ✅ NSPasteboard polling | ✅ | ✅ `google_sign_in` plugin | **Full** | v1 |
+| **Android** (phone + tablet) | ⚠️ tiered capture, 1-time setup (§6) | ✅ | ✅ plugin | **Full** | v1 |
+| **Windows** | ✅ **easiest** — Win32 `AddClipboardFormatListener`, background allowed | ✅ Win32 | ⚠️ plugin unsupported → **browser/loopback OAuth** (free) | **Full, extra code** | Phase 2 |
+| **iOS / iPadOS** | ❌ **impossible in background** (Apple; no FGS escape) | ✅ (app foreground / on tap) | ✅ plugin | **Partial: receive + send-on-open** | Phase 3 |
+| **Linux** | ✅ possible | ✅ | ⚠️ same as Windows (loopback OAuth) | Full, extra code | later |
+
+**Free cross-platform auth (Windows/Linux).** `google_sign_in` has no
+Windows/Linux support, but Google OAuth itself is free on every platform via
+the **desktop loopback flow**: open the system browser → user consents →
+redirect to `http://localhost:<port>` → exchange the code for a Google ID
+token → hand it to Firebase Auth's REST `accounts:signInWithIdp` (plain HTTPS,
+works anywhere) to get a Firebase session. No plugin, no cost. Firestore on
+Windows uses the FlutterFire desktop plugin where available, else the Firestore
+REST API (also free within Spark limits). This is the same identity model as
+the mobile plugins — only the *token acquisition* differs.
+
+**iOS reality.** Third-party iOS apps cannot read the pasteboard in the
+background — stricter than Android, with no foreground-service equivalent. iOS
+therefore *receives* clips (written to the pasteboard when the app is opened or
+foregrounded) and *sends* when the app is open. Better capture needs a **share
+extension or a Clippy keyboard** (keyboards get pasteboard access) — free to
+build, more code. No backend choice changes this.
+
+**N devices.** All targets sign in with the same Google account → same `uid` →
+same history. The apply-latest engine and history are per-device and converge;
+pairing repeats per device (§4.7). Three, four, five devices behave identically.
+
+**Why not Railway for cross-platform?** Railway ($5) was one way to solve
+Windows auth, but the free desktop-OAuth path above removes that need. Railway
+remains the planned go-public backend for *cost predictability at scale and
+background delivery*, not a requirement for cross-platform reach.
 
 ---
 
@@ -301,3 +347,6 @@ Run `flutterfire configure` to pin mutually compatible Firebase versions rather 
 | FCM wake-up | No, v1 (Blaze-gated) | Free tier can't run the trigger Function; resync-on-resume instead. |
 | Concealed clips | Skip | Never sync or store password-manager clips. |
 | Freshness gate | 60s, first snapshot only | Guards cold-start clobber without discarding late Doze deliveries. |
+| Devices per account | **N** (not just 2) | Same-uid history + repeatable QR pairing (§4.7); one shared group key. |
+| Platform coverage | macOS+Android v1; **Windows + iOS phased**, all $0 | OS capabilities differ (§13); Windows via free loopback OAuth; iOS bg-capture is an Apple wall. |
+| Cost | **Everything free** (Firebase Spark); no Railway needed for cross-platform | Free tier fine for personal/testing; Railway is the go-public scale/delivery upgrade, not a cross-platform requirement. |
