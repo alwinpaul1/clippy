@@ -1,75 +1,59 @@
-# Clippy — Build Status & Handoff
+# Clippy — Build Status
 
 **Updated:** 2026-07-02
-**Branch:** `feat/foundation-core`
-**Tests:** 44 passing, `flutter analyze` clean.
+**Repo:** github.com/alwinpau1/clippy (private) · branch `main`
 
-## ✅ Built and verified (pure Dart, no external accounts needed)
+## Architecture (current)
 
-The entire **transport-agnostic core** is done and unit-tested. This is the hard,
-correctness-critical part — and it's independent of Firebase/Railway/platform,
-so none of it is throwaway.
+Zero-knowledge **Railway relay** backend — no Firebase, no login. Devices that
+scan/enter the same pairing key share a room; the relay routes E2E-encrypted
+clips by an opaque room token and never sees the key, plaintext, or identity.
 
-| Module | File | What it does | Tests |
-|--------|------|--------------|-------|
-| Models | `lib/core/models/` | `ClipEvent`, `EncryptedClip`, `RemoteClip` | 7 |
-| Sync engine | `lib/core/sync/sync_engine.dart` | §7 state machine: echo-guard (one-shot, 2s), freshness gate (60s first-snapshot), persisted dedup, apply-latest | 15 |
-| Encryption | `lib/core/crypto/aes_gcm_crypto_box.dart` | Real AES-256-GCM, HMAC-derived enc/mac subkeys from the paired master key, deterministic fingerprint | 10 |
-| History | `lib/core/history/history_store.dart` | decrypt + order + cap(25) + consecutive-dedup + apply-on-tap | 7 |
-| State | `lib/core/state/prefs_state_store.dart` | persist `lastAppliedHash` across restarts | 4 |
-| Smoke | `test/smoke_test.dart` | harness | 1 |
+```
+ Device A  ──wss──▶  Railway relay (clippy-relay)  ◀──wss──  Device B
+  copy → seal(AES-256-GCM) → append          route + last-25 history
+  incoming → SyncEngine → set clipboard       (zero-knowledge)
+   pairing key (QR/text) shared device→device; relay only sees room token + ciphertext
+```
 
-Interfaces the platform/backend plug into (already defined + faked in tests):
-`CryptoBox`, `StateStore`, `ClipboardWriter`, and the `SyncAction` outputs.
+## ✅ Done and live
 
-## ⛔ Gated on you (external accounts / devices I can't access)
+- **Relay deployed & working end-to-end over the internet:**
+  `wss://clippy-relay-production.up.railway.app` (health 200; verified a clip
+  routed A→B with server timestamp). 6 relay tests.
+- **Pure-Dart core:** SyncEngine (echo-guard/freshness/dedup), AES-256-GCM
+  CryptoBox, HistoryStore, PrefsStateStore — 44 tests.
+- **Pairing + client:** PairingKey (room token + content keys from one master
+  key), WebSocketClipStore — 8 + 5 unit tests + 3 in-process relay integration
+  tests. **60 tests total, analyzer clean.**
+- **App wired:** pairing screen (generate/enter key), home screen (synced
+  history, tap-to-copy, manual add, add-device), desktop auto-capture via
+  clipboard_watcher, master key in Keychain/Keystore. Firebase removed.
+- **App icon** (paperclip-with-eyes) on macOS + Android.
+- **CI/CD** green: app analyze+test, relay analyze+test, deploy-relay job
+  (arms once `RAILWAY_TOKEN` secret is set).
+- **Railway:** `clippy` project + `clippy-relay` service + public domain.
+  nexdash deleted (per Alwin).
 
-These need your credentials or hardware. I've written the exact steps.
+## Remaining
 
-### Gate 1 — Firebase project (for auth + backend, testing phase)
-1. Go to <https://console.firebase.google.com> → **Add project** → name it `clippy` (Google Analytics optional).
-2. Install the CLIs (in this session, type the `!` lines so output lands here):
-   - `! npm i -g firebase-tools` (or `curl -sL https://firebase.tools | bash`)
-   - `! dart pub global activate flutterfire_cli`
-   - `! firebase login`
-3. From the project root: `! flutterfire configure --project=clippy`
-   → generates `lib/firebase_options.dart` and drops `google-services.json` (Android) + `GoogleService-Info.plist` (macOS). *(These are git-ignored — secrets.)*
-4. In the Firebase console → **Authentication** → enable **Google** sign-in.
+| Item | Notes |
+|------|-------|
+| Install on devices | macOS: `flutter run -d macos`. Android: connect phone (USB debugging) → `flutter run -d <device>` or sideload the debug APK. |
+| Android background capture | v1 captures via the in-app box + receives automatically; true background copy-capture (READ_LOGS+overlay / Shizuku) is the elevated follow-up (spec §6). |
+| Real QR pairing UI | v1 uses a copy/paste key; a camera QR scan is a UX nicety on top. |
+| Durable relay history | v1 keeps last-25 in memory (survives while the relay runs); SQLite-on-volume is the durability follow-up. |
+| Windows/iOS/Linux | The relay client is cross-platform; add the targets when wanted (spec §13). |
 
-### Gate 2 — Google Sign-In client details
-- **Android:** add your debug **SHA-1** to the Firebase Android app:
-  `! keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android | grep SHA1`
-  → paste it into Firebase console → Project settings → your Android app → Add fingerprint, then re-run `flutterfire configure`.
-- **macOS:** the generated `GoogleService-Info.plist` gives the `CLIENT_ID`; it goes into `macos/Runner/Info.plist` as `GIDClientID` (I'll wire this once the file exists).
+## Secrets to add (optional, for CI auto-deploy)
 
-### Gate 3 — Apple code-signing (macOS app)
-- Open `macos/Runner.xcworkspace` in Xcode → Signing & Capabilities → select your Apple ID team. Keychain-based Google/Firebase auth fails on unsigned builds.
+Repo → Settings → Secrets → Actions: `RAILWAY_TOKEN` = a Railway project token
+(`railway tokens` or dashboard). Until set, the deploy job is a green no-op.
 
-### Gate 4 — Physical Android phone (capture engine)
-- Your Samsung phone + USB, for the one-time ADB grant and on-device testing of the background capture engine. Emulators can't validate the READ_LOGS/overlay path.
+## How to run
 
-## 🔜 Remaining to build (I do these; some need the gates above)
-
-| Component | Needs gate | Notes |
-|-----------|-----------|-------|
-| `ClipStore` (Firestore `clips/{uid}/items`) + security rules | Gate 1 (or local emulator) | append / ordered history stream / trim |
-| `AuthController` (Google → Firebase uid) | Gate 1+2 | |
-| `PairingController` (QR key exchange) + Keychain/Keystore key storage | — (code now, run needs devices) | |
-| macOS app: `ClipboardPort` (NSPasteboard), menu-bar shell + history | Gate 3 | can run on this Mac once signed |
-| Android app: tiered capture engine, FGS, floating bubble, pairing scan | Gate 1+4 | |
-
-## CI/CD (`.github/workflows/ci.yml`)
-
-On every push/PR to `main`:
-1. **analyze-test** — `flutter analyze` + `flutter test` (the 44 Dart tests).
-2. **firestore-rules** — spins up the Firestore emulator and runs the 9 rules tests.
-3. **deploy-rules** — on push to `main` (after 1+2 pass), deploys `firestore.rules` to your Firebase project. **No-ops until you add these repo secrets** (Settings → Secrets and variables → Actions):
-   - `FIREBASE_PROJECT_ID` — your real project id (e.g. `clippy`).
-   - `FIREBASE_TOKEN` — from `! firebase login:ci` (paste the printed token).
-   *(Token auth is simplest for a personal project; a service-account secret is the production-grade upgrade later.)*
-
-Note: CI does not build the macOS/Android apps (they need your git-ignored Firebase config + signing). It validates the Dart core and the rules — the parts that must stay correct on every change.
-
-## Notes
-- Backend decision: **Firebase now, Railway relay when going public** — swap is contained to `ClipStore` (see spec §4.5, decisions log).
-- Multi-user: architecture is per-uid isolated + per-user E2E keys from day one (spec §1).
+- **macOS:** `flutter run -d macos` (sandbox network entitlement already set).
+- **Android:** enable Developer Options → USB debugging, plug in, authorize, then
+  `flutter devices` should show it → `flutter run -d <id>`.
+- **Pair two devices:** on the first, tap "Generate a new key" → Pair. On the
+  second, paste the same key → Pair. Copy on one, watch it appear on the other.
