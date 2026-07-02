@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the pure-Dart correctness core of Clippy — the `SyncEngine` state machine (spec §7) plus its models and injected interfaces — fully unit-tested, with zero cloud, device, or code-signing dependencies.
+**Goal:** Build the pure-Dart correctness core of Clippy — the `SyncEngine` apply-latest state machine (spec §7) plus its models and injected interfaces — fully unit-tested, with zero cloud, device, or code-signing dependencies.
 
-**Architecture:** A single Flutter project targeting macOS + Android. This plan builds only `lib/core/**` — platform-agnostic Dart. The `SyncEngine` consumes local clipboard events and remote Firestore snapshots and *emits actions* (`UploadClip`, `ApplyToClipboard`, `OfferRestore`) rather than performing side effects, so every branch of the echo-guard / freshness / dedup logic is deterministically testable with fakes. Encryption and persistence are behind the `CryptoBox` and `StateStore` interfaces; this plan ships test-double implementations only. Real AES-GCM, Firebase, and the platform apps come in Plans 2–4.
+**Architecture:** A single Flutter project targeting macOS + Android. This plan builds only `lib/core/**` — platform-agnostic Dart. Clippy's sync model is a **hybrid** (spec §1, §7.1): the *latest* clip is written to the system clipboard, and a *capped browsable history* is synced for the Clippy UI. This plan implements the **apply-latest brain only** — the `SyncEngine`, which decides whether the newest clip should be written to the local system clipboard. It consumes local clipboard events and the newest remote clip and *emits actions* (`UploadClip`, `ApplyToClipboard`, `OfferRestore`) rather than performing side effects, so every branch of the echo-guard / freshness / dedup logic is deterministically testable with fakes. The **history layer** (`HistoryStore`, the Firestore `clips/{uid}/items` subcollection, and the bubble/menu/app UI) is additive and built in Plans 2–4; in that model `UploadClip` becomes an *append* to the history subcollection, and a remote "snapshot" is the *newest item* of the ordered history stream — the `SyncEngine` code here is unchanged by that. Encryption and persistence are behind the `CryptoBox` and `StateStore` interfaces; this plan ships test-double implementations only. Real AES-GCM, Firebase, and the platform apps come in Plans 2–4.
 
 **Tech Stack:** Flutter (Dart 3), `flutter_test`. No third-party runtime dependencies in this plan.
 
@@ -27,9 +27,9 @@ Copied verbatim from the spec; every task's requirements implicitly include thes
 ## Plan Sequence (context)
 
 This is Plan 1 of 4. Later plans depend on the interfaces produced here:
-- **Plan 2** — real `AesGcmCryptoBox` (implements `CryptoBox`), Keychain/Keystore key storage, `AuthController`, `ClipStore` (implements the Firestore side), security rules, App Check.
-- **Plan 3** — macOS app: `ClipboardPort` (NSPasteboard), menu-bar shell, pairing QR display; wires `SyncEngine` to a real `StateStore` (shared_preferences).
-- **Plan 4** — Android app: tiered capture engine, foreground service, pairing scan, OEM onboarding.
+- **Plan 2** — real `AesGcmCryptoBox` (implements `CryptoBox`), Keychain/Keystore key storage, `AuthController`, `ClipStore` (Firestore `clips/{uid}/items` subcollection: append + `orderBy/limit` history stream + trim), `HistoryStore` (ordered/capped/de-duped list for the UI), security rules, App Check.
+- **Plan 3** — macOS app: `ClipboardPort` (NSPasteboard), menu-bar shell with history menu, pairing QR display; wires `SyncEngine` to a real `StateStore` (shared_preferences).
+- **Plan 4** — Android app: tiered capture engine, foreground service, floating history bubble (`SYSTEM_ALERT_WINDOW`), pairing scan, OEM onboarding.
 
 ---
 
