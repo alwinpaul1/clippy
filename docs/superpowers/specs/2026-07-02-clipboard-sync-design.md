@@ -24,6 +24,38 @@ The Android **system clipboard holds exactly one item** — there is no clipboar
 
 ---
 
+## 1.2 Backend (CURRENT design — supersedes the Firebase sections below)
+
+**The backend is a self-hosted zero-knowledge Railway relay, not Firebase.** The
+Firebase details in §3–§6/§8/§11 are kept for history but are superseded by this
+section; they'll be folded in on the next full spec pass.
+
+- **Transport:** a Dart WebSocket relay deployed on Railway (`server/`, project
+  `clippy`, service `clippy-relay`). Clients hold one persistent WSS connection;
+  the server pushes clips instantly (no polling, no FCM, works cross-platform
+  incl. Windows/Linux).
+- **Account model = QR-pairing room, no login.** Devices that scan the same
+  pairing QR share a 256-bit master key. Each derives an opaque **room token**
+  `HMAC(masterKey, "clippy-relay-room-v1")` (the credential presented to the
+  relay) and separate **content keys** `HKDF(masterKey, "enc"/"mac")`. "Same
+  account" = "same room". No Google, no email, no passwords.
+- **Zero-knowledge relay:** the server only ever sees the room token and
+  E2E-encrypted payloads — never the master key, plaintext, or any identity. It
+  routes clips among connections in a room and retains the last 25 (dedup
+  consecutive) so a reconnecting device catches up. It stamps the authoritative
+  timestamp. Confidentiality holds even if a room token leaks (payloads stay
+  AES-256-GCM encrypted; a leaked token only enables DoS, not disclosure).
+- **Protocol (JSON over WSS):** `{"type":"join","room":<token>}` →
+  `{"type":"history","clips":[…]}`; `{"type":"clip","clip":{ciphertext,iv,hash,source}}`
+  → broadcast to peers as `{"type":"clip","clip":{…,timestamp}}`.
+- **Persistence:** v1 relay keeps history in memory (survives while the process
+  runs). Durable per-room history (SQLite on a Railway volume) is the next step.
+- **Cost:** Railway Hobby $5/mo (includes $5 usage; a small relay fits within).
+- **Client seam unchanged:** the `SyncEngine`/`HistoryStore` are transport-agnostic;
+  only `ClipStore` is implemented over the WebSocket instead of Firestore.
+
+---
+
 ## 2. Success Criteria
 
 The build is "done" for v1 when, on Alwin's own Mac + Android phone:
@@ -335,8 +367,9 @@ background delivery*, not a requirement for cross-platform reach.
 |----------|--------|-----------|
 | Audience | Personal now, product later | Email-scoped path already isolates per-account. |
 | Framework | Flutter, one codebase | "Compatible everywhere"; single Dart `SyncEngine`. |
-| Backend | Firebase Spark (free) | Zero cost; comfortably within limits incl. capped history. |
-| Backend timing | Firebase now, **Railway relay when going public** | Test fast on the free tier; the `ClipStore` interface (§4.5) + transport-agnostic `SyncEngine` (§7) are the migration seam, so the swap is one implementation class, not a rewrite. A persistent-WebSocket relay also removes the Android background-listener risk and the need for Blaze-gated FCM at that point. |
+| Backend | ~~Firebase Spark~~ → **Railway zero-knowledge relay** (§1.2) | Pivoted: self-hosted Dart WebSocket relay. Cross-platform incl. Windows, persistent-WS push (no FCM), $5/mo, no vendor lock-in. |
+| Account/auth | ~~Google Sign-In~~ → **QR-pairing room, no login** (§1.2) | Most secure + private: zero-knowledge relay, no identity, no phishable credential; works on every platform with no auth plugins. Trade-off: add a device by scanning a QR (already needed for the E2E key). |
+| nexdash | Deleted (per Alwin, confirmed with running-service context) | Clippy runs in its own `clippy` Railway project. |
 | Auth | Google Sign-In → Firebase uid | "Same email = same clipboard." |
 | Content | Text only (v1) | Covers the vast majority of copy/paste; images deferred. |
 | Sync model | **Latest → system clipboard + Clippy-owned browsable history** | Latest item flows into any keyboard (incl. Samsung) with no taps; full history browsable in Clippy since keyboard panels are closed (§1.1). |
