@@ -29,8 +29,10 @@ class HomePage extends StatelessWidget {
           children: [
             const Text('Paste this key into Clippy on your other device:'),
             const SizedBox(height: 12),
-            SelectableText(payload,
-                style: const TextStyle(fontFamily: 'monospace')),
+            SelectableText(
+              payload,
+              style: const TextStyle(fontFamily: 'monospace'),
+            ),
           ],
         ),
         actions: [
@@ -38,9 +40,9 @@ class HomePage extends StatelessWidget {
             onPressed: () {
               Clipboard.setData(ClipboardData(text: payload));
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Key copied')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('Key copied')));
             },
             child: const Text('Copy key'),
           ),
@@ -79,8 +81,9 @@ class HomePage extends StatelessWidget {
           return Column(
             children: [
               _StatusBanner(
-                  isDesktop: controller.isDesktop,
-                  connected: controller.connected),
+                isDesktop: controller.isDesktop,
+                connected: controller.connected,
+              ),
               const Divider(height: 1),
               Expanded(
                 child: controller.history.isEmpty
@@ -94,22 +97,20 @@ class HomePage extends StatelessWidget {
                           ),
                         ),
                       )
-                    : ListView.separated(
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(12),
                         itemCount: controller.history.length,
-                        separatorBuilder: (_, _) => const Divider(height: 1),
                         itemBuilder: (context, i) {
                           final item = controller.history[i];
-                          return ListTile(
-                            leading: const Icon(Icons.content_paste),
-                            title: Text(item.text,
-                                maxLines: 2, overflow: TextOverflow.ellipsis),
-                            subtitle: const Text('tap to copy'),
-                            onTap: () async {
+                          return _ClipItem(
+                            text: item.text,
+                            onCopy: () async {
                               await controller.applyItem(item);
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                      content: Text('Copied to clipboard')),
+                                    content: Text('Copied to clipboard'),
+                                  ),
                                 );
                               }
                             },
@@ -127,6 +128,72 @@ class HomePage extends StatelessWidget {
   }
 }
 
+/// A single synced clip, styled like the shadcn "Item" outline row: the clip
+/// text on the left, a copy action on the right. Tapping anywhere copies it.
+class _ClipItem extends StatelessWidget {
+  final String text;
+  final Future<void> Function() onCopy;
+  const _ClipItem({required this.text, required this.onCopy});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: onCopy,
+          child: Ink(
+            decoration: BoxDecoration(
+              border: Border.all(color: scheme.outlineVariant),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            padding: const EdgeInsets.fromLTRB(16, 10, 6, 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        text,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Tap to copy',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: 'Copy',
+                  color: scheme.primary,
+                  icon: const Icon(Icons.content_copy_outlined),
+                  onPressed: onCopy,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _StatusBanner extends StatelessWidget {
   final bool isDesktop;
   final bool connected;
@@ -138,9 +205,7 @@ class _StatusBanner extends StatelessWidget {
     final reconnecting = !connected;
     return Container(
       width: double.infinity,
-      color: reconnecting
-          ? scheme.errorContainer
-          : scheme.primaryContainer,
+      color: reconnecting ? scheme.errorContainer : scheme.primaryContainer,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
@@ -151,8 +216,8 @@ class _StatusBanner extends StatelessWidget {
               reconnecting
                   ? 'Reconnecting…'
                   : isDesktop
-                      ? 'Auto-syncing — anything you copy here appears on your other devices.'
-                      : 'Synced. Incoming clips land on your clipboard; add one below to send.',
+                  ? 'Auto-syncing — anything you copy here appears on your other devices.'
+                  : 'Synced. Incoming clips land on your clipboard; add one below to send.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
