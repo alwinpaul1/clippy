@@ -36,7 +36,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
       - run: npm i -g firebase-tools
       - name: Install rules-test deps
         working-directory: test/firestore_rules
