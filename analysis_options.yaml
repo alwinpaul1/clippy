@@ -23,6 +23,11 @@ linter:
   rules:
     # avoid_print: false  # Uncomment to disable the `avoid_print` rule
     # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+    # We intentionally back private fields (_crypto, _state, ...) with clean
+    # public named constructor params (crypto:, state:, ...). Initializing
+    # formals would force callers to write `_crypto:`, leaking the private
+    # name into the public API, so this rule is disabled project-wide.
+    prefer_initializing_formals: false
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

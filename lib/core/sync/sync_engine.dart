@@ -80,8 +80,33 @@ class SyncEngine {
     return [UploadClip(clip)];
   }
 
-  /// Spec §7 — On remote snapshot. Implemented in Task 5.
+  /// Spec §7 — On remote snapshot.
   Future<List<SyncAction>> onRemoteSnapshot(RemoteClip clip) async {
-    throw UnimplementedError('onRemoteSnapshot: implemented in Task 5');
+    // Rule 1: never react to our own writes.
+    if (clip.source == _selfDeviceId) return const [];
+
+    // Rule 2: already applied (also absorbs reconnect / cold-start re-delivery).
+    await _ensureLoaded();
+    if (clip.hash == _lastAppliedHash) return const [];
+
+    // From here this counts as a "considered" snapshot for the freshness gate.
+    final isFirstConsidered = !_firstSnapshotConsidered;
+    _firstSnapshotConsidered = true;
+
+    // Rule 3: cold-start / fresh-install protection — do not clobber the live
+    // clipboard with a stale clip on the first considered snapshot.
+    if (isFirstConsidered &&
+        _clock().difference(clip.timestamp) > _freshnessWindow) {
+      final text = await _crypto.open(clip);
+      await _setLastApplied(clip.hash);
+      return [OfferRestore(text)];
+    }
+
+    // Rule 4: apply, and arm one-shot echo suppression for the local watcher.
+    final text = await _crypto.open(clip);
+    _expectedEchoHash = clip.hash;
+    _expectedEchoExpiry = _clock().add(_echoWindow);
+    await _setLastApplied(clip.hash);
+    return [ApplyToClipboard(text)];
   }
 }
