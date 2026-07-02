@@ -108,9 +108,13 @@ void _handleSocket(WebSocket ws) {
             'timestamp': nowIso(),
           };
           r.remember(stored);
+          // Broadcast to ALL room members including the sender, so every device
+          // sees uniform server-stamped clips. A device ignores its own clips
+          // for the clipboard-apply decision (SyncEngine source check) but still
+          // shows them in history.
           final out = jsonEncode({'type': 'clip', 'clip': stored});
           for (final peer in r.clients) {
-            if (peer != ws && peer.readyState == WebSocket.open) {
+            if (peer.readyState == WebSocket.open) {
               peer.add(out);
             }
           }

@@ -62,18 +62,16 @@ void main() {
     await b.close();
   });
 
-  test('sender does NOT receive its own clip echoed back', () async {
+  test('sender also receives its own clip, server-stamped (echo to all)',
+      () async {
     final (a, aStream) = await connect(port());
     a.add(jsonEncode({'type': 'join', 'room': 'solo'}));
     await aStream.first; // history
 
     a.add(jsonEncode(clipMsg('mine')));
-    // Give the server a moment; expect no 'clip' frame back to sender.
-    final gotClip = await aStream
-        .firstWhere((m) => m['type'] == 'clip')
-        .timeout(const Duration(milliseconds: 300), onTimeout: () => {})
-        .then((m) => m.isNotEmpty);
-    expect(gotClip, isFalse);
+    final echoed = await aStream.firstWhere((m) => m['type'] == 'clip');
+    expect(echoed['clip']['ciphertext'], 'enc:mine');
+    expect(echoed['clip']['timestamp'], '2026-07-02T00:00:00.000Z');
     await a.close();
   });
 
