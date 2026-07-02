@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app/clip_controller.dart';
 import 'app/home_page.dart';
 import 'app/pairing_page.dart';
+import 'app/theme.dart';
 import 'core/pairing/pairing_key.dart';
 import 'platform/foreground_service.dart';
 import 'platform/secure_key_store.dart';
@@ -26,7 +27,12 @@ class ClippyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF6C4DF6),
+        scaffoldBackgroundColor: Ck.bg,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Ck.green,
+          brightness: Brightness.light,
+          surface: Ck.bg,
+        ),
       ),
       home: const ClippyRoot(),
     );
@@ -57,7 +63,8 @@ class _ClippyRootState extends State<ClippyRoot> {
     var id = prefs.getString('clippy.deviceId');
     if (id == null) {
       final rnd = Random.secure();
-      id = 'dev-${List.generate(6, (_) => rnd.nextInt(36).toRadixString(36)).join()}';
+      id =
+          'dev-${List.generate(6, (_) => rnd.nextInt(36).toRadixString(36)).join()}';
       await prefs.setString('clippy.deviceId', id);
     }
     return id;
@@ -106,7 +113,8 @@ class _ClippyRootState extends State<ClippyRoot> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        backgroundColor: Ck.bg,
+        body: Center(child: CircularProgressIndicator(color: Ck.green)),
       );
     }
     final controller = _controller;
