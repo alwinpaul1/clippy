@@ -37,11 +37,9 @@ dependencies:
   meta: ^1.18.0
   cryptography: ^2.9.0
   shared_preferences: ^2.5.5
-  firebase_core: ^4.11.0
-  firebase_auth: ^6.5.4
-  cloud_firestore: ^6.6.0
-  google_sign_in: ^7.2.0
   web_socket_channel: ^3.0.3
+  flutter_secure_storage: ^10.3.1
+  clipboard_watcher: ^0.3.0
 
 dev_dependencies:
   flutter_test:
