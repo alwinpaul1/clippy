@@ -74,6 +74,12 @@ class SyncEngine {
       return const [];
     }
 
+    // Rule 2b: persisted dedup. If this content is already the last clip we
+    // applied or uploaded, re-reading it (fresh isolate after the background
+    // service applied a clip, resume re-read, …) must not upload a duplicate.
+    // The in-memory echo window can't cover this — it's per-isolate.
+    if (h == await _state.readLastAppliedHash()) return const [];
+
     // Rule 3: seal and upload.
     final clip = await _crypto.seal(text, source: _selfDeviceId);
     await _setLastApplied(h);
@@ -95,6 +101,8 @@ class SyncEngine {
       _expectedEchoExpiry = null;
       return const [];
     }
+    // Rule 2b — see onLocalClip: don't re-upload the last applied content.
+    if (h == await _state.readLastAppliedHash()) return const [];
     final clip = (await _crypto.seal(base64Image, source: _selfDeviceId))
         .copyWith(kind: 'image', mime: mime);
     await _setLastApplied(h);

@@ -72,6 +72,7 @@ class _BackgroundSyncHandler extends TaskHandler {
       );
       final store = WebSocketClipStore.connect(Uri.parse(relayUrl), roomToken);
       _store = store;
+      if (kDebugMode) debugPrint('[clippy-bg] takeover: receive loop started');
       _sub = store.incoming.listen((clip) async {
         final actions = await _engine!.onRemoteSnapshot(clip);
         for (final a in actions) {
@@ -81,6 +82,9 @@ class _BackgroundSyncHandler extends TaskHandler {
               await ImageClipboard.write(base64Decode(a.text));
             } else {
               await Clipboard.setData(ClipboardData(text: a.text));
+            }
+            if (kDebugMode) {
+              debugPrint('[clippy-bg] applied ${clip.kind} to clipboard');
             }
           } catch (_) {
             // Background clipboard write failed — the clip stays in room

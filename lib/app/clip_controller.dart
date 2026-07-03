@@ -86,6 +86,15 @@ class ClipController extends ChangeNotifier
     _historySub = _store!.history.listen((clips) async {
       history = await _historyStore!.project(clips);
       notifyListeners();
+      // If the last-applied clip was deleted (here or on another device),
+      // clear its persisted hash so re-copying that content syncs again
+      // instead of being deduped by the engine's Rule 2b.
+      final last = await state.readLastAppliedHash();
+      if (last != null &&
+          last.isNotEmpty &&
+          history.every((i) => i.hash != last)) {
+        await state.writeLastAppliedHash('');
+      }
     });
     _incomingSub = _store!.incoming.listen((clip) async {
       final actions = await _engine!.onRemoteSnapshot(clip);

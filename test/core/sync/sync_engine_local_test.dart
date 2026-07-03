@@ -90,14 +90,19 @@ void main() {
     await engine
         .onLocalClip(const ClipEvent(text: 'remote', byteSize: 6)); // consumes
 
-    // User copies 'remote' again intentionally -> must upload.
+    // Re-copying content that is already the room's latest is a no-op —
+    // uploading again would only manufacture duplicates (Rule 2b).
     final again =
         await engine.onLocalClip(const ClipEvent(text: 'remote', byteSize: 6));
-    expect(again.single, isA<UploadClip>());
+    expect(again, isEmpty);
   });
 
-  test('echo guard does not fire after the 2s window expires', () async {
-    // Apply remote at t0; local event arrives at t0+3s -> window expired -> upload.
+  test('echo window expiry: a late echo of OLDER content uploads again',
+      () async {
+    // Apply remote at t0 (arms the one-shot echo for h:remote). A copy of
+    // different content moves lastApplied on; when 'remote' comes back at
+    // t0+3s the echo window has expired and Rule 2b no longer matches, so it
+    // uploads as a genuine new copy.
     final engine = SyncEngine(
         crypto: crypto,
         state: store,
@@ -111,10 +116,32 @@ void main() {
         source: 'phoneB',
         timestamp: t0);
     await engine.onRemoteSnapshot(remote);
+    _clockValue = t0.add(const Duration(seconds: 1));
+    await engine.onLocalClip(const ClipEvent(text: 'other', byteSize: 5));
     _clockValue = t0.add(const Duration(seconds: 3));
     final late =
         await engine.onLocalClip(const ClipEvent(text: 'remote', byteSize: 6));
     expect(late.single, isA<UploadClip>());
+  });
+
+  test('text matching the persisted lastAppliedHash is not re-uploaded',
+      () async {
+    // Another isolate (the background service) applied this clip and persisted
+    // its hash; a fresh engine re-reading the same clipboard must not upload a
+    // duplicate. The in-memory echo window can't cover this — it's per-isolate.
+    await store.writeLastAppliedHash('h:from-service');
+    final engine = build();
+    final actions = await engine
+        .onLocalClip(const ClipEvent(text: 'from-service', byteSize: 12));
+    expect(actions, isEmpty);
+  });
+
+  test('image matching the persisted lastAppliedHash is not re-uploaded',
+      () async {
+    await store.writeLastAppliedHash('h:imgdata');
+    final engine = build();
+    final actions = await engine.onLocalImage('imgdata');
+    expect(actions, isEmpty);
   });
 }
 
