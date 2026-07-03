@@ -9,6 +9,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../core/history/history_item.dart';
 import '../platform/haptics.dart';
+import '../platform/share_channel.dart';
 import '../core/pairing/pairing_key.dart';
 import 'clip_controller.dart';
 import 'settings_page.dart';
@@ -210,6 +211,8 @@ class _HomeBodyState extends State<_HomeBody> {
 
   ClipController get _ctl => widget.controller;
 
+  bool _shotHintShown = false;
+
   @override
   void initState() {
     super.initState();
@@ -217,12 +220,47 @@ class _HomeBodyState extends State<_HomeBody> {
       const Duration(seconds: 30),
       (_) => mounted ? setState(() {}) : null,
     );
+    _ctl.addListener(_maybeShowScreenshotHint);
   }
 
   @override
   void dispose() {
     _agesTicker?.cancel();
+    _ctl.removeListener(_maybeShowScreenshotHint);
     super.dispose();
+  }
+
+  // If the user granted only "Select photos" (partial), screenshot auto-sync
+  // silently can't work — nudge them, once, to grant full photo access.
+  void _maybeShowScreenshotHint() {
+    if (_shotHintShown || _ctl.screenshotAccess != 'partial') return;
+    _shotHintShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final c = context.ck;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              'Screenshot sync needs full photo access.',
+              style: Ct.body(13.5, color: Ck.bg),
+            ),
+            backgroundColor: c.snack,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            duration: const Duration(seconds: 8),
+            action: SnackBarAction(
+              label: 'Fix',
+              textColor: c.green,
+              onPressed: ShareChannel.openPhotoSettings,
+            ),
+          ),
+        );
+    });
   }
 
   void _enterSelection(HistoryItem item) {

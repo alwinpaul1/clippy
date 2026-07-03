@@ -39,15 +39,32 @@ abstract class ShareChannel {
   }
 
   /// Start the Android screenshot auto-sync: new screenshots arrive through
-  /// the [listen] onImage handler like shared images. Prompts for the
-  /// photo-read permission on first call; returns whether it's watching.
-  static Future<bool> startScreenshotWatch() async {
+  /// the [listen] onImage handler like shared images. Prompts for photo access
+  /// on first call. Returns the access level:
+  ///  - 'granted': full access — screenshots will sync.
+  ///  - 'partial': Android 14+ "Select photos" — screenshots WON'T sync;
+  ///    the user must grant full access (see [openPhotoSettings]).
+  ///  - 'denied' / 'unavailable': no sync.
+  static Future<String> startScreenshotWatch() async {
     try {
-      return await _channel.invokeMethod<bool>('startScreenshotWatch') ?? false;
+      return await _channel.invokeMethod<String>('startScreenshotWatch') ??
+          'denied';
     } on MissingPluginException {
-      return false; // Desktop / no native channel.
+      return 'unavailable'; // Desktop / no native channel.
     } on PlatformException {
-      return false;
+      return 'denied';
+    }
+  }
+
+  /// Open Clippy's app-settings page so the user can switch photo access from
+  /// "Select photos" to "Allow all" (partial can't be upgraded in-app).
+  static Future<void> openPhotoSettings() async {
+    try {
+      await _channel.invokeMethod<void>('openPhotoSettings');
+    } on MissingPluginException {
+      // Desktop / no native channel.
+    } on PlatformException {
+      // Ignore.
     }
   }
 

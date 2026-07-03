@@ -65,6 +65,10 @@ class ClipController extends ChangeNotifier
   List<HistoryItem> history = const [];
   bool ready = false;
   bool connected = false;
+  // Android screenshot auto-sync access: 'granted' | 'partial' | 'denied' |
+  // 'unavailable'. 'partial' means the user picked "Select photos" and new
+  // screenshots won't sync until they grant full access.
+  String screenshotAccess = 'granted';
 
   bool get isDesktop =>
       defaultTargetPlatform == TargetPlatform.macOS ||
@@ -191,9 +195,9 @@ class ClipController extends ChangeNotifier
       // to the foreground instead.
       WidgetsBinding.instance.addObserver(this);
       // Screenshots never touch the Android clipboard — watch MediaStore and
-      // sync new ones directly. Deliberately not awaited: the first call pops
-      // the photo-access dialog, and startup shouldn't block on the answer.
-      unawaited(ShareChannel.startScreenshotWatch());
+      // sync new ones directly. Not awaited: the first call pops the
+      // photo-access dialog, and startup shouldn't block on the answer.
+      unawaited(_startScreenshotSync());
       // Heartbeat the service isolate: while it hears us, it idles; when the
       // UI isolate dies (swipe-away), it takes over the receive loop.
       ForegroundServiceManager.pingAlive();
@@ -253,6 +257,13 @@ class ClipController extends ChangeNotifier
     if (text == null || text.isEmpty || text == _handledText) return;
     _handledText = text;
     await _pushLocal(text);
+  }
+
+  Future<void> _startScreenshotSync() async {
+    final status = await ShareChannel.startScreenshotWatch();
+    if (_disposed) return;
+    screenshotAccess = status;
+    notifyListeners();
   }
 
   /// Manual capture (phones without background capture, or any device).

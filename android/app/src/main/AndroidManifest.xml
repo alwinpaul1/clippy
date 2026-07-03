@@ -8,6 +8,9 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Auto-sync new screenshots: watch MediaStore for files in Screenshots/. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- Android 14+: lets us detect the "Select photos" (partial) grant so we
+         can prompt for full access, which screenshot auto-sync requires. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />

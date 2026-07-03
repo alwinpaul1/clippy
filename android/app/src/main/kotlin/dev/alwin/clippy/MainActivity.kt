@@ -12,6 +12,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.MediaStore
+import android.provider.Settings
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
@@ -45,6 +46,39 @@ class MainActivity : FlutterActivity() {
             Manifest.permission.READ_EXTERNAL_STORAGE
         }
 
+    /**
+     * Photo access as it matters for screenshot auto-sync:
+     *  - "granted": full READ_MEDIA_IMAGES — new screenshots are visible.
+     *  - "partial": Android 14+ "Select photos" only — new screenshots are
+     *    NOT visible, so auto-sync can't work; the user must grant full access.
+     *  - "denied": no access.
+     */
+    private fun photoAccess(): String {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) ==
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                return "granted"
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+                ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                return "partial"
+            }
+            return "denied"
+        }
+        return if (ContextCompat.checkSelfPermission(
+                this, Manifest.permission.READ_EXTERNAL_STORAGE,
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            "granted"
+        } else {
+            "denied"
+        }
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         channel = MethodChannel(
@@ -60,17 +94,30 @@ class MainActivity : FlutterActivity() {
                     result.success(shared)
                 }
                 "startScreenshotWatch" -> {
-                    if (ContextCompat.checkSelfPermission(this, mediaPermission) ==
-                        PackageManager.PERMISSION_GRANTED
-                    ) {
-                        watchScreenshots()
-                        result.success(true)
-                    } else {
-                        permissionResult = result
-                        ActivityCompat.requestPermissions(
-                            this, arrayOf(mediaPermission), SCREENSHOT_PERMISSION_CODE,
-                        )
+                    when (photoAccess()) {
+                        "granted" -> { watchScreenshots(); result.success("granted") }
+                        // Partial: the observer would only ever see user-selected
+                        // photos, never new screenshots — report so the UI can
+                        // prompt for full access instead of silently doing nothing.
+                        "partial" -> result.success("partial")
+                        else -> {
+                            permissionResult = result
+                            ActivityCompat.requestPermissions(
+                                this, arrayOf(mediaPermission), SCREENSHOT_PERMISSION_CODE,
+                            )
+                        }
                     }
+                }
+                // Deep-link to Clippy's app settings so the user can switch from
+                // "Select photos" to "Allow all" (can't be upgraded in-app).
+                "openPhotoSettings" -> {
+                    startActivity(
+                        Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.fromParts("package", packageName, null),
+                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                    result.success(null)
                 }
                 else -> result.notImplemented()
             }
@@ -108,10 +155,9 @@ class MainActivity : FlutterActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != SCREENSHOT_PERMISSION_CODE) return
-        val granted = grantResults.isNotEmpty() &&
-            grantResults[0] == PackageManager.PERMISSION_GRANTED
-        if (granted) watchScreenshots()
-        permissionResult?.success(granted)
+        val status = photoAccess()
+        if (status == "granted") watchScreenshots()
+        permissionResult?.success(status)
         permissionResult = null
     }
 
