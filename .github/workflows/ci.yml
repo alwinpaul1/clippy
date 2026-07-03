@@ -62,7 +62,22 @@ jobs:
       # precompiled binary download fails; a toolchain avoids that flake.
       - uses: dtolnay/rust-toolchain@stable
       - run: flutter pub get
-      - run: flutter build apk --release
+      - name: Decode release keystore (if configured)
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/clippy-release.jks"
+            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/clippy-release.jks" >> "$GITHUB_ENV"
+            echo "Release keystore configured — build will be release-signed."
+          else
+            echo "No release keystore secret set — falling back to debug signing."
+          fi
+      - name: Build APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: flutter build apk --release
       - uses: actions/upload-artifact@v4
         with:
           name: android-apk

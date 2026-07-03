@@ -28,11 +28,32 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        // Permanent release key, supplied by CI via env vars sourced from
+        // GitHub secrets (see tool/setup_release_keystore.sh). Only wired up
+        // when ANDROID_KEYSTORE_PATH is set, so local `flutter build` still
+        // works with no keystore.
+        create("release") {
+            val ksPath = System.getenv("ANDROID_KEYSTORE_PATH")
+            if (ksPath != null) {
+                storeFile = file(ksPath)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Sign with the permanent release key in CI (stable signature →
+            // updates install over the old app); fall back to the debug key
+            // for local builds so `flutter build` works without the keystore.
+            signingConfig = if (System.getenv("ANDROID_KEYSTORE_PATH") != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             // No R8: minification broke mobile_scanner's camera path on fresh
             // installs (NPE with minified names at scanner start). We don't
             // ship through the Play Store, so the size win isn't worth it.
