@@ -257,7 +257,7 @@ class _HomeBodyState extends State<_HomeBody> {
   }
 
   Future<void> _deleteOne(HistoryItem item) async {
-    HapticFeedback.mediumImpact();
+    HapticFeedback.lightImpact();
     await _ctl.deleteItems([item]);
     if (mounted) HomePage.snack(context, 'Clip deleted');
   }
@@ -271,7 +271,9 @@ class _HomeBodyState extends State<_HomeBody> {
       action: 'Delete',
     );
     if (ok != true) return;
-    HapticFeedback.mediumImpact();
+    // heavyImpact, not mediumImpact: Samsung maps mediumImpact (KEYBOARD_TAP)
+    // to the keyboard-vibration setting and silently drops it when that's off.
+    HapticFeedback.heavyImpact();
     await _ctl.deleteItems(chosen);
     _exitSelection();
   }
@@ -284,7 +286,8 @@ class _HomeBodyState extends State<_HomeBody> {
       action: 'Clear all',
     );
     if (ok == true) {
-      HapticFeedback.mediumImpact();
+      // heavyImpact, not mediumImpact — see _deleteSelected.
+      HapticFeedback.heavyImpact();
       await _ctl.clearAll();
     }
   }
@@ -810,6 +813,11 @@ class _ClipCard extends StatelessWidget {
       key: ValueKey('dismiss-${item.hash}'),
       direction: DismissDirection.endToStart,
       dismissThresholds: const {DismissDirection.endToStart: 0.55},
+      onUpdate: (d) {
+        // Soft tick the instant the swipe crosses (or backs out of) the delete
+        // threshold, so the gesture feels physical instead of abrupt.
+        if (d.reached != d.previousReached) HapticFeedback.selectionClick();
+      },
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 22),
@@ -1062,15 +1070,20 @@ class _ImagePreview extends StatelessWidget {
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Center(
-                  child: item.imageBytes != null
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
-                          child: Image.memory(item.imageBytes!,
-                              fit: BoxFit.contain),
-                        )
-                      : const SizedBox.shrink(),
-                ),
+                child: item.imageBytes != null
+                    ? InteractiveViewer(
+                        minScale: 1,
+                        maxScale: 6,
+                        clipBehavior: Clip.none,
+                        child: Center(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: Image.memory(item.imageBytes!,
+                                fit: BoxFit.contain),
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
               ),
             ),
             Padding(
