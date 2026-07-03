@@ -3,6 +3,9 @@
     <!-- Keep the relay connection alive while backgrounded. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Delete/clear haptics via Vibrator (performHapticFeedback is
+         unreliable on Samsung — gated behind system touch-vibration). -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Auto-sync new screenshots: watch MediaStore for files in Screenshots/. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission

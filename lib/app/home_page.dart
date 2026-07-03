@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../core/history/history_item.dart';
+import '../platform/haptics.dart';
 import '../core/pairing/pairing_key.dart';
 import 'clip_controller.dart';
 import 'settings_page.dart';
@@ -215,7 +216,7 @@ class _HomeBodyState extends State<_HomeBody> {
   }
 
   void _enterSelection(HistoryItem item) {
-    HapticFeedback.selectionClick();
+    Haptics.tick();
     setState(() {
       _selecting = true;
       _selected
@@ -276,7 +277,7 @@ class _HomeBodyState extends State<_HomeBody> {
   }
 
   Future<void> _deleteOne(HistoryItem item) async {
-    HapticFeedback.heavyImpact(); // Samsung gates the subtler constants
+    Haptics.thump();
     await _ctl.deleteItems([item]);
     if (mounted) HomePage.snack(context, 'Clip deleted');
   }
@@ -292,7 +293,7 @@ class _HomeBodyState extends State<_HomeBody> {
     if (ok != true) return;
     // heavyImpact, not mediumImpact: Samsung maps mediumImpact (KEYBOARD_TAP)
     // to the keyboard-vibration setting and silently drops it when that's off.
-    HapticFeedback.heavyImpact();
+    Haptics.thump();
     await _ctl.deleteItems(chosen);
     _exitSelection();
   }
@@ -306,7 +307,7 @@ class _HomeBodyState extends State<_HomeBody> {
     );
     if (ok == true) {
       // heavyImpact, not mediumImpact — see _deleteSelected.
-      HapticFeedback.heavyImpact();
+      Haptics.thump();
       await _ctl.clearAll();
     }
   }
@@ -833,12 +834,13 @@ class _ClipCard extends StatelessWidget {
     return Dismissible(
       key: ValueKey('dismiss-${item.hash}'),
       direction: DismissDirection.endToStart,
-      dismissThresholds: const {DismissDirection.endToStart: 0.55},
+      // Half swipe deletes (with the armed tick as the cue).
+      dismissThresholds: const {DismissDirection.endToStart: 0.4},
       onUpdate: (d) {
         // Tick the instant the swipe crosses (or backs out of) the delete
         // threshold. heavyImpact, not selectionClick: Samsung gates the
         // subtle constants (CLOCK_TICK/VIRTUAL_KEY) behind system settings.
-        if (d.reached != d.previousReached) HapticFeedback.heavyImpact();
+        if (d.reached != d.previousReached) Haptics.tick();
       },
       background: Container(
         alignment: Alignment.centerRight,

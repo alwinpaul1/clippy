@@ -8,6 +8,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.provider.MediaStore
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -72,6 +75,30 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        // Direct Vibrator haptics: Samsung gates View.performHapticFeedback
+        // (all of Flutter's HapticFeedback.*) behind system touch-vibration
+        // settings, so app haptics silently die. VibrationEffect doesn't.
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "clippy/haptics",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "tick" -> { vibrate(25, 120); result.success(null) }
+                "thump" -> { vibrate(55, 255); result.success(null) }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun vibrate(ms: Long, amplitude: Int) {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager)
+                .defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(VIBRATOR_SERVICE) as Vibrator
+        }
+        vibrator.vibrate(VibrationEffect.createOneShot(ms, amplitude))
     }
 
     override fun onRequestPermissionsResult(
