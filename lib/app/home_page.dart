@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -405,7 +407,8 @@ class _HomeBodyState extends State<_HomeBody> {
               ? const _EmptyState()
               : _HistoryList(
                   items: items,
-                  topInset: _selecting ? 76 : 122,
+                  topInset: (_selecting ? 76 : 122) +
+                      (defaultTargetPlatform == TargetPlatform.macOS ? 20 : 0),
                   selecting: _selecting,
                   selected: _selected,
                   collapsedDevices: _collapsedDevices,
@@ -479,7 +482,14 @@ class _GlassHeader extends StatelessWidget {
               bottom: BorderSide(color: c.ink.withValues(alpha: 0.06)),
             ),
           ),
-          padding: const EdgeInsets.fromLTRB(20, 10, 12, 4),
+          // Extra top padding on macOS so the logo clears the traffic-light
+          // buttons (the title bar is transparent, so content underlaps them).
+          padding: EdgeInsets.fromLTRB(
+            20,
+            defaultTargetPlatform == TargetPlatform.macOS ? 30 : 10,
+            12,
+            4,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
