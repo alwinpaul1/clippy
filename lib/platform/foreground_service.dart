@@ -9,9 +9,11 @@ import 'package:super_clipboard/super_clipboard.dart';
 
 import '../app/relay_config.dart';
 import '../core/backend/websocket_clip_store.dart';
+import '../core/models/clip_event.dart';
 import '../core/state/prefs_state_store.dart';
 import '../core/sync/sync_action.dart';
 import '../core/sync/sync_engine.dart';
+import 'clip_queue.dart';
 import 'device_name.dart';
 import 'image_clipboard.dart';
 import 'secure_key_store.dart';
@@ -64,8 +66,29 @@ class _BackgroundSyncHandler extends TaskHandler {
       // The activity's MediaStore observer died with the UI isolate, so the
       // takeover also picks up new screenshots by scanning their folders.
       unawaited(_scanScreenshots());
+      // Texts the Clippy keyboard captured while everything Dart was dead.
+      unawaited(_drainImeQueue());
     } else {
       _stop();
+    }
+  }
+
+  Future<void> _drainImeQueue() async {
+    final engine = _engine;
+    final store = _store;
+    if (engine == null || store == null) return;
+    for (final text in await ClipQueue.drain()) {
+      final actions = await engine.onLocalClip(
+        ClipEvent(text: text, byteSize: utf8.encode(text).length),
+      );
+      for (final a in actions) {
+        if (a is UploadClip) {
+          await store.append(a.clip.copyWith(device: _deviceName));
+          if (kDebugMode) {
+            debugPrint('[clippy-bg] pushed keyboard-captured clip');
+          }
+        }
+      }
     }
   }
 

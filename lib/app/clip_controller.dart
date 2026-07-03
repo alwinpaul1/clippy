@@ -20,6 +20,7 @@ import '../core/sync/sync_engine.dart';
 import '../platform/device_name.dart';
 import '../platform/flutter_clipboard_writer.dart';
 import '../platform/foreground_service.dart';
+import '../platform/clip_queue.dart';
 import '../platform/image_clipboard.dart';
 import '../platform/mac_screenshot_watcher.dart';
 import '../platform/share_channel.dart';
@@ -198,6 +199,8 @@ class ClipController extends ChangeNotifier
       // sync new ones directly. Not awaited: the first call pops the
       // photo-access dialog, and startup shouldn't block on the answer.
       unawaited(_startScreenshotSync());
+      // Texts the Clippy keyboard queued while no isolate was ready.
+      unawaited(_drainImeQueue());
       // Heartbeat the service isolate: while it hears us, it idles; when the
       // UI isolate dies (swipe-away), it takes over the receive loop.
       ForegroundServiceManager.pingAlive();
@@ -227,6 +230,16 @@ class ClipController extends ChangeNotifier
     if (state == AppLifecycleState.resumed && !isDesktop) {
       ForegroundServiceManager.pingAlive();
       onClipboardChanged();
+      unawaited(_drainImeQueue());
+    }
+  }
+
+  /// Push texts the Clippy keyboard captured while nothing could take them
+  /// live. Engine dedup (echo window + lastAppliedHash) absorbs repeats.
+  Future<void> _drainImeQueue() async {
+    for (final text in await ClipQueue.drain()) {
+      if (_disposed) return;
+      await _pushLocal(text);
     }
   }
 

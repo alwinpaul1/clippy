@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 
+import '../platform/share_channel.dart';
 import 'theme.dart';
 import 'theme_controller.dart';
 
@@ -83,6 +86,22 @@ class SettingsPage extends StatelessWidget {
                       style: Ct.body(12, color: c.muted, height: 1.4),
                     ),
                   ),
+                  if (defaultTargetPlatform == TargetPlatform.android) ...[
+                    const SizedBox(height: 24),
+                    _Label('INSTANT SYNC', c),
+                    const SizedBox(height: 4),
+                    const _KeyboardSyncCard(),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+                      child: Text(
+                        'Android only lets the default keyboard read the '
+                        'clipboard in the background. With the Clippy '
+                        'Keyboard active, copies from any app sync '
+                        'instantly — even with Clippy closed.',
+                        style: Ct.body(12, color: c.muted, height: 1.4),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   _Label('GROUP', c),
                   const SizedBox(height: 4),
@@ -253,6 +272,108 @@ class _ActionRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// "Bulletproof" instant sync setup: shows whether the Clippy Keyboard is
+/// enabled + default, with actions for each step. Status refreshes when the
+/// app resumes (the user bounces to system settings and back).
+class _KeyboardSyncCard extends StatefulWidget {
+  const _KeyboardSyncCard();
+
+  @override
+  State<_KeyboardSyncCard> createState() => _KeyboardSyncCardState();
+}
+
+class _KeyboardSyncCardState extends State<_KeyboardSyncCard>
+    with WidgetsBindingObserver {
+  bool _enabled = false;
+  bool _isDefault = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final s = await ShareChannel.imeStatus();
+    if (!mounted) return;
+    setState(() {
+      _enabled = s.enabled;
+      _isDefault = s.isDefault;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ck;
+    if (_isDefault) {
+      return _Card(
+        c,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            child: Row(
+              children: [
+                Icon(Icons.keyboard_alt_outlined, size: 20, color: c.green),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Clippy Keyboard active — copies sync instantly',
+                    style: Ct.body(14, color: c.green,
+                        weight: FontWeight.w500),
+                  ),
+                ),
+                Icon(Icons.check_circle, size: 18, color: c.green),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+    return _Card(
+      c,
+      children: [
+        _ActionRow(
+          c,
+          icon: _enabled
+              ? Icons.check_circle_outline
+              : Icons.keyboard_alt_outlined,
+          iconColor: _enabled ? c.green : c.muted2,
+          label: _enabled
+              ? 'Clippy Keyboard enabled'
+              : '1. Enable Clippy Keyboard',
+          labelColor: _enabled ? c.green : c.ink,
+          trailing: _enabled
+              ? null
+              : Icon(Icons.chevron_right, size: 20, color: c.muted),
+          onTap: ShareChannel.openImeSettings,
+        ),
+        _Divider(c),
+        _ActionRow(
+          c,
+          icon: Icons.swap_horiz,
+          iconColor: c.muted2,
+          label: '2. Set as default keyboard',
+          labelColor: _enabled ? c.ink : c.muted,
+          trailing: Icon(Icons.chevron_right, size: 20, color: c.muted),
+          onTap: ShareChannel.showImePicker,
+        ),
+      ],
     );
   }
 }

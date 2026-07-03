@@ -68,6 +68,21 @@
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
+        <!-- The Clippy keyboard: while it's the user's DEFAULT input method,
+             Android's clipboard restriction exempts this app, so copies sync
+             instantly from any app — even with Clippy cleared from Recents. -->
+        <service
+            android:name=".ClippyImeService"
+            android:label="Clippy Keyboard"
+            android:permission="android.permission.BIND_INPUT_METHOD"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
