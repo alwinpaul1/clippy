@@ -9,12 +9,16 @@ import 'app/pairing_page.dart';
 import 'app/theme.dart';
 import 'app/theme_controller.dart';
 import 'core/pairing/pairing_key.dart';
+import 'platform/desktop_tray.dart';
 import 'platform/foreground_service.dart';
 import 'platform/secure_key_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   ForegroundServiceManager.init();
+  // Desktop: menu-bar / tray icon + hide-on-close so Clippy keeps syncing in
+  // the background after its window is closed (no-op on mobile).
+  await DesktopTray.instance.init();
   final theme = ThemeController();
   await theme.load();
   runApp(ClippyApp(theme: theme));

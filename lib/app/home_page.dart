@@ -193,7 +193,15 @@ class _HomeBody extends StatefulWidget {
 
 class _HomeBodyState extends State<_HomeBody> {
   final Set<String> _selected = {};
+  final Set<String> _collapsedDevices = {};
   bool _selecting = false;
+
+  void _toggleDevice(String device) {
+    Haptics.tick();
+    setState(() {
+      if (!_collapsedDevices.remove(device)) _collapsedDevices.add(device);
+    });
+  }
   // Clip ages ("2m") are computed at build time; without a periodic rebuild
   // they go stale, so two devices show different ages for the same clip.
   Timer? _agesTicker;
@@ -400,6 +408,8 @@ class _HomeBodyState extends State<_HomeBody> {
                   topInset: _selecting ? 76 : 122,
                   selecting: _selecting,
                   selected: _selected,
+                  collapsedDevices: _collapsedDevices,
+                  onToggleDevice: _toggleDevice,
                   onCopy: _copy,
                   onDelete: _deleteOne,
                   onToggle: _toggle,
@@ -648,6 +658,8 @@ class _HistoryList extends StatelessWidget {
   final double topInset;
   final bool selecting;
   final Set<String> selected;
+  final Set<String> collapsedDevices;
+  final void Function(String) onToggleDevice;
   final Future<void> Function(HistoryItem) onCopy;
   final Future<void> Function(HistoryItem) onDelete;
   final void Function(HistoryItem) onToggle;
@@ -658,6 +670,8 @@ class _HistoryList extends StatelessWidget {
     required this.topInset,
     required this.selecting,
     required this.selected,
+    required this.collapsedDevices,
+    required this.onToggleDevice,
     required this.onCopy,
     required this.onDelete,
     required this.onToggle,
@@ -679,25 +693,51 @@ class _HistoryList extends StatelessWidget {
         l.map((i) => i.timestamp).reduce((a, b) => a.isAfter(b) ? a : b);
     final devices = byDevice.keys.toList()
       ..sort((a, b) => newestOf(byDevice[b]!).compareTo(newestOf(byDevice[a]!)));
+    final c = context.ck;
     for (final device in devices) {
+      final clips = byDevice[device]!
+        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      final collapsed = collapsedDevices.contains(device);
+      // Tappable device header: chevron rotates, clip count shown; tapping
+      // folds the group so a big recent group doesn't bury the others.
       children.add(
         Padding(
           padding: EdgeInsets.only(
-            // The first header sits just below the glass header — give it room
-            // so it never renders half-faded under the blur.
             top: device == devices.first ? 8 : 18,
             bottom: 2,
           ),
-          child: Text(
-            device.toUpperCase(),
-            style: Ct.sectionLabel().copyWith(color: context.ck.muted),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          child: InkWell(
+            onTap: () => onToggleDevice(device),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  AnimatedRotation(
+                    turns: collapsed ? -0.25 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: Icon(Icons.keyboard_arrow_down,
+                        size: 18, color: c.muted),
+                  ),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      device.toUpperCase(),
+                      style: Ct.sectionLabel().copyWith(color: c.muted),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text('${clips.length}',
+                      style: Ct.mono(11, color: c.muted2)),
+                ],
+              ),
+            ),
           ),
         ),
       );
-      final clips = byDevice[device]!
-        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      if (collapsed) continue;
       for (final item in clips) {
         children.add(
           _ClipCard(

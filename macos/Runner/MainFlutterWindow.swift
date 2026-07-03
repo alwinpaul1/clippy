@@ -1,7 +1,7 @@
 import Cocoa
 import FlutterMacOS
 
-class MainFlutterWindow: NSWindow, NSWindowDelegate {
+class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -11,10 +11,8 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     // Hide the "clippy" window-title text (keep the traffic-light controls).
     self.titleVisibility = .hidden
     self.titlebarAppearsTransparent = true
-
-    // Keep the window (and thus the Flutter engine + clipboard sync) alive when
-    // the user closes it — just hide it. The Dock icon reopens it.
-    self.delegate = self
+    // Closing only hides the window (window_manager intercepts it), so keep the
+    // instance alive when it does close.
     self.isReleasedWhenClosed = false
 
     RegisterGeneratedPlugins(registry: flutterViewController)
@@ -22,8 +20,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     super.awakeFromNib()
   }
 
-  func windowShouldClose(_ sender: NSWindow) -> Bool {
-    orderOut(nil)
-    return false
+  // Required by window_manager for correct show/hide ordering.
+  override public func order(
+    _ place: NSWindow.OrderingMode, relativeTo otherWin: Int
+  ) {
+    super.order(place, relativeTo: otherWin)
+    hiddenWindowAtLaunch()
   }
 }
