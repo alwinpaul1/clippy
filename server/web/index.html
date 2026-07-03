@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clippy — your clipboard, everywhere</title>
+<meta name="description" content="Copy on one device, paste on another. Clippy syncs your clipboard across Mac and Android — end-to-end encrypted, paired with a QR code.">
+<meta property="og:title" content="Clippy — your clipboard, everywhere">
+<meta property="og:description" content="Copy here. Paste there. A tiny, end-to-end-encrypted clipboard that follows you across devices.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..500&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F1EA; --surface:#FFFFFF; --ink:#1E1C15; --green:#1F4B3F;
+    --green-hover:#173A31; --muted:#7A7466; --muted2:#A39C8B; --border:#E3DED2;
+    --border-strong:#CFC9BA; --blue:#29A9F4;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:'Instrument Sans',system-ui,sans-serif; line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit}
+  .wrap{max-width:1000px; margin:0 auto; padding:0 24px}
+
+  /* Top bar */
+  .topbar{display:flex; align-items:center; gap:11px; padding:22px 0}
+  .topbar .mark{width:22px; height:31px}
+  .topbar .name{font-family:'Newsreader',serif; font-weight:500; font-size:22px; letter-spacing:-.01em}
+  .topbar .spacer{flex:1}
+  .topbar .gh{font-size:13.5px; color:var(--muted); text-decoration:none; border-bottom:1px solid transparent}
+  .topbar .gh:hover{color:var(--ink); border-bottom-color:var(--border-strong)}
+
+  /* Hero */
+  .hero{padding:36px 0 20px; text-align:center}
+  .hero .mascot{width:132px; height:auto; margin:0 auto 26px; display:block}
+  .hero h1{
+    font-family:'Newsreader',serif; font-weight:500; letter-spacing:-.02em;
+    font-size:clamp(44px,8vw,76px); line-height:1.02; margin:0 0 18px;
+  }
+  .hero h1 .b{color:var(--green)}
+  .hero .sub{
+    font-size:clamp(16px,2.4vw,19px); color:var(--muted); max-width:30em;
+    margin:0 auto 30px;
+  }
+
+  /* Download CTA */
+  .cta-row{display:flex; flex-direction:column; align-items:center; gap:14px}
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:11px;
+    background:var(--green); color:#F4F1EA; text-decoration:none;
+    font-weight:500; font-size:16px; padding:16px 30px; border-radius:14px;
+    border:1px solid var(--green); transition:background .18s ease, transform .18s ease;
+    box-shadow:0 2px 10px rgba(31,75,63,.18);
+  }
+  .btn:hover{background:var(--green-hover); transform:translateY(-1px)}
+  .btn:focus-visible{outline:3px solid rgba(41,169,244,.5); outline-offset:2px}
+  .btn svg{width:20px; height:20px; flex:none}
+  .btn .meta{font-family:'IBM Plex Mono',monospace; font-size:11px; opacity:.72; font-weight:400}
+  .others{font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--muted2)}
+  .others a{color:var(--muted); text-decoration:none; border-bottom:1px solid var(--border-strong)}
+  .others a:hover{color:var(--green)}
+  .others .sep{opacity:.5; margin:0 8px}
+
+  /* Feature strip */
+  .features{
+    display:grid; grid-template-columns:repeat(3,1fr); gap:1px;
+    background:var(--border); border:1px solid var(--border);
+    border-radius:16px; overflow:hidden; margin:64px 0;
+  }
+  .feature{background:var(--bg); padding:26px 24px}
+  .feature .k{font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted2); margin-bottom:10px}
+  .feature h3{font-family:'Newsreader',serif; font-weight:500; font-size:20px; margin:0 0 6px; letter-spacing:-.01em}
+  .feature p{margin:0; font-size:14.5px; color:var(--muted)}
+
+  /* Platform cards */
+  .platforms-h{text-align:center; margin:0 0 24px}
+  .platforms-h h2{font-family:'Newsreader',serif; font-weight:500; font-size:30px; margin:0 0 6px; letter-spacing:-.01em}
+  .platforms-h p{margin:0; color:var(--muted); font-size:15px}
+  .cards{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin:0 0 72px}
+  .card{
+    background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    padding:24px 22px; display:flex; flex-direction:column; gap:4px;
+    transition:border-color .18s ease, box-shadow .18s ease;
+  }
+  .card.you{border-color:var(--green); box-shadow:0 6px 20px rgba(31,75,63,.10)}
+  .card .os-ic{width:30px; height:30px; margin-bottom:12px; color:var(--ink)}
+  .card h3{font-family:'Newsreader',serif; font-weight:500; font-size:22px; margin:0; letter-spacing:-.01em}
+  .card .req{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--muted2); margin:2px 0 16px}
+  .card .yours{display:inline-block; font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--green); margin-bottom:10px}
+  .card .dl{
+    margin-top:auto; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    text-decoration:none; font-weight:500; font-size:14.5px; padding:12px 16px; border-radius:11px;
+    border:1px solid var(--border-strong); color:var(--ink); transition:background .16s ease, border-color .16s ease;
+  }
+  .card .dl:hover{background:var(--bg); border-color:var(--green)}
+  .card .dl.soon{color:var(--muted2); border-style:dashed; pointer-events:none}
+  .card .dl svg{width:16px; height:16px}
+
+  /* Pairing note */
+  .note{
+    text-align:center; max-width:34em; margin:0 auto 80px; color:var(--muted);
+    font-size:14.5px;
+  }
+  .note code{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--green); background:rgba(31,75,63,.07); padding:2px 6px; border-radius:5px}
+
+  footer{border-top:1px solid var(--border); padding:28px 0 44px; color:var(--muted2); font-size:13px; text-align:center}
+  footer a{color:var(--muted); text-decoration:none; border-bottom:1px solid var(--border-strong)}
+
+  /* Living mascot */
+  @keyframes bob{0%,100%{transform:translateY(0) rotate(0)}45%{transform:translateY(-6px) rotate(-3deg)}}
+  @keyframes blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
+  .mascot .body{transform-origin:50% 72%; transform-box:fill-box; animation:bob 5.5s ease-in-out infinite}
+  .mascot .eyes{transform-origin:center; transform-box:fill-box; animation:blink 4.2s linear infinite}
+
+  @media (max-width:720px){
+    .features{grid-template-columns:1fr}
+    .cards{grid-template-columns:1fr}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .mascot .body,.mascot .eyes{animation:none}
+    .btn,.card,.card .dl{transition:none}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <svg class="mark" viewBox="0 0 60 84" aria-hidden="true"><path d="M18,24 V58 A12,12 0 0 0 42,58 V18 A8,8 0 0 0 26,18 V56 A4,4 0 0 0 34,56 V26" fill="none" stroke="#1E1C15" stroke-width="7" stroke-linecap="round"/><circle cx="24" cy="8" r="6.5" fill="#F4F1EA" stroke="#1E1C15" stroke-width="2"/><circle cx="38" cy="8" r="6.5" fill="#F4F1EA" stroke="#1E1C15" stroke-width="2"/><circle cx="25.5" cy="9" r="3" fill="#1E1C15"/><circle cx="39.5" cy="9" r="3" fill="#1E1C15"/></svg>
+      <span class="name">Clippy</span>
+      <span class="spacer"></span>
+      <a class="gh" href="https://github.com/alwinpau1/clippy" target="_blank" rel="noopener">Source on GitHub</a>
+    </header>
+
+    <section class="hero">
+      <svg class="mascot" viewBox="0 0 60 92" aria-label="Clippy the paperclip">
+        <g class="body">
+          <path d="M18,32 V66 A12,12 0 0 0 42,66 V26 A8,8 0 0 0 26,26 V64 A4,4 0 0 0 34,64 V34" fill="none" stroke="#1F4B3F" stroke-width="7" stroke-linecap="round"/>
+          <circle cx="24" cy="16" r="6.5" fill="#FFFFFF" stroke="#1F4B3F" stroke-width="2"/>
+          <circle cx="38" cy="16" r="6.5" fill="#FFFFFF" stroke="#1F4B3F" stroke-width="2"/>
+          <g class="eyes"><circle cx="25.5" cy="17" r="3" fill="#1F4B3F"/><circle cx="39.5" cy="17" r="3" fill="#1F4B3F"/></g>
+        </g>
+      </svg>
+      <h1>Copy here.<br><span class="b">Paste there.</span></h1>
+      <p class="sub">Clippy keeps one clipboard in sync across your devices. Copy a link on your Mac, paste it on your phone — end-to-end encrypted, no account, no cloud reading your clips.</p>
+
+      <div class="cta-row">
+        <a class="btn" id="primaryBtn" href="https://github.com/alwinpau1/clippy/releases/latest">
+          <span id="primaryIcon"></span>
+          <span>Download Clippy</span>
+        </a>
+        <div class="others" id="others"></div>
+      </div>
+    </section>
+
+    <section class="features">
+      <div class="feature"><div class="k">Instant</div><h3>The latest copy, always here</h3><p>Copy on any paired device and it lands on this one's clipboard, ready to paste.</p></div>
+      <div class="feature"><div class="k">Private</div><h3>End-to-end encrypted</h3><p>Clips are sealed with AES-256 before they leave your device. The relay only sees ciphertext.</p></div>
+      <div class="feature"><div class="k">Simple</div><h3>Pair with a QR code</h3><p>Scan once to link a device. No sign-up, no email, no password to forget.</p></div>
+    </section>
+
+    <div class="platforms-h">
+      <h2>Get Clippy</h2>
+      <p>Pick your platform — pair them and they share one clipboard.</p>
+    </div>
+    <section class="cards" id="cards">
+      <div class="card" data-os="macos">
+        <svg class="os-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.5 3c.1 1-.3 2-.9 2.7-.6.8-1.6 1.4-2.6 1.3-.1-1 .4-2 .9-2.6.6-.8 1.7-1.3 2.6-1.4zM19 17.2c-.5 1.1-.7 1.6-1.3 2.6-.9 1.3-2.1 3-3.6 3-1.4 0-1.7-.9-3.6-.9-1.8 0-2.2.9-3.6.9-1.5 0-2.7-1.5-3.5-2.8C1.1 16.9.8 12.6 2.3 10.4c1-1.5 2.6-2.4 4.1-2.4 1.5 0 2.5 1 3.7 1 1.2 0 1.9-1 3.7-1 1.3 0 2.7.7 3.7 2-3.2 1.8-2.7 6.4 1.8 7.2z"/></svg>
+        <span class="yours" hidden>Your device</span>
+        <h3>macOS</h3>
+        <div class="req">Apple Silicon &amp; Intel · macOS 12+</div>
+        <a class="dl" href="https://github.com/alwinpau1/clippy/releases/latest/download/Clippy-macOS.zip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
+          Download .zip
+        </a>
+      </div>
+      <div class="card" data-os="android">
+        <svg class="os-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.6 9.5l1.4-2.4a.4.4 0 10-.7-.4l-1.4 2.5A8.7 8.7 0 0012 8c-1.8 0-3.4.5-4.9 1.2L5.7 6.7a.4.4 0 10-.7.4l1.4 2.4A8 8 0 002 16h20a8 8 0 00-4.4-6.5zM7.5 13.8a1 1 0 110-2 1 1 0 010 2zm9 0a1 1 0 110-2 1 1 0 010 2z"/></svg>
+        <span class="yours" hidden>Your device</span>
+        <h3>Android</h3>
+        <div class="req">Android 6+ · sideload APK</div>
+        <a class="dl" href="https://github.com/alwinpau1/clippy/releases/latest/download/Clippy-Android.apk">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
+          Download .apk
+        </a>
+      </div>
+      <div class="card" data-os="windows">
+        <svg class="os-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.5l7.5-1v7.2H3zM11.3 4.4L21 3v9.7h-9.7zM3 12.5h7.5v7.2L3 18.6zM11.3 12.5H21V21l-9.7-1.3z"/></svg>
+        <span class="yours" hidden>Your device</span>
+        <h3>Windows</h3>
+        <div class="req">Windows 10+ · in the works</div>
+        <span class="dl soon">Coming soon</span>
+      </div>
+    </section>
+
+    <p class="note">
+      First launch, one device shows a QR code and the others scan it — that shared key is what encrypts your clips.
+      macOS build is unsigned for now: right-click the app and choose <code>Open</code> the first time.
+    </p>
+
+    <footer>
+      Clippy · a small clipboard that follows you · <a href="https://github.com/alwinpau1/clippy" target="_blank" rel="noopener">GitHub</a>
+    </footer>
+  </div>
+
+<script>
+  var DL = {
+    macos:{label:'Download for macOS', meta:'.zip', href:'https://github.com/alwinpau1/clippy/releases/latest/download/Clippy-macOS.zip'},
+    android:{label:'Download for Android', meta:'.apk', href:'https://github.com/alwinpau1/clippy/releases/latest/download/Clippy-Android.apk'},
+    windows:{label:'Windows — coming soon', meta:'', href:'https://github.com/alwinpau1/clippy/releases/latest'}
+  };
+  var ICON = {
+    macos:'<svg viewBox="0 0 24 24" fill="#F4F1EA" width="20" height="20"><path d="M16.5 3c.1 1-.3 2-.9 2.7-.6.8-1.6 1.4-2.6 1.3-.1-1 .4-2 .9-2.6.6-.8 1.7-1.3 2.6-1.4zM19 17.2c-.5 1.1-.7 1.6-1.3 2.6-.9 1.3-2.1 3-3.6 3-1.4 0-1.7-.9-3.6-.9-1.8 0-2.2.9-3.6.9-1.5 0-2.7-1.5-3.5-2.8C1.1 16.9.8 12.6 2.3 10.4c1-1.5 2.6-2.4 4.1-2.4 1.5 0 2.5 1 3.7 1 1.2 0 1.9-1 3.7-1 1.3 0 2.7.7 3.7 2-3.2 1.8-2.7 6.4 1.8 7.2z"/></svg>',
+    android:'<svg viewBox="0 0 24 24" fill="#F4F1EA" width="20" height="20"><path d="M17.6 9.5l1.4-2.4a.4.4 0 10-.7-.4l-1.4 2.5A8.7 8.7 0 0012 8c-1.8 0-3.4.5-4.9 1.2L5.7 6.7a.4.4 0 10-.7.4l1.4 2.4A8 8 0 002 16h20a8 8 0 00-4.4-6.5zM7.5 13.8a1 1 0 110-2 1 1 0 010 2zm9 0a1 1 0 110-2 1 1 0 010 2z"/></svg>',
+    windows:'<svg viewBox="0 0 24 24" fill="#F4F1EA" width="20" height="20"><path d="M3 5.5l7.5-1v7.2H3zM11.3 4.4L21 3v9.7h-9.7zM3 12.5h7.5v7.2L3 18.6zM11.3 12.5H21V21l-9.7-1.3z"/></svg>'
+  };
+  function detectOS(){
+    var ua=navigator.userAgent, p=navigator.platform||'';
+    if(/Android/i.test(ua)) return 'android';
+    if(/iPhone|iPad|iPod/i.test(ua)) return 'ios';
+    if(/Mac/i.test(p)||/Mac OS X/i.test(ua)) return 'macos';
+    if(/Win/i.test(p)||/Windows/i.test(ua)) return 'windows';
+    return 'other';
+  }
+  var os=detectOS();
+  var primaryOS = (os==='macos'||os==='android'||os==='windows') ? os : 'macos';
+  var d=DL[primaryOS];
+  var btn=document.getElementById('primaryBtn');
+  btn.href=d.href;
+  document.getElementById('primaryIcon').innerHTML=ICON[primaryOS];
+  btn.querySelector('span:nth-child(2)').innerHTML = d.label + (d.meta?' <span class="meta">'+d.meta+'</span>':'');
+
+  // "Also available on …" line
+  var order=['macos','android','windows'];
+  var names={macos:'macOS',android:'Android',windows:'Windows'};
+  var others=order.filter(function(o){return o!==primaryOS;});
+  var html='Also on '+others.map(function(o){return '<a href="'+DL[o].href+'">'+names[o]+'</a>';}).join('<span class="sep">·</span>');
+  document.getElementById('others').innerHTML=html;
+
+  // Mark the visitor's card
+  if(os==='ios'){ /* iOS: no build; leave primary as macos, note phone */ }
+  var mine=document.querySelector('.card[data-os="'+primaryOS+'"]');
+  if(mine && (os===primaryOS)){ mine.classList.add('you'); var y=mine.querySelector('.yours'); if(y) y.hidden=false; }
+</script>
+</body>
+</html>

@@ -127,7 +127,9 @@ class WebSocketClipStore {
     final map = (m as Map).cast<String, dynamic>();
     return RemoteClip.fromMap(
       map,
-      timestamp: DateTime.parse(map['timestamp'] as String),
+      // Relay stamps UTC; show it in THIS device's local timezone so the
+      // displayed time/date matches wherever Clippy is installed.
+      timestamp: DateTime.parse(map['timestamp'] as String).toLocal(),
     );
   }
 

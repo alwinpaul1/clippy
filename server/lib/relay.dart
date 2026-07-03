@@ -149,7 +149,7 @@ Future<void> _handleRequest(HttpRequest req) async {
     _handleSocket(ws);
     return;
   }
-  if (req.uri.path == '/health' || req.uri.path == '/') {
+  if (req.uri.path == '/health') {
     req.response
       ..statusCode = HttpStatus.ok
       ..headers.contentType = ContentType.text
@@ -157,8 +157,43 @@ Future<void> _handleRequest(HttpRequest req) async {
     await req.response.close();
     return;
   }
+  if (req.uri.path == '/' || req.uri.path == '/index.html') {
+    req.response
+      ..statusCode = HttpStatus.ok
+      ..headers.contentType = ContentType.html
+      ..write(_downloadPage());
+    await req.response.close();
+    return;
+  }
   req.response.statusCode = HttpStatus.notFound;
   await req.response.close();
+}
+
+String? _downloadPageCache;
+
+/// The public download page (served at "/"). Loaded once from disk; the
+/// Dockerfile copies web/ next to the binary.
+String _downloadPage() {
+  if (_downloadPageCache != null) return _downloadPageCache!;
+  final candidates = <String>[
+    'web/index.html',
+    '/app/web/index.html',
+    '${File(Platform.resolvedExecutable).parent.parent.path}/web/index.html',
+  ];
+  for (final path in candidates) {
+    try {
+      final file = File(path);
+      if (file.existsSync()) {
+        return _downloadPageCache = file.readAsStringSync();
+      }
+    } catch (_) {
+      // Try the next candidate.
+    }
+  }
+  return _downloadPageCache =
+      '<!doctype html><title>Clippy</title>'
+      '<body style="font-family:system-ui;padding:40px">'
+      '<h1>Clippy relay</h1><p>The download page is unavailable.</p>';
 }
 
 /// Send [msg] to every open socket in [room].
