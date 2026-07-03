@@ -61,6 +61,25 @@ void main() {
     await b.close();
   });
 
+  test('joining later also emits the newest clip on incoming (catch-up apply)',
+      () async {
+    // A clip copied while a device was offline must land on its clipboard at
+    // reconnect, not just appear in the list. The engine's persisted
+    // lastAppliedHash dedups re-emits, so this is safe on every reconnect.
+    final a = WebSocketClipStore.connect(url(), 'room-c');
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await a.append(clip('missed'));
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+
+    final b = WebSocketClipStore.connect(url(), 'room-c');
+    final caught =
+        await b.incoming.first.timeout(const Duration(seconds: 5));
+    expect(caught.ciphertext, 'enc:missed');
+
+    await a.close();
+    await b.close();
+  });
+
   test('different rooms are isolated', () async {
     final a = WebSocketClipStore.connect(url(), 'room-A');
     final b = WebSocketClipStore.connect(url(), 'room-B');

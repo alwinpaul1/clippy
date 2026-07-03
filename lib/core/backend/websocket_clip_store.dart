@@ -100,6 +100,10 @@ class WebSocketClipStore {
           ..clear()
           ..addAll((msg['clips'] as List).map(_parse));
         _emitHistory();
+        // Catch-up apply: surface the newest clip as incoming so anything
+        // copied while we were offline lands on the clipboard at reconnect.
+        // The engine's persisted lastAppliedHash dedups repeat emissions.
+        if (_history.isNotEmpty) _incomingController.add(_history.last);
       case 'clip':
         final clip = _parse(msg['clip']);
         if (_history.isEmpty || _history.last.hash != clip.hash) {

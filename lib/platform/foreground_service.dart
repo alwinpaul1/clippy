@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:super_clipboard/super_clipboard.dart';
 
 import '../app/relay_config.dart';
 import '../core/backend/websocket_clip_store.dart';
@@ -72,16 +72,33 @@ class _BackgroundSyncHandler extends TaskHandler {
       );
       final store = WebSocketClipStore.connect(Uri.parse(relayUrl), roomToken);
       _store = store;
-      if (kDebugMode) debugPrint('[clippy-bg] takeover: receive loop started');
+      if (kDebugMode) {
+        debugPrint('[clippy-bg] takeover: receive loop started');
+        unawaited(store.history.first.then(
+          (h) => debugPrint('[clippy-bg] snapshot: ${h.length} clips'),
+        ));
+      }
       _sub = store.incoming.listen((clip) async {
         final actions = await _engine!.onRemoteSnapshot(clip);
+        if (kDebugMode) {
+          debugPrint('[clippy-bg] incoming ${clip.kind} '
+              'age=${DateTime.now().difference(clip.timestamp).inSeconds}s '
+              '-> ${actions.map((a) => a.runtimeType).toList()}');
+        }
         for (final a in actions) {
           if (a is! ApplyToClipboard) continue;
           try {
             if (clip.kind == 'image') {
               await ImageClipboard.write(base64Decode(a.text));
             } else {
-              await Clipboard.setData(ClipboardData(text: a.text));
+              // NOT Clipboard.setData: SystemChannels.platform needs an
+              // Activity-backed engine, which this headless service isolate
+              // lacks. super_clipboard is a real plugin (registered in the
+              // service engine) and writes fine from here.
+              final cb = SystemClipboard.instance;
+              if (cb == null) continue;
+              final item = DataWriterItem()..add(Formats.plainText(a.text));
+              await cb.write([item]);
             }
             if (kDebugMode) {
               debugPrint('[clippy-bg] applied ${clip.kind} to clipboard');
