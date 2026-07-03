@@ -159,6 +159,10 @@
   @keyframes blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
   .mascot .body{transform-origin:50% 72%; transform-box:fill-box; animation:bob 5.5s ease-in-out infinite}
   .mascot .eyes{transform-origin:center; transform-box:fill-box; animation:blink 4.2s linear infinite}
+  /* The tiny top-bar clip lives too (gentler bob so it doesn't jitter). */
+  @keyframes bobSmall{0%,100%{transform:translateY(0) rotate(0)}45%{transform:translateY(-1.5px) rotate(-2deg)}}
+  .topbar .mark .body{transform-origin:50% 72%; transform-box:fill-box; animation:bobSmall 5.5s ease-in-out infinite}
+  .topbar .mark .eyes{transform-origin:center; transform-box:fill-box; animation:blink 4.2s linear infinite}
 
   @media (max-width:720px){
     .cards{grid-template-columns:1fr}
@@ -170,7 +174,8 @@
     .assistant .clip{margin-top:14px}
   }
   @media (prefers-reduced-motion:reduce){
-    .mascot .body,.mascot .eyes,.assistant .clip .body,.assistant .clip .eyes{animation:none}
+    .mascot .body,.mascot .eyes,.assistant .clip .body,.assistant .clip .eyes,
+    .topbar .mark .body,.topbar .mark .eyes{animation:none}
     .btn,.card,.card .dl{transition:none}
   }
 </style>
@@ -178,7 +183,7 @@
 <body>
   <div class="wrap">
     <header class="topbar">
-      <svg class="mark" viewBox="0 0 60 84" aria-hidden="true"><path d="M18,24 V58 A12,12 0 0 0 42,58 V18 A8,8 0 0 0 26,18 V56 A4,4 0 0 0 34,56 V26" fill="none" stroke="#1E1C15" stroke-width="7" stroke-linecap="round"/><circle cx="24" cy="8" r="6.5" fill="#F4F1EA" stroke="#1E1C15" stroke-width="2"/><circle cx="38" cy="8" r="6.5" fill="#F4F1EA" stroke="#1E1C15" stroke-width="2"/><circle cx="25.5" cy="9" r="3" fill="#1E1C15"/><circle cx="39.5" cy="9" r="3" fill="#1E1C15"/></svg>
+      <svg class="mark" viewBox="0 0 60 84" aria-hidden="true"><g class="body"><path d="M18,24 V58 A12,12 0 0 0 42,58 V18 A8,8 0 0 0 26,18 V56 A4,4 0 0 0 34,56 V26" fill="none" stroke="#1E1C15" stroke-width="7" stroke-linecap="round"/><circle cx="24" cy="8" r="6.5" fill="#F4F1EA" stroke="#1E1C15" stroke-width="2"/><circle cx="38" cy="8" r="6.5" fill="#F4F1EA" stroke="#1E1C15" stroke-width="2"/><g class="eyes"><circle cx="25.5" cy="9" r="3" fill="#1E1C15"/><circle cx="39.5" cy="9" r="3" fill="#1E1C15"/></g></g></svg>
       <span class="name">Clippy</span>
       <span class="spacer"></span>
       <a class="gh" href="#get">Get it</a>
