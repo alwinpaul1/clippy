@@ -230,8 +230,6 @@ class _HomeBodyState extends State<_HomeBody> {
 
   ClipController get _ctl => widget.controller;
 
-  bool _shotHintShown = false;
-
   @override
   void initState() {
     super.initState();
@@ -239,47 +237,18 @@ class _HomeBodyState extends State<_HomeBody> {
       const Duration(seconds: 30),
       (_) => mounted ? setState(() {}) : null,
     );
-    _ctl.addListener(_maybeShowScreenshotHint);
+    _ctl.addListener(_onCtlChanged);
+  }
+
+  void _onCtlChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _agesTicker?.cancel();
-    _ctl.removeListener(_maybeShowScreenshotHint);
+    _ctl.removeListener(_onCtlChanged);
     super.dispose();
-  }
-
-  // If the user granted only "Select photos" (partial), screenshot auto-sync
-  // silently can't work — nudge them, once, to grant full photo access.
-  void _maybeShowScreenshotHint() {
-    if (_shotHintShown || _ctl.screenshotAccess != 'partial') return;
-    _shotHintShown = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final c = context.ck;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              'Screenshot sync needs full photo access.',
-              style: Ct.body(13.5, color: Ck.bg),
-            ),
-            backgroundColor: c.snack,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            duration: const Duration(seconds: 8),
-            action: SnackBarAction(
-              label: 'Fix',
-              textColor: c.green,
-              onPressed: ShareChannel.openPhotoSettings,
-            ),
-          ),
-        );
-    });
   }
 
   void _enterSelection(HistoryItem item) {
@@ -503,7 +472,63 @@ class _HomeBodyState extends State<_HomeBody> {
                   onClearAll: _clearAll,
                 ),
         ),
+        // Screenshot auto-sync can't work with "Select photos" (partial) or
+        // denied photo access — a transient snackbar was too easy to miss, so
+        // pin a banner until it's fixed. The lifecycle-resume refresh in
+        // ClipController clears it once full access is granted.
+        if (defaultTargetPlatform == TargetPlatform.android &&
+            (_ctl.screenshotAccess == 'partial' ||
+                _ctl.screenshotAccess == 'denied'))
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 16,
+            child: SafeArea(child: _ShotAccessBanner()),
+          ),
       ],
+    );
+  }
+}
+
+/// Pinned warning: screenshots won't sync until Clippy has FULL photo access
+/// (Android 14+ "Select photos" partial grants hide new screenshots entirely).
+class _ShotAccessBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ck;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border.all(color: c.rust.withValues(alpha: 0.45)),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.10),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.screenshot_monitor, size: 18, color: c.rust),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              "Screenshots won't sync — Clippy needs full photo access.",
+              style: Ct.body(12.5, color: c.ink, height: 1.35),
+            ),
+          ),
+          TextButton(
+            onPressed: ShareChannel.openPhotoSettings,
+            child: Text(
+              'Fix',
+              style: Ct.body(13.5, weight: FontWeight.w600, color: c.green),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
