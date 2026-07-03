@@ -48,6 +48,7 @@ class ClipController extends ChangeNotifier
   MacScreenshotWatcher? _macShots;
   Timer? _uiPing;
   Timer? _bgDrain;
+  StreamSubscription? _queueWatch;
   String _deviceName = '';
   // After we write an incoming image to the clipboard, ignore the watcher's
   // resulting change for a moment (PNG round-trips aren't byte-identical, so a
@@ -211,10 +212,13 @@ class ClipController extends ChangeNotifier
       );
       // While Clippy is backgrounded-but-alive (in Recents), the service
       // handler idles (it hears our pings) and the resume hook hasn't fired —
-      // so nobody would drain copies the AccessibilityService queues. Poll
-      // here; it's just a directory check when the queue is empty.
+      // so nobody would drain copies the AccessibilityService queues. Watch
+      // the queue directory (inotify) so a captured copy syncs the instant
+      // it's written, with a slow poll as a safety net.
+      final queueEvents = await ClipQueue.watch();
+      _queueWatch = queueEvents?.listen((_) => unawaited(_drainQueue()));
       _bgDrain = Timer.periodic(
-        const Duration(seconds: 3),
+        const Duration(seconds: 10),
         (_) => unawaited(_drainQueue()),
       );
     }
@@ -350,6 +354,7 @@ class ClipController extends ChangeNotifier
     WidgetsBinding.instance.removeObserver(this);
     _uiPing?.cancel();
     _bgDrain?.cancel();
+    _queueWatch?.cancel();
     _macShots?.stop();
     ShareChannel.listen();
     if (_watching) {

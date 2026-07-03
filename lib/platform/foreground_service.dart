@@ -44,6 +44,7 @@ class _BackgroundSyncHandler extends TaskHandler {
   DateTime _lastUiPing = DateTime.now();
   WebSocketClipStore? _store;
   StreamSubscription? _sub;
+  StreamSubscription? _queueWatch;
   SyncEngine? _engine;
   bool _starting = false;
   String _deviceName = '';
@@ -204,12 +205,19 @@ class _BackgroundSyncHandler extends TaskHandler {
           }
         }
       });
+      // Instant outgoing sync during takeover: drain the moment the
+      // AccessibilityService writes a captured copy (the 10s tick stays as a
+      // safety net).
+      final queueEvents = await ClipQueue.watch();
+      _queueWatch = queueEvents?.listen((_) => unawaited(_drainQueue()));
     } finally {
       _starting = false;
     }
   }
 
   void _stop() {
+    _queueWatch?.cancel();
+    _queueWatch = null;
     _sub?.cancel();
     _sub = null;
     _store?.close();

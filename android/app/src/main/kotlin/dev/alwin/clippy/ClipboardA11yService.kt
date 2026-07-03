@@ -40,20 +40,46 @@ class ClipboardA11yService : AccessibilityService() {
     }
 
     private var lastPoll = 0L
+    private var trailing: Runnable? = null
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         // The bg clipboard listener is dead on One UI, so use accessibility
         // events as a "user might have copied" trigger to read the clipboard
         // via the focus-trick. Only text-selection / clicks (copies happen
         // around those) — NOT text-changed, which fires while typing and would
-        // flicker constantly. Throttled so rapid events don't thrash.
+        // flicker constantly. Throttled so rapid events don't thrash, but a
+        // throttled event schedules a TRAILING read instead of being dropped:
+        // long-press-select fires an event, and the Copy tap ~1s later would
+        // otherwise land inside the window and never be read.
         val t = event?.eventType ?: return
         if (t != AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED &&
             t != AccessibilityEvent.TYPE_VIEW_CLICKED
         ) return
         val now = System.currentTimeMillis()
-        if (now - lastPoll < 1200) return
-        lastPoll = now
+        val wait = 800 - (now - lastPoll)
+        if (wait <= 0) {
+            lastPoll = now
+            attemptRead()
+            // A Copy tap's click event can arrive BEFORE the system commits
+            // the clipboard — one follow-up read catches the fresh content.
+            scheduleTrailing(600)
+        } else if (trailing == null) {
+            scheduleTrailing(wait)
+        }
+    }
+
+    private fun scheduleTrailing(delayMs: Long) {
+        if (trailing != null) return
+        val r = Runnable {
+            trailing = null
+            lastPoll = System.currentTimeMillis()
+            attemptRead()
+        }
+        trailing = r
+        main.postDelayed(r, delayMs)
+    }
+
+    private fun attemptRead() {
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         readClip(cm)?.let { emit(it); return }
         focusTrickRead(cm)
