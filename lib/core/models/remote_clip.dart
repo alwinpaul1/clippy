@@ -8,6 +8,13 @@ class RemoteClip {
   final String iv;
   final String hash;
   final String source;
+
+  /// Human-friendly name of the origin device (cleartext, for display only).
+  final String device;
+
+  /// 'text' or 'image'; for images the decrypted plaintext is base64 JPEG.
+  final String kind;
+  final String mime;
   final DateTime timestamp;
 
   const RemoteClip({
@@ -16,6 +23,9 @@ class RemoteClip {
     required this.hash,
     required this.source,
     required this.timestamp,
+    this.device = '',
+    this.kind = 'text',
+    this.mime = '',
   });
 
   factory RemoteClip.fromMap(
@@ -27,6 +37,9 @@ class RemoteClip {
         iv: map['iv'] as String,
         hash: map['hash'] as String,
         source: map['source'] as String,
+        device: (map['device'] as String?) ?? '',
+        kind: (map['kind'] as String?) ?? 'text',
+        mime: (map['mime'] as String?) ?? '',
         timestamp: timestamp,
       );
 
@@ -37,8 +50,12 @@ class RemoteClip {
       other.iv == iv &&
       other.hash == hash &&
       other.source == source &&
+      other.device == device &&
+      other.kind == kind &&
+      other.mime == mime &&
       other.timestamp == timestamp;
 
   @override
-  int get hashCode => Object.hash(ciphertext, iv, hash, source, timestamp);
+  int get hashCode =>
+      Object.hash(ciphertext, iv, hash, source, device, kind, mime, timestamp);
 }

@@ -7,6 +7,7 @@ import 'app/clip_controller.dart';
 import 'app/home_page.dart';
 import 'app/pairing_page.dart';
 import 'app/theme.dart';
+import 'app/theme_controller.dart';
 import 'core/pairing/pairing_key.dart';
 import 'platform/foreground_service.dart';
 import 'platform/secure_key_store.dart';
@@ -14,33 +15,49 @@ import 'platform/secure_key_store.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   ForegroundServiceManager.init();
-  runApp(const ClippyApp());
+  final theme = ThemeController();
+  await theme.load();
+  runApp(ClippyApp(theme: theme));
 }
 
 class ClippyApp extends StatelessWidget {
-  const ClippyApp({super.key});
+  final ThemeController theme;
+  const ClippyApp({super.key, required this.theme});
+
+  ThemeData _themeData(ClippyColors c) {
+    final brightness = c.isDark ? Brightness.dark : Brightness.light;
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      scaffoldBackgroundColor: c.bg,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: c.green,
+        brightness: brightness,
+        surface: c.bg,
+      ),
+      extensions: [c],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Clippy',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: Ck.bg,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Ck.green,
-          brightness: Brightness.light,
-          surface: Ck.bg,
-        ),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: theme,
+      builder: (context, mode, _) => MaterialApp(
+        title: 'Clippy',
+        debugShowCheckedModeBanner: false,
+        theme: _themeData(ClippyColors.light),
+        darkTheme: _themeData(ClippyColors.dark),
+        themeMode: mode,
+        home: ClippyRoot(theme: theme),
       ),
-      home: const ClippyRoot(),
     );
   }
 }
 
 class ClippyRoot extends StatefulWidget {
-  const ClippyRoot({super.key});
+  final ThemeController theme;
+  const ClippyRoot({super.key, required this.theme});
 
   @override
   State<ClippyRoot> createState() => _ClippyRootState();
@@ -112,9 +129,9 @@ class _ClippyRootState extends State<ClippyRoot> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        backgroundColor: Ck.bg,
-        body: Center(child: CircularProgressIndicator(color: Ck.green)),
+      return Scaffold(
+        backgroundColor: context.ck.bg,
+        body: Center(child: CircularProgressIndicator(color: context.ck.green)),
       );
     }
     final controller = _controller;
@@ -124,6 +141,7 @@ class _ClippyRootState extends State<ClippyRoot> {
     return HomePage(
       controller: controller,
       pairing: _pairing!,
+      theme: widget.theme,
       onUnpair: _onUnpair,
     );
   }

@@ -16,6 +16,9 @@ void main() {
     final field = tester.widget<TextField>(find.byType(TextField));
     expect(field.controller!.text, isNotEmpty);
 
+    // The QR pushes the button below the fold in the test viewport; scroll to it.
+    await tester.ensureVisible(find.text('Pair this device'));
+    await tester.pump();
     await tester.tap(find.text('Pair this device'));
     await tester.pump();
 
@@ -30,6 +33,8 @@ void main() {
     ));
 
     await tester.enterText(find.byType(TextField), 'not!!a!!valid!!key');
+    await tester.ensureVisible(find.text('Pair this device'));
+    await tester.pump();
     await tester.tap(find.text('Pair this device'));
     await tester.pump();
 

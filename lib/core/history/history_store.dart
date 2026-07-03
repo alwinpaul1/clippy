@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import '../crypto/crypto_box.dart';
 import '../models/remote_clip.dart';
 import 'clipboard_writer.dart';
@@ -31,10 +34,23 @@ class HistoryStore {
     for (final clip in sorted) {
       if (clip.hash == previousHash) continue; // collapse consecutive dupes
       previousHash = clip.hash;
+      final text = await _crypto.open(clip);
+      Uint8List? bytes;
+      if (clip.kind == 'image') {
+        try {
+          bytes = base64Decode(text);
+        } catch (_) {
+          bytes = null;
+        }
+      }
       items.add(HistoryItem(
-        text: await _crypto.open(clip),
+        text: text,
         hash: clip.hash,
         source: clip.source,
+        device: clip.device,
+        kind: clip.kind,
+        mime: clip.mime,
+        imageBytes: bytes,
         timestamp: clip.timestamp,
       ));
       if (items.length >= _capacity) break;

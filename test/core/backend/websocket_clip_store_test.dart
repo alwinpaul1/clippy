@@ -109,7 +109,15 @@ void main() {
         ciphertext: 'enc:x', iv: 'iv', hash: 'h:x', source: 'me'));
     expect(jsonDecode(transports[0].sent.single), {
       'type': 'clip',
-      'clip': {'ciphertext': 'enc:x', 'iv': 'iv', 'hash': 'h:x', 'source': 'me'},
+      'clip': {
+        'ciphertext': 'enc:x',
+        'iv': 'iv',
+        'hash': 'h:x',
+        'source': 'me',
+        'device': '',
+        'kind': 'text',
+        'mime': '',
+      },
     });
   });
 

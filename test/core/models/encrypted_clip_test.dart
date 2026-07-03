@@ -7,7 +7,15 @@ void main() {
 
   test('toMap contains all fields (no timestamp — server adds it)', () {
     final m = clip.toMap();
-    expect(m, {'ciphertext': 'ct', 'iv': 'iv', 'hash': 'h', 'source': 'devA'});
+    expect(m, {
+      'ciphertext': 'ct',
+      'iv': 'iv',
+      'hash': 'h',
+      'source': 'devA',
+      'device': '',
+      'kind': 'text',
+      'mime': '',
+    });
     expect(m.containsKey('timestamp'), isFalse);
   });
 

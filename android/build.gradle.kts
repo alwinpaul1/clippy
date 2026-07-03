@@ -1,3 +1,7 @@
+// Restore Project.exec(Closure) for Gradle 9 so super_clipboard's cargokit
+// native build works. Persistent (in-project), unlike a ~/.pub-cache patch.
+apply(from = "exec_compat.gradle")
+
 allprojects {
     repositories {
         google()

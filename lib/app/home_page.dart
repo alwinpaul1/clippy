@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -5,29 +7,35 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../core/history/history_item.dart';
 import '../core/pairing/pairing_key.dart';
 import 'clip_controller.dart';
+import 'settings_page.dart';
 import 'theme.dart';
+import 'theme_controller.dart';
 
-/// The main Clippy screen: synced clipboard history (tap to copy), a manual
-/// add box, and access to the pairing key for adding more devices.
+/// The main Clippy screen: synced clipboard history (tap to copy) under a
+/// frosted-glass header with the living mascot, a manual add box, delete
+/// (swipe / clear-all / multi-select), and access to settings + pairing.
 class HomePage extends StatelessWidget {
   final ClipController controller;
   final PairingKey pairing;
+  final ThemeController theme;
   final Future<void> Function() onUnpair;
 
   const HomePage({
     super.key,
     required this.controller,
     required this.pairing,
+    required this.theme,
     required this.onUnpair,
   });
 
-  static void _snack(BuildContext context, String text) {
+  static void snack(BuildContext context, String text) {
+    final c = context.ck;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(text, style: Ct.body(13.5, color: Ck.bg)),
-          backgroundColor: Ck.snack,
+          backgroundColor: c.snack,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
@@ -37,13 +45,26 @@ class HomePage extends StatelessWidget {
       );
   }
 
+  void _openSettings(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SettingsPage(
+          theme: theme,
+          onAddDevice: () => _showKey(context),
+          onUnpair: onUnpair,
+        ),
+      ),
+    );
+  }
+
   void _showKey(BuildContext context) {
+    final c = context.ck;
     final payload = pairing.toQrPayload();
     showDialog<void>(
       context: context,
       barrierColor: const Color(0x731E1C15),
       builder: (context) => Dialog(
-        backgroundColor: Ck.dialogBg,
+        backgroundColor: c.dialogBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.all(26),
@@ -51,11 +72,11 @@ class HomePage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Add another device', style: Ct.title(24)),
+              Text('Add another device', style: Ct.title(24, color: c.ink)),
               const SizedBox(height: 16),
               Text(
                 'Scan this on your other device, or paste the key:',
-                style: Ct.body(14, color: Ck.muted2),
+                style: Ct.body(14, color: c.muted2),
               ),
               const SizedBox(height: 16),
               Center(
@@ -63,7 +84,7 @@ class HomePage extends StatelessWidget {
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    border: Border.all(color: Ck.border),
+                    border: Border.all(color: c.border),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: QrImageView(data: payload, size: 150),
@@ -76,30 +97,44 @@ class HomePage extends StatelessWidget {
                   vertical: 11,
                 ),
                 decoration: BoxDecoration(
-                  color: Ck.bg,
-                  border: Border.all(color: Ck.border),
+                  color: c.bg,
+                  border: Border.all(color: c.border),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Text(
-                  payload,
-                  style: Ct.mono(12, color: const Color(0xFF5C5748)),
-                ),
+                child: Text(payload, style: Ct.mono(12, color: c.muted2)),
               ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () {
+              const SizedBox(height: 18),
+              Material(
+                color: c.green,
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
                     Clipboard.setData(ClipboardData(text: payload));
                     Navigator.pop(context);
-                    _snack(context, 'Key copied');
+                    snack(context, 'Key copied');
                   },
-                  child: Text(
-                    'Copy key',
-                    style: Ct.body(
-                      14,
-                      weight: FontWeight.w500,
-                      color: Ck.green,
+                  child: Container(
+                    height: 48,
+                    alignment: Alignment.center,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.content_copy_outlined,
+                          size: 16,
+                          color: c.isDark ? c.bg : Ck.bg,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Copy key',
+                          style: Ct.body(
+                            14,
+                            weight: FontWeight.w500,
+                            color: c.isDark ? c.bg : Ck.bg,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -113,42 +148,22 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ck;
     return Scaffold(
-      backgroundColor: Ck.bg,
+      backgroundColor: c.bg,
       body: SafeArea(
+        bottom: false,
         child: ListenableBuilder(
           listenable: controller,
           builder: (context, _) {
             if (!controller.ready) {
-              return const Center(
-                child: CircularProgressIndicator(color: Ck.green),
-              );
+              return Center(child: CircularProgressIndicator(color: c.green));
             }
-            final reconnecting = !controller.connected;
-            return Column(
-              children: [
-                _TopBar(onDevices: () => _showKey(context), onUnpair: onUnpair),
-                _StatusRow(
-                  reconnecting: reconnecting,
-                  isDesktop: controller.isDesktop,
-                ),
-                Container(height: 1, color: Ck.border),
-                Expanded(
-                  child: controller.history.isEmpty
-                      ? const _EmptyState()
-                      : _HistoryList(
-                          items: controller.history,
-                          onCopy: (item) async {
-                            await controller.applyItem(item);
-                            if (context.mounted) {
-                              _snack(context, 'Copied to clipboard');
-                            }
-                          },
-                        ),
-                ),
-                Container(height: 1, color: Ck.border),
-                _AddBar(onAdd: controller.addManual, enabled: !reconnecting),
-              ],
+            return _HomeBody(
+              controller: controller,
+              onDevices: () => _showKey(context),
+              onSettings: () => _openSettings(context),
+              onUnpair: onUnpair,
             );
           },
         ),
@@ -157,79 +172,441 @@ class HomePage extends StatelessWidget {
   }
 }
 
-class _TopBar extends StatelessWidget {
+/// Stateful body owning the selection state, so it survives history updates.
+class _HomeBody extends StatefulWidget {
+  final ClipController controller;
   final VoidCallback onDevices;
+  final VoidCallback onSettings;
   final Future<void> Function() onUnpair;
-  const _TopBar({required this.onDevices, required this.onUnpair});
+  const _HomeBody({
+    required this.controller,
+    required this.onDevices,
+    required this.onSettings,
+    required this.onUnpair,
+  });
+
+  @override
+  State<_HomeBody> createState() => _HomeBodyState();
+}
+
+class _HomeBodyState extends State<_HomeBody> {
+  final Set<String> _selected = {};
+  bool _selecting = false;
+
+  ClipController get _ctl => widget.controller;
+
+  void _enterSelection(HistoryItem item) {
+    setState(() {
+      _selecting = true;
+      _selected
+        ..clear()
+        ..add(item.hash);
+    });
+  }
+
+  void _toggle(HistoryItem item) {
+    setState(() {
+      if (!_selected.remove(item.hash)) _selected.add(item.hash);
+      if (_selected.isEmpty) _selecting = false;
+    });
+  }
+
+  void _exitSelection() => setState(() {
+    _selecting = false;
+    _selected.clear();
+  });
+
+  void _selectAll(List<HistoryItem> items) => setState(() {
+    _selected
+      ..clear()
+      ..addAll(items.map((i) => i.hash));
+  });
+
+  Future<void> _copy(HistoryItem item) async {
+    await _ctl.applyItem(item);
+    if (mounted) HomePage.snack(context, 'Copied to clipboard');
+  }
+
+  Future<void> _deleteOne(HistoryItem item) async {
+    await _ctl.deleteItems([item]);
+    if (mounted) HomePage.snack(context, 'Clip deleted');
+  }
+
+  Future<void> _deleteSelected(List<HistoryItem> all) async {
+    final chosen = all.where((i) => _selected.contains(i.hash)).toList();
+    final ok = await _confirm(
+      title: 'Delete ${chosen.length} '
+          '${chosen.length == 1 ? 'clip' : 'clips'}?',
+      body: "They'll be removed from all your devices. This can't be undone.",
+      action: 'Delete',
+    );
+    if (ok != true) return;
+    await _ctl.deleteItems(chosen);
+    _exitSelection();
+  }
+
+  Future<void> _clearAll() async {
+    final ok = await _confirm(
+      title: 'Clear all clips?',
+      body: 'This removes every clip from all your devices. Anything not '
+          'saved elsewhere is gone for good.',
+      action: 'Clear all',
+    );
+    if (ok == true) await _ctl.clearAll();
+  }
+
+  Future<bool?> _confirm({
+    required String title,
+    required String body,
+    required String action,
+  }) {
+    final c = context.ck;
+    return showDialog<bool>(
+      context: context,
+      barrierColor: const Color(0x731E1C15),
+      builder: (context) => Dialog(
+        backgroundColor: c.dialogBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(26),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: c.rust.withValues(alpha: 0.14),
+                ),
+                child: Icon(Icons.delete_outline, color: c.rust, size: 22),
+              ),
+              const SizedBox(height: 14),
+              Text(title, style: Ct.title(22, color: c.ink)),
+              const SizedBox(height: 8),
+              Text(body, style: Ct.body(14, color: c.muted2, height: 1.5)),
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: Text(
+                      'Cancel',
+                      style: Ct.body(14, weight: FontWeight.w500, color: c.ink),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      backgroundColor: c.rust,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 11,
+                      ),
+                    ),
+                    onPressed: () => Navigator.pop(context, true),
+                    child: Text(
+                      action,
+                      style: Ct.body(14, weight: FontWeight.w500, color: Ck.bg),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 12, 0),
-      child: Row(
-        children: [
-          const ClippyMark(height: 24),
-          const SizedBox(width: 11),
-          Expanded(child: Text('Clippy', style: Ct.title(24))),
-          IconButton(
-            tooltip: 'Add another device',
-            icon: const Icon(Icons.devices_outlined, color: Ck.ink, size: 21),
-            onPressed: onDevices,
+    final items = _ctl.history;
+    // Prune selection to items that still exist after remote deletes.
+    final live = items.map((i) => i.hash).toSet();
+    _selected.retainAll(live);
+    if (_selecting && _selected.isEmpty && items.isEmpty) _selecting = false;
+    final reconnecting = !_ctl.connected;
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: items.isEmpty
+              ? const _EmptyState()
+              : _HistoryList(
+                  items: items,
+                  topInset: _selecting ? 76 : 108,
+                  selecting: _selecting,
+                  selected: _selected,
+                  onCopy: _copy,
+                  onDelete: _deleteOne,
+                  onToggle: _toggle,
+                  onLongPress: _enterSelection,
+                ),
+        ),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: _selecting
+              ? _SelectionBar(
+                  count: _selected.length,
+                  onClose: _exitSelection,
+                  onSelectAll: () => _selectAll(items),
+                  onDelete: () => _deleteSelected(items),
+                )
+              : _GlassHeader(
+                  reconnecting: reconnecting,
+                  showClearAll: items.isNotEmpty,
+                  onDevices: widget.onDevices,
+                  onSettings: widget.onSettings,
+                  onUnpair: widget.onUnpair,
+                  onClearAll: _clearAll,
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _GlassHeader extends StatelessWidget {
+  final bool reconnecting;
+  final bool showClearAll;
+  final VoidCallback onDevices;
+  final VoidCallback onSettings;
+  final Future<void> Function() onUnpair;
+  final VoidCallback onClearAll;
+  const _GlassHeader({
+    required this.reconnecting,
+    required this.showClearAll,
+    required this.onDevices,
+    required this.onSettings,
+    required this.onUnpair,
+    required this.onClearAll,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ck;
+    return ClipRect(
+      child: BackdropFilter(
+        // Stronger blur + lower tint = a more see-through "liquid glass" bar.
+        filter: ui.ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                c.bg.withValues(alpha: c.isDark ? 0.52 : 0.60),
+                c.bg.withValues(alpha: c.isDark ? 0.38 : 0.46),
+              ],
+            ),
+            border: Border(
+              bottom: BorderSide(color: c.ink.withValues(alpha: 0.06)),
+            ),
           ),
-          IconButton(
-            tooltip: 'Unpair this device',
-            icon: const Icon(Icons.logout, color: Ck.ink, size: 21),
-            onPressed: onUnpair,
+          padding: const EdgeInsets.fromLTRB(20, 10, 12, 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  AnimatedClippyMark(
+                    height: 40,
+                    clipHex: c.hex(c.ink),
+                    eyeHex: c.hex(c.ink),
+                    eyeFill: c.hex(c.bg),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text('Clippy', style: Ct.title(27, color: c.ink)),
+                  ),
+                  _HeaderIcon(
+                    icon: Icons.devices_outlined,
+                    tooltip: 'Add another device',
+                    color: c.ink,
+                    onTap: onDevices,
+                  ),
+                  _HeaderIcon(
+                    icon: Icons.settings_outlined,
+                    tooltip: 'Settings',
+                    color: c.ink,
+                    onTap: onSettings,
+                  ),
+                  _HeaderIcon(
+                    icon: Icons.logout,
+                    tooltip: 'Unpair this device',
+                    color: c.ink,
+                    onTap: () => onUnpair(),
+                  ),
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(2, 8, 8, 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: reconnecting ? c.rust : c.green,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        reconnecting ? 'Reconnecting…' : 'Synced',
+                        style: Ct.body(
+                          13,
+                          color: reconnecting ? c.rust : c.muted2,
+                        ),
+                      ),
+                    ),
+                    if (showClearAll)
+                      InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: onClearAll,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: c.border),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.delete_outline,
+                                size: 14,
+                                color: c.rust,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                'Clear all',
+                                style: Ct.body(
+                                  12,
+                                  weight: FontWeight.w500,
+                                  color: c.rust,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _StatusRow extends StatelessWidget {
-  final bool reconnecting;
-  final bool isDesktop;
-  const _StatusRow({required this.reconnecting, required this.isDesktop});
+class _SelectionBar extends StatelessWidget {
+  final int count;
+  final VoidCallback onClose;
+  final VoidCallback onSelectAll;
+  final VoidCallback onDelete;
+  const _SelectionBar({
+    required this.count,
+    required this.onClose,
+    required this.onSelectAll,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final color = reconnecting ? Ck.rust : Ck.green;
-    final text = reconnecting
-        ? 'Reconnecting…'
-        : isDesktop
-        ? 'Auto-syncing — anything you copy here appears on your other devices.'
-        : 'Synced — incoming clips land on your clipboard. Add one below to send.';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 12, 20, 14),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Text(
-              text,
-              style: Ct.body(13, color: reconnecting ? Ck.rust : Ck.muted2),
+    final c = context.ck;
+    return Material(
+      color: c.green,
+      elevation: 2,
+      child: SizedBox(
+        height: 64,
+        child: Row(
+          children: [
+            IconButton(
+              icon: Icon(Icons.close, color: Ck.bg, size: 22),
+              onPressed: onClose,
             ),
-          ),
-        ],
+            Expanded(
+              child: Text(
+                '$count selected',
+                style: Ct.body(20, weight: FontWeight.w500, color: Ck.bg),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Select all',
+              icon: Icon(Icons.done_all, color: Ck.bg, size: 22),
+              onPressed: onSelectAll,
+            ),
+            IconButton(
+              tooltip: 'Delete selected',
+              icon: Icon(Icons.delete_outline, color: Ck.bg, size: 22),
+              onPressed: count == 0 ? null : onDelete,
+            ),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _HeaderIcon extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final Color color;
+  final VoidCallback onTap;
+  const _HeaderIcon({
+    required this.icon,
+    required this.tooltip,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      icon: Icon(icon, color: color, size: 21),
+      onPressed: onTap,
     );
   }
 }
 
 class _HistoryList extends StatelessWidget {
   final List<HistoryItem> items;
+  final double topInset;
+  final bool selecting;
+  final Set<String> selected;
   final Future<void> Function(HistoryItem) onCopy;
-  const _HistoryList({required this.items, required this.onCopy});
+  final Future<void> Function(HistoryItem) onDelete;
+  final void Function(HistoryItem) onToggle;
+  final void Function(HistoryItem) onLongPress;
+  const _HistoryList({
+    required this.items,
+    required this.topInset,
+    required this.selecting,
+    required this.selected,
+    required this.onCopy,
+    required this.onDelete,
+    required this.onToggle,
+    required this.onLongPress,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // Build a flat list of section labels + cards, grouped by day.
     final children = <Widget>[];
     String? lastLabel;
     for (final item in items) {
@@ -241,15 +618,33 @@ class _HistoryList extends StatelessWidget {
               top: lastLabel == null ? 2 : 12,
               bottom: 2,
             ),
-            child: Text(label, style: Ct.sectionLabel()),
+            child: Text(
+              label,
+              style: Ct.sectionLabel().copyWith(color: context.ck.muted),
+            ),
           ),
         );
         lastLabel = label;
       }
-      children.add(_ClipCard(item: item, onCopy: () => onCopy(item)));
+      children.add(
+        _ClipCard(
+          key: ValueKey(item.hash),
+          item: item,
+          selecting: selecting,
+          selected: selected.contains(item.hash),
+          onTap: () => selecting ? onToggle(item) : onCopy(item),
+          onLongPress: () => onLongPress(item),
+          onDelete: () => onDelete(item),
+        ),
+      );
     }
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        topInset,
+        20,
+        24 + MediaQuery.of(context).padding.bottom,
+      ),
       itemCount: children.length,
       separatorBuilder: (_, i) =>
           SizedBox(height: children[i] is _ClipCard ? 10 : 0),
@@ -260,69 +655,155 @@ class _HistoryList extends StatelessWidget {
 
 class _ClipCard extends StatelessWidget {
   final HistoryItem item;
-  final VoidCallback onCopy;
-  const _ClipCard({required this.item, required this.onCopy});
+  final bool selecting;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+  final VoidCallback onDelete;
+  const _ClipCard({
+    super.key,
+    required this.item,
+    required this.selecting,
+    required this.selected,
+    required this.onTap,
+    required this.onLongPress,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Ck.surface,
+    final c = context.ck;
+    final card = Material(
+      color: selected ? c.selBg : c.surface,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: onCopy,
+        onTap: onTap,
+        onLongPress: onLongPress,
         child: Ink(
           decoration: BoxDecoration(
-            border: Border.all(color: Ck.border),
+            border: Border.all(
+              color: selected ? c.green : c.border,
+              width: selected ? 2 : 1,
+            ),
             borderRadius: BorderRadius.circular(12),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x0A1E1C15),
-                blurRadius: 2,
-                offset: Offset(0, 1),
-              ),
-            ],
+            boxShadow: c.isDark || selected
+                ? null
+                : const [
+                    BoxShadow(
+                      color: Color(0x0A1E1C15),
+                      blurRadius: 2,
+                      offset: Offset(0, 1),
+                    ),
+                  ],
           ),
           padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              if (selecting) ...[
+                _Check(selected: selected),
+                const SizedBox(width: 13),
+              ],
+              if (item.isImage && item.imageBytes != null) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(
+                    item.imageBytes!,
+                    width: 46,
+                    height: 46,
+                    fit: BoxFit.cover,
+                    cacheWidth: 128,
+                    gaplessPlayback: true,
+                  ),
+                ),
+                const SizedBox(width: 13),
+              ],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      item.text,
+                      item.isImage ? 'Image' : item.text,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: _looksLikeCode(item.text)
-                          ? Ct.mono(14, color: Ck.ink, weight: FontWeight.w500)
-                          : Ct.body(15, weight: FontWeight.w500, color: Ck.ink),
+                      style: (!item.isImage && _looksLikeCode(item.text))
+                          ? Ct.mono(14, color: c.ink, weight: FontWeight.w500)
+                          : Ct.body(15, weight: FontWeight.w500, color: c.ink),
                     ),
                     const SizedBox(height: 5),
-                    Text(_rel(item.timestamp), style: Ct.mono(11)),
+                    Text(_meta(item), style: Ct.mono(11, color: c.muted)),
                   ],
                 ),
               ),
-              const SizedBox(width: 14),
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Ck.border),
+              if (!selecting) ...[
+                const SizedBox(width: 14),
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: c.border),
+                  ),
+                  child: Icon(
+                    Icons.content_copy_outlined,
+                    size: 15,
+                    color: c.green,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.content_copy_outlined,
-                  size: 15,
-                  color: Ck.green,
-                ),
-              ),
+              ],
             ],
           ),
         ),
       ),
+    );
+
+    if (selecting) return card;
+    // Swipe-left to delete. confirmDismiss triggers the delete and returns
+    // false so the row isn't self-removed — the history rebuild removes it.
+    return Dismissible(
+      key: ValueKey('dismiss-${item.hash}'),
+      direction: DismissDirection.endToStart,
+      dismissThresholds: const {DismissDirection.endToStart: 0.55},
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 22),
+        decoration: BoxDecoration(
+          color: c.rust,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(Icons.delete_outline, color: Ck.bg, size: 20),
+      ),
+      confirmDismiss: (_) async {
+        onDelete();
+        return false;
+      },
+      child: card,
+    );
+  }
+}
+
+class _Check extends StatelessWidget {
+  final bool selected;
+  const _Check({required this.selected});
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ck;
+    return Container(
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: selected ? c.green : Colors.transparent,
+        border: Border.all(
+          color: selected ? c.green : c.borderStrong,
+          width: 2,
+        ),
+      ),
+      child: selected
+          ? Icon(Icons.check, size: 15, color: Ck.bg)
+          : null,
     );
   }
 }
@@ -332,114 +813,32 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ck;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 52),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Opacity(
+            Opacity(
               opacity: 0.4,
               child: ClippyMark(
                 height: 58,
-                clipHex: '7A7466',
-                eyeHex: '7A7466',
-                eyeFill: 'F4F1EA',
+                clipHex: c.hex(c.muted2),
+                eyeHex: c.hex(c.muted2),
+                eyeFill: c.hex(c.bg),
               ),
             ),
             const SizedBox(height: 18),
             Text(
               'Nothing synced yet. Copy something on another device, or add one below.',
               textAlign: TextAlign.center,
-              style: Ct.body(14, color: Ck.muted),
+              style: Ct.body(14, color: c.muted),
             ),
           ],
         ),
       ),
     );
-  }
-}
-
-class _AddBar extends StatefulWidget {
-  final Future<void> Function(String) onAdd;
-  final bool enabled;
-  const _AddBar({required this.onAdd, required this.enabled});
-
-  @override
-  State<_AddBar> createState() => _AddBarState();
-}
-
-class _AddBarState extends State<_AddBar> {
-  final _controller = TextEditingController();
-
-  Future<void> _submit() async {
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    await widget.onAdd(text);
-    _controller.clear();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Ck.surface,
-                border: Border.all(color: Ck.border),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: TextField(
-                controller: _controller,
-                style: Ct.body(14, color: Ck.ink),
-                cursorColor: Ck.green,
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                  border: InputBorder.none,
-                  hintText: 'Add a clip to sync…',
-                  hintStyle: Ct.body(14, color: Ck.muted),
-                ),
-                onSubmitted: (_) => _submit(),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Opacity(
-            opacity: widget.enabled ? 1 : 0.45,
-            child: Material(
-              color: Ck.green,
-              borderRadius: BorderRadius.circular(12),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: widget.enabled ? _submit : null,
-                child: Container(
-                  height: 48,
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  alignment: Alignment.center,
-                  child: Text(
-                    'Send',
-                    style: Ct.body(14, weight: FontWeight.w500, color: Ck.bg),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
   }
 }
 
@@ -460,6 +859,17 @@ String _rel(DateTime t) {
   final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
   final m = t.minute.toString().padLeft(2, '0');
   return '$h:$m ${t.hour < 12 ? 'AM' : 'PM'}';
+}
+
+String _meta(HistoryItem item) {
+  final rel = _rel(item.timestamp);
+  final dev = item.device.isEmpty ? '' : '${item.device} · ';
+  if (item.isImage) {
+    final kb = ((item.imageBytes?.length ?? 0) / 1024).round();
+    final fmt = item.mime.contains('png') ? 'PNG' : 'JPG';
+    return '$fmt · $kb KB · $dev$rel';
+  }
+  return '$dev$rel';
 }
 
 String _dayLabel(DateTime t) {

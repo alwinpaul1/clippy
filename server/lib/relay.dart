@@ -11,7 +11,8 @@ import 'dart:io';
 /// encrypted-message router that also keeps the last N clips per room (durably,
 /// see [ClipRepository]) so a reconnecting device catches up.
 const int maxHistory = 25;
-const int maxCiphertextChars = 200000; // ~150KB plaintext, base64-encoded
+// ~1.1MB on the wire — covers a downscaled JPEG image clip (base64 + encrypted).
+const int maxCiphertextChars = 1500000;
 const int maxRoomTokenChars = 512;
 
 /// Per-room clip history storage. Consecutive duplicate hashes collapse and the
@@ -19,6 +20,13 @@ const int maxRoomTokenChars = 512;
 abstract class ClipRepository {
   List<Map<String, dynamic>> recent(String room);
   void add(String room, Map<String, dynamic> clip);
+
+  /// Remove clips whose hash is in [hashes]. Returns the hashes actually
+  /// removed (so the broadcast reflects real deletions).
+  List<String> remove(String room, Set<String> hashes);
+
+  /// Drop the whole room's history.
+  void clear(String room);
 }
 
 class InMemoryClipRepository implements ClipRepository {
@@ -36,6 +44,27 @@ class InMemoryClipRepository implements ClipRepository {
     if (list.length > maxHistory) {
       list.removeRange(0, list.length - maxHistory);
     }
+  }
+
+  @override
+  List<String> remove(String room, Set<String> hashes) {
+    final list = rooms[room];
+    if (list == null) return const [];
+    final removed = <String>[];
+    list.removeWhere((c) {
+      final h = c['hash'];
+      if (h is String && hashes.contains(h)) {
+        removed.add(h);
+        return true;
+      }
+      return false;
+    });
+    return removed;
+  }
+
+  @override
+  void clear(String room) {
+    rooms[room]?.clear();
   }
 }
 
@@ -81,6 +110,19 @@ class FileClipRepository extends InMemoryClipRepository {
     super.add(room, clip);
     _persist();
   }
+
+  @override
+  List<String> remove(String room, Set<String> hashes) {
+    final removed = super.remove(room, hashes);
+    if (removed.isNotEmpty) _persist();
+    return removed;
+  }
+
+  @override
+  void clear(String room) {
+    super.clear(room);
+    _persist();
+  }
 }
 
 /// Live WebSocket connections per room (not persisted).
@@ -117,6 +159,14 @@ Future<void> _handleRequest(HttpRequest req) async {
   }
   req.response.statusCode = HttpStatus.notFound;
   await req.response.close();
+}
+
+/// Send [msg] to every open socket in [room].
+void _broadcast(String room, Map<String, dynamic> msg) {
+  final out = jsonEncode(msg);
+  for (final peer in roomClients[room] ?? const <WebSocket>{}) {
+    if (peer.readyState == WebSocket.open) peer.add(out);
+  }
 }
 
 void _handleSocket(WebSocket ws) {
@@ -167,6 +217,9 @@ void _handleSocket(WebSocket ws) {
             'iv': clip['iv'],
             'hash': clip['hash'],
             'source': clip['source'],
+            'device': clip['device'],
+            'kind': clip['kind'],
+            'mime': clip['mime'],
             'timestamp': nowIso(),
           };
           repository.add(r, stored);
@@ -180,6 +233,25 @@ void _handleSocket(WebSocket ws) {
               peer.add(out);
             }
           }
+          break;
+
+        case 'delete':
+          final r = room;
+          if (r == null) return;
+          final raw = msg['hashes'];
+          if (raw is! List) return;
+          final hashes = raw.whereType<String>().toSet();
+          if (hashes.isEmpty) return;
+          final removed = repository.remove(r, hashes);
+          if (removed.isEmpty) return;
+          _broadcast(r, {'type': 'deleted', 'hashes': removed});
+          break;
+
+        case 'clear':
+          final r = room;
+          if (r == null) return;
+          repository.clear(r);
+          _broadcast(r, {'type': 'cleared'});
           break;
       }
     },

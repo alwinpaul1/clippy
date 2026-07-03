@@ -1,0 +1,23 @@
+# The root Dockerfile only builds server/. Keep the build context tiny by
+# excluding the Flutter app and build artifacts.
+android/
+ios/
+linux/
+windows/
+web/
+macos/
+build/
+.dart_tool/
+assets/
+docs/
+tool/
+lib/
+test/
+.claude/
+.github/
+.git/
+*.iml
+.metadata
+.flutter-plugins*
+server/.dart_tool/
+server/build/

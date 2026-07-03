@@ -37,6 +37,10 @@ class ForegroundServiceManager {
         channelDescription:
             'Keeps your clipboard syncing across devices in the background.',
         onlyAlertOnce: true,
+        // Keep the required foreground-service notification as unobtrusive as
+        // Android allows: no status-bar icon, collapsed below the fold.
+        channelImportance: NotificationChannelImportance.MIN,
+        priority: NotificationPriority.MIN,
       ),
       iosNotificationOptions: const IOSNotificationOptions(),
       foregroundTaskOptions: ForegroundTaskOptions(
@@ -63,8 +67,8 @@ class ForegroundServiceManager {
     await FlutterForegroundTask.startService(
       serviceId: 4242,
       serviceTypes: const [ForegroundServiceTypes.dataSync],
-      notificationTitle: '📎 Clippy is syncing',
-      notificationText: 'Your clipboard stays in sync across devices.',
+      notificationTitle: 'Clippy',
+      notificationText: 'Clipboard sync active',
       callback: clippyServiceCallback,
     );
   }

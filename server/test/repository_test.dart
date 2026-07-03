@@ -25,6 +25,45 @@ void main() {
     expect(r.recent('room').length, maxHistory);
   });
 
+  test('remove drops clips by hash and reports what it removed', () {
+    final r = InMemoryClipRepository();
+    r.add('room', clip('a'));
+    r.add('room', clip('b'));
+    r.add('room', clip('c'));
+
+    final removed = r.remove('room', {'h:b', 'h:missing'});
+    expect(removed, ['h:b']); // only the hash that existed
+    expect(r.recent('room').map((c) => c['hash']).toList(), ['h:a', 'h:c']);
+  });
+
+  test('clear empties a room', () {
+    final r = InMemoryClipRepository();
+    r.add('room', clip('a'));
+    r.add('room', clip('b'));
+    r.clear('room');
+    expect(r.recent('room'), isEmpty);
+  });
+
+  test('File repository persists removes and clears across restart', () async {
+    final dir = await Directory.systemTemp.createTemp('clippy_relay_rm');
+    final path = '${dir.path}/clippy.json';
+    try {
+      FileClipRepository(path)
+        ..add('room', clip('a'))
+        ..add('room', clip('b'))
+        ..remove('room', {'h:a'});
+      expect(
+        FileClipRepository(path).recent('room').map((c) => c['hash']).toList(),
+        ['h:b'],
+      );
+
+      FileClipRepository(path).clear('room');
+      expect(FileClipRepository(path).recent('room'), isEmpty);
+    } finally {
+      await dir.delete(recursive: true);
+    }
+  });
+
   test('File history survives a new instance on the same path (restart)',
       () async {
     final dir = await Directory.systemTemp.createTemp('clippy_relay_test');

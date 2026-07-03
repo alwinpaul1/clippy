@@ -131,4 +131,42 @@ void main() {
     await a.close();
     await b.close();
   });
+
+  test('delete removes a clip and broadcasts to all room members', () async {
+    final (a, _) = await connect(port());
+    final (b, bStream) = await connect(port());
+    a.add(jsonEncode({'type': 'join', 'room': 'del'}));
+    b.add(jsonEncode({'type': 'join', 'room': 'del'}));
+    await bStream.first; // history
+
+    a.add(jsonEncode(clipMsg('keep')));
+    a.add(jsonEncode(clipMsg('drop')));
+    await bStream.where((m) => m['type'] == 'clip').take(2).toList();
+
+    a.add(jsonEncode({'type': 'delete', 'hashes': ['h:drop']}));
+    final deleted = await bStream.firstWhere((m) => m['type'] == 'deleted');
+    expect(deleted['hashes'], ['h:drop']);
+    expect(
+      repository.recent('del').map((c) => c['hash']).toList(),
+      ['h:keep'],
+    );
+
+    await a.close();
+    await b.close();
+  });
+
+  test('clear empties the room and broadcasts cleared', () async {
+    final (a, aStream) = await connect(port());
+    a.add(jsonEncode({'type': 'join', 'room': 'clr'}));
+    await aStream.first; // history
+    a.add(jsonEncode(clipMsg('x')));
+    await aStream.firstWhere((m) => m['type'] == 'clip');
+
+    a.add(jsonEncode({'type': 'clear'}));
+    final cleared = await aStream.firstWhere((m) => m['type'] == 'cleared');
+    expect(cleared['type'], 'cleared');
+    expect(repository.recent('clr'), isEmpty);
+
+    await a.close();
+  });
 }

@@ -1,0 +1,47 @@
+// Gradle 9 removed Project.exec(Closure). super_clipboard's native build
+// (irondash_engine_context / cargokit) still calls `project.exec {}` to run its
+// build tool, so the Android build fails with "Could not find method exec()".
+//
+// This restores a compatible `exec` on every project via Groovy metaClass, run
+// as a ProcessBuilder. It lives in the project (not ~/.pub-cache), so it
+// survives `flutter pub get` and dependency refreshes.
+allprojects { proj ->
+    proj.metaClass.exec = { Closure closure ->
+        def spec = new CargokitExecShim()
+        closure.delegate = spec
+        closure.resolveStrategy = Closure.DELEGATE_FIRST
+        closure.call()
+        def cmd = spec.buildCommand()
+        def pb = new ProcessBuilder(cmd)
+        pb.inheritIO()
+        spec.env.each { k, v -> pb.environment().put(k, v == null ? "" : v.toString()) }
+        def exit = pb.start().waitFor()
+        if (exit != 0) {
+            throw new org.gradle.api.GradleException(
+                "exec ${cmd} failed with exit code ${exit}")
+        }
+        return null
+    }
+}
+
+// Minimal stand-in for Gradle's ExecSpec covering what cargokit uses.
+class CargokitExecShim {
+    private Object executableValue
+    private List argsValue = []
+    private List commandLineValue
+    Map env = [:]
+
+    void executable(value) { executableValue = value }
+    void args(Object... a) { argsValue.addAll(a as List) }
+    void commandLine(Object... c) { commandLineValue = (c as List) }
+    void environment(String key, value) { env[key] = value }
+
+    List<String> buildCommand() {
+        if (commandLineValue != null) {
+            return commandLineValue.collect { it.toString() }
+        }
+        def list = [executableValue.toString()]
+        list.addAll(argsValue.collect { it.toString() })
+        return list
+    }
+}

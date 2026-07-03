@@ -107,6 +107,19 @@ class WebSocketClipStore {
           _emitHistory();
         }
         _incomingController.add(clip);
+      case 'deleted':
+        final hashes =
+            (msg['hashes'] as List?)?.whereType<String>().toSet() ??
+            const <String>{};
+        if (hashes.isNotEmpty) {
+          _history.removeWhere((c) => hashes.contains(c.hash));
+          _emitHistory();
+        }
+      case 'cleared':
+        if (_history.isNotEmpty) {
+          _history.clear();
+          _emitHistory();
+        }
     }
   }
 
@@ -127,6 +140,18 @@ class WebSocketClipStore {
   /// Send a sealed clip to the room.
   Future<void> append(EncryptedClip clip) async =>
       _transport?.send(jsonEncode({'type': 'clip', 'clip': clip.toMap()}));
+
+  /// Ask the room to delete clips by content hash. The server broadcasts the
+  /// deletion back to every device (including this one), which applies it.
+  Future<void> deleteHashes(Iterable<String> hashes) async {
+    final list = hashes.toList();
+    if (list.isEmpty) return;
+    _transport?.send(jsonEncode({'type': 'delete', 'hashes': list}));
+  }
+
+  /// Clear the whole room history for all devices.
+  Future<void> clearAll() async =>
+      _transport?.send(jsonEncode({'type': 'clear'}));
 
   Future<void> close() async {
     _closed = true;
