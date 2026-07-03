@@ -205,6 +205,25 @@ class _HomeBodyState extends State<_HomeBody> {
       if (!_collapsedDevices.remove(device)) _collapsedDevices.add(device);
     });
   }
+
+  static String _deviceKey(HistoryItem i) =>
+      i.device.isEmpty ? 'Unknown device' : i.device;
+
+  /// One tap in the header folds/unfolds every device group, so a huge
+  /// most-recent group never forces scrolling to reach the others.
+  void _toggleAllDevices(List<HistoryItem> items) {
+    Haptics.tick();
+    final all = items.map(_deviceKey).toSet();
+    setState(() {
+      if (_collapsedDevices.length < all.length) {
+        _collapsedDevices
+          ..clear()
+          ..addAll(all);
+      } else {
+        _collapsedDevices.clear();
+      }
+    });
+  }
   // Clip ages ("2m") are computed at build time; without a periodic rebuild
   // they go stale, so two devices show different ages for the same clip.
   Timer? _agesTicker;
@@ -472,6 +491,12 @@ class _HomeBodyState extends State<_HomeBody> {
               : _GlassHeader(
                   reconnecting: reconnecting,
                   showClearAll: items.isNotEmpty,
+                  showCollapseAll:
+                      items.map(_deviceKey).toSet().length > 1,
+                  allCollapsed: items.isNotEmpty &&
+                      _collapsedDevices.length >=
+                          items.map(_deviceKey).toSet().length,
+                  onToggleCollapseAll: () => _toggleAllDevices(items),
                   onDevices: widget.onDevices,
                   onSettings: widget.onSettings,
                   onUnpair: widget.onUnpair,
@@ -486,6 +511,9 @@ class _HomeBodyState extends State<_HomeBody> {
 class _GlassHeader extends StatelessWidget {
   final bool reconnecting;
   final bool showClearAll;
+  final bool showCollapseAll;
+  final bool allCollapsed;
+  final VoidCallback onToggleCollapseAll;
   final VoidCallback onDevices;
   final VoidCallback onSettings;
   final Future<void> Function() onUnpair;
@@ -493,6 +521,9 @@ class _GlassHeader extends StatelessWidget {
   const _GlassHeader({
     required this.reconnecting,
     required this.showClearAll,
+    required this.showCollapseAll,
+    required this.allCollapsed,
+    required this.onToggleCollapseAll,
     required this.onDevices,
     required this.onSettings,
     required this.onUnpair,
@@ -585,6 +616,44 @@ class _GlassHeader extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (showCollapseAll) ...[
+                      InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: onToggleCollapseAll,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: c.border),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                allCollapsed
+                                    ? Icons.unfold_more
+                                    : Icons.unfold_less,
+                                size: 14,
+                                color: c.muted2,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                allCollapsed ? 'Expand' : 'Collapse',
+                                style: Ct.body(
+                                  12,
+                                  weight: FontWeight.w500,
+                                  color: c.muted2,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     if (showClearAll)
                       InkWell(
                         borderRadius: BorderRadius.circular(20),
