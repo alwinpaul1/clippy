@@ -77,10 +77,19 @@
     font-family:'Newsreader',serif; font-style:italic; font-size:17px;
     color:var(--ink); margin:0 0 16px; line-height:1.35;
   }
-  .tips{list-style:none; margin:0; padding:0; display:grid; gap:15px}
+  /* One tip at a time: all stacked in the same grid cell (the cell sizes to
+     the tallest tip, so the bubble never jumps), JS crossfades between them. */
+  .tips{list-style:none; margin:0; padding:0; display:grid}
+  .tips li{grid-area:1/1; opacity:0; transform:translateY(9px); transition:opacity .55s ease, transform .55s ease; pointer-events:none}
+  .tips li.active{opacity:1; transform:translateY(0); pointer-events:auto}
   .tips .k{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--green); display:block; margin-bottom:3px}
   .tips b{font-family:'Newsreader',serif; font-weight:500; font-size:18px; letter-spacing:-.01em; display:block; margin-bottom:2px}
   .tips em{font-style:normal; font-size:14px; color:var(--muted); display:block}
+  /* Little progress dots so the rotation reads as intentional */
+  .tip-dots{display:flex; gap:6px; margin-top:16px}
+  .tip-dots i{width:6px; height:6px; border-radius:50%; background:var(--border-strong); transition:background .3s ease, transform .3s ease}
+  .tip-dots i.on{background:var(--green); transform:scale(1.25)}
+  @media (prefers-reduced-motion:reduce){.tips li{transition:none}}
   /* Speech-balloon tail, pointing right toward Clippy (border + fill layers) */
   .bubble::before,.bubble::after{content:''; position:absolute; left:100%; top:50%; width:0; height:0; border-style:solid; transform:translateY(-50%)}
   .bubble::before{border-width:16px 0 16px 22px; border-color:transparent transparent transparent var(--border-strong)}
@@ -206,10 +215,11 @@
       <div class="bubble">
         <p class="greet">It looks like you want your clipboard everywhere. Here's how I help:</p>
         <ul class="tips">
-          <li><span class="k">Instant</span><b>The latest copy, always here</b><em>Copy on any paired device and it lands on this one's clipboard, ready to paste.</em></li>
+          <li class="active"><span class="k">Instant</span><b>The latest copy, always here</b><em>Copy on any paired device and it lands on this one's clipboard, ready to paste.</em></li>
           <li><span class="k">Private</span><b>End-to-end encrypted</b><em>Clips are sealed with AES-256 before they leave your device. The relay only sees ciphertext.</em></li>
           <li><span class="k">Simple</span><b>Pair with a QR code</b><em>Scan once to link a device. No sign-up, no email, no password to forget.</em></li>
         </ul>
+        <div class="tip-dots"><i class="on"></i><i></i><i></i></div>
       </div>
       <svg class="clip" viewBox="0 0 60 92" aria-label="Clippy the paperclip">
         <g class="body">
@@ -327,6 +337,22 @@
   if(os==='ios'){ /* iOS: no build; leave primary as macos, note phone */ }
   var mine=document.querySelector('.card[data-os="'+primaryOS+'"]');
   if(mine && (os===primaryOS)){ mine.classList.add('you'); var y=mine.querySelector('.yours'); if(y) y.hidden=false; }
+
+  // Clippy's speech bubble cycles one tip at a time (~4s), like the real
+  // Office Assistant rotating its advice.
+  (function(){
+    var tips = document.querySelectorAll('.tips li');
+    var dots = document.querySelectorAll('.tip-dots i');
+    if(tips.length < 2) return;
+    var i = 0;
+    setInterval(function(){
+      tips[i].classList.remove('active');
+      if(dots[i]) dots[i].classList.remove('on');
+      i = (i + 1) % tips.length;
+      tips[i].classList.add('active');
+      if(dots[i]) dots[i].classList.add('on');
+    }, 4000);
+  })();
 
   // 3D tilt + cursor glare on the platform cards. Mouse only, and off when the
   // visitor prefers reduced motion (mirrors the TiltCard useHoverCapable /
