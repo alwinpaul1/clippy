@@ -14,6 +14,9 @@ analyzer:
     # Downloaded SDK sources / build artifacts — not our code.
     - build/**
     - "**/*.g.dart"
+    # The relay is a separate Dart package with its own pubspec + analyze job
+    # (its test dev-deps aren't resolved in the root package's context).
+    - server/**
 
 linter:
   # The lint rules applied to this project can be customized in the
