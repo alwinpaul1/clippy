@@ -165,6 +165,43 @@ Future<void> _handleRequest(HttpRequest req) async {
     await req.response.close();
     return;
   }
+  if (req.uri.path.startsWith('/download/')) {
+    await _serveDownload(req);
+    return;
+  }
+  req.response.statusCode = HttpStatus.notFound;
+  await req.response.close();
+}
+
+// The app builds available for download (allow-listed — no path traversal).
+const _downloads = {
+  'Clippy-macOS.zip': 'application/zip',
+  'Clippy-Android.apk': 'application/vnd.android.package-archive',
+};
+
+Future<void> _serveDownload(HttpRequest req) async {
+  final segments = req.uri.pathSegments; // ['download', '<name>']
+  final name = segments.length == 2 ? segments[1] : '';
+  final mime = _downloads[name];
+  if (mime != null) {
+    for (final dir in [
+      'web/downloads',
+      '/app/web/downloads',
+      '${File(Platform.resolvedExecutable).parent.parent.path}/web/downloads',
+    ]) {
+      final file = File('$dir/$name');
+      if (file.existsSync()) {
+        final parts = mime.split('/');
+        req.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType(parts[0], parts[1])
+          ..headers.add('Content-Disposition', 'attachment; filename="$name"');
+        await req.response.addStream(file.openRead());
+        await req.response.close();
+        return;
+      }
+    }
+  }
   req.response.statusCode = HttpStatus.notFound;
   await req.response.close();
 }
