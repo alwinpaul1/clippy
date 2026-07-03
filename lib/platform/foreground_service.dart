@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -12,6 +12,7 @@ import '../core/backend/websocket_clip_store.dart';
 import '../core/state/prefs_state_store.dart';
 import '../core/sync/sync_action.dart';
 import '../core/sync/sync_engine.dart';
+import 'device_name.dart';
 import 'image_clipboard.dart';
 import 'secure_key_store.dart';
 
@@ -29,11 +30,21 @@ class _BackgroundSyncHandler extends TaskHandler {
   // pings don't cause a spurious takeover.
   static const _uiTimeout = Duration(seconds: 40);
 
+  // Samsung saves to DCIM/Screenshots; stock Android to Pictures/Screenshots.
+  // With READ_MEDIA_IMAGES granted, media files are readable by direct path
+  // (scoped storage passes reads through MediaProvider since Android 11).
+  static const _screenshotDirs = [
+    '/storage/emulated/0/DCIM/Screenshots',
+    '/storage/emulated/0/Pictures/Screenshots',
+  ];
+
   DateTime _lastUiPing = DateTime.now();
   WebSocketClipStore? _store;
   StreamSubscription? _sub;
   SyncEngine? _engine;
   bool _starting = false;
+  String _deviceName = '';
+  final Set<String> _pushedShots = {};
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {}
@@ -50,8 +61,69 @@ class _BackgroundSyncHandler extends TaskHandler {
   void onRepeatEvent(DateTime timestamp) {
     if (DateTime.now().difference(_lastUiPing) > _uiTimeout) {
       unawaited(_ensureRunning());
+      // The activity's MediaStore observer died with the UI isolate, so the
+      // takeover also picks up new screenshots by scanning their folders.
+      unawaited(_scanScreenshots());
     } else {
       _stop();
+    }
+  }
+
+  Future<void> _scanScreenshots() async {
+    final store = _store;
+    final engine = _engine;
+    if (store == null || engine == null) return;
+    const mimes = {
+      'png': 'image/png',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'webp': 'image/webp',
+    };
+    for (final dirPath in _screenshotDirs) {
+      final dir = Directory(dirPath);
+      if (!dir.existsSync()) continue;
+      List<FileSystemEntity> entries;
+      try {
+        entries = dir.listSync();
+      } catch (_) {
+        continue; // permission edge — the app-open path still covers it
+      }
+      for (final e in entries) {
+        if (e is! File) continue;
+        final mime = mimes[e.path.split('.').last.toLowerCase()];
+        if (mime == null || _pushedShots.contains(e.path)) continue;
+        DateTime modified;
+        try {
+          modified = e.lastModifiedSync();
+        } catch (_) {
+          continue;
+        }
+        // Only screenshots taken after the UI's last sign of life (older ones
+        // were the activity observer's job), and settled for 2s+ so we never
+        // read a half-written file.
+        final age = DateTime.now().difference(modified);
+        if (modified.isBefore(_lastUiPing) || age < const Duration(seconds: 2)) {
+          continue;
+        }
+        _pushedShots.add(e.path);
+        try {
+          final bytes = await e.readAsBytes();
+          if (bytes.isEmpty) continue;
+          final (out, outMime) = ImageClipboard.prepareForRelay(bytes, mime: mime);
+          final actions = await engine.onLocalImage(base64Encode(out), mime: outMime);
+          for (final a in actions) {
+            if (a is UploadClip) {
+              await store.append(a.clip.copyWith(device: _deviceName));
+              if (kDebugMode) {
+                debugPrint('[clippy-bg] pushed screenshot '
+                    '${e.path.split('/').last} (${bytes.length}b)');
+              }
+            }
+          }
+        } catch (_) {
+          // Unreadable — leave it to the app-open capture.
+        }
+      }
     }
   }
 
@@ -63,6 +135,7 @@ class _BackgroundSyncHandler extends TaskHandler {
       if (pairing == null) return; // not paired yet — nothing to sync
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload(); // long-lived isolate: skip stale caches
+      _deviceName = await resolveDeviceName();
       final roomToken = await pairing.roomToken();
       _engine = SyncEngine(
         crypto: await pairing.cryptoBox(),
