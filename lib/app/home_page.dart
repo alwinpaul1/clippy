@@ -668,38 +668,50 @@ class _HistoryList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final children = <Widget>[];
-    String? lastLabel;
+    // Group clips by the device they came from; order the groups so the device
+    // with the most recent clip comes first, and keep each group newest-first.
+    final byDevice = <String, List<HistoryItem>>{};
     for (final item in items) {
-      final label = _dayLabel(item.timestamp);
-      if (label != lastLabel) {
-        children.add(
-          Padding(
-            padding: EdgeInsets.only(
-              // The first label sits just below the glass header — give it
-              // room so it never renders half-faded under the blur.
-              top: lastLabel == null ? 8 : 12,
-              bottom: 2,
-            ),
-            child: Text(
-              label,
-              style: Ct.sectionLabel().copyWith(color: context.ck.muted),
-            ),
-          ),
-        );
-        lastLabel = label;
-      }
+      final key = item.device.isEmpty ? 'Unknown device' : item.device;
+      (byDevice[key] ??= []).add(item);
+    }
+    DateTime newestOf(List<HistoryItem> l) =>
+        l.map((i) => i.timestamp).reduce((a, b) => a.isAfter(b) ? a : b);
+    final devices = byDevice.keys.toList()
+      ..sort((a, b) => newestOf(byDevice[b]!).compareTo(newestOf(byDevice[a]!)));
+    for (final device in devices) {
       children.add(
-        _ClipCard(
-          key: ValueKey(item.hash),
-          item: item,
-          selecting: selecting,
-          selected: selected.contains(item.hash),
-          onTap: () => selecting ? onToggle(item) : onPreview(item),
-          onCopy: () => onCopy(item),
-          onLongPress: () => onLongPress(item),
-          onDelete: () => onDelete(item),
+        Padding(
+          padding: EdgeInsets.only(
+            // The first header sits just below the glass header — give it room
+            // so it never renders half-faded under the blur.
+            top: device == devices.first ? 8 : 18,
+            bottom: 2,
+          ),
+          child: Text(
+            device.toUpperCase(),
+            style: Ct.sectionLabel().copyWith(color: context.ck.muted),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       );
+      final clips = byDevice[device]!
+        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      for (final item in clips) {
+        children.add(
+          _ClipCard(
+            key: ValueKey(item.hash),
+            item: item,
+            selecting: selecting,
+            selected: selected.contains(item.hash),
+            onTap: () => selecting ? onToggle(item) : onPreview(item),
+            onCopy: () => onCopy(item),
+            onLongPress: () => onLongPress(item),
+            onDelete: () => onDelete(item),
+          ),
+        );
+      }
     }
     return ListView.separated(
       padding: EdgeInsets.fromLTRB(
@@ -1219,36 +1231,13 @@ String _rel(DateTime t) {
 }
 
 String _meta(HistoryItem item) {
+  // No device here: the list groups by device, so the section header carries
+  // it. (The full-screen / bottom-sheet previews still show the device.)
   final rel = _rel(item.timestamp);
-  final dev = item.device.isEmpty ? '' : '${item.device} · ';
   if (item.isImage) {
     final kb = ((item.imageBytes?.length ?? 0) / 1024).round();
     final fmt = item.mime.contains('png') ? 'PNG' : 'JPG';
-    return '$fmt · $kb KB · $dev$rel';
+    return '$fmt · $kb KB · $rel';
   }
-  return '$dev$rel';
-}
-
-String _dayLabel(DateTime t) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final day = DateTime(t.year, t.month, t.day);
-  final diff = today.difference(day).inDays;
-  if (diff <= 0) return 'TODAY';
-  if (diff == 1) return 'YESTERDAY';
-  const months = [
-    'JAN',
-    'FEB',
-    'MAR',
-    'APR',
-    'MAY',
-    'JUN',
-    'JUL',
-    'AUG',
-    'SEP',
-    'OCT',
-    'NOV',
-    'DEC',
-  ];
-  return '${months[t.month - 1]} ${t.day}';
+  return rel;
 }
