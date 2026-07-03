@@ -10,15 +10,31 @@ import 'package:super_clipboard/super_clipboard.dart';
 abstract class ImageClipboard {
   static SystemClipboard? get _cb => SystemClipboard.instance;
 
-  /// Read a PNG image off the clipboard as raw bytes, or null if there's none.
+  /// Read an image off the clipboard as raw bytes, or null if there's none.
+  /// Tries several formats (macOS screenshots land as PNG; other apps may use
+  /// JPEG/TIFF/…). The `image` package decodes whichever we get.
   static Future<Uint8List?> read() async {
     final cb = _cb;
     if (cb == null) return null;
     final reader = await cb.read();
-    if (!reader.canProvide(Formats.png)) return null;
+    for (final fmt in [
+      Formats.png,
+      Formats.jpeg,
+      Formats.tiff,
+      Formats.gif,
+      Formats.bmp,
+    ]) {
+      if (!reader.canProvide(fmt)) continue;
+      final bytes = await _readFile(reader, fmt);
+      if (bytes != null && bytes.isNotEmpty) return bytes;
+    }
+    return null;
+  }
+
+  static Future<Uint8List?> _readFile(ClipboardReader reader, FileFormat fmt) {
     final completer = Completer<Uint8List?>();
     reader.getFile(
-      Formats.png,
+      fmt,
       (file) async {
         try {
           completer.complete(await file.readAll());

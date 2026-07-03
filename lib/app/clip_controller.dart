@@ -128,15 +128,16 @@ class ClipController extends ChangeNotifier with ClipboardListener {
 
   @override
   void onClipboardChanged() async {
-    // Text first (common + cheap); fall back to an image on the clipboard.
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final text = data?.text;
-    if (text != null && text.isNotEmpty) {
-      await _pushLocal(text);
+    // Image first: a screenshot or copied image file can also carry a text /
+    // file-path representation, and we must sync the image — not the path.
+    final png = await ImageClipboard.read();
+    if (png != null) {
+      await _pushLocalImage(png);
       return;
     }
-    final png = await ImageClipboard.read();
-    if (png != null) await _pushLocalImage(png);
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text;
+    if (text != null && text.isNotEmpty) await _pushLocal(text);
   }
 
   /// Manual capture (phones without background capture, or any device).

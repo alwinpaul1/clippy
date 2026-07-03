@@ -196,6 +196,7 @@ class _HomeBodyState extends State<_HomeBody> {
   ClipController get _ctl => widget.controller;
 
   void _enterSelection(HistoryItem item) {
+    HapticFeedback.selectionClick();
     setState(() {
       _selecting = true;
       _selected
@@ -256,6 +257,7 @@ class _HomeBodyState extends State<_HomeBody> {
   }
 
   Future<void> _deleteOne(HistoryItem item) async {
+    HapticFeedback.mediumImpact();
     await _ctl.deleteItems([item]);
     if (mounted) HomePage.snack(context, 'Clip deleted');
   }
@@ -269,6 +271,7 @@ class _HomeBodyState extends State<_HomeBody> {
       action: 'Delete',
     );
     if (ok != true) return;
+    HapticFeedback.mediumImpact();
     await _ctl.deleteItems(chosen);
     _exitSelection();
   }
@@ -280,7 +283,10 @@ class _HomeBodyState extends State<_HomeBody> {
           'saved elsewhere is gone for good.',
       action: 'Clear all',
     );
-    if (ok == true) await _ctl.clearAll();
+    if (ok == true) {
+      HapticFeedback.mediumImpact();
+      await _ctl.clearAll();
+    }
   }
 
   Future<bool?> _confirm({
