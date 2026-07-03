@@ -80,14 +80,14 @@ class SyncEngine {
     return [UploadClip(clip)];
   }
 
-  /// On local IMAGE capture. [base64Jpeg] is the downscaled JPEG, base64'd, and
+  /// On local IMAGE capture. [base64Image] is the original image, base64'd, and
   /// treated as the sealed plaintext (so the echo-guard and dedup work exactly
   /// as for text). No text size-cap — the relay enforces its own ciphertext cap.
   Future<List<SyncAction>> onLocalImage(
-    String base64Jpeg, {
+    String base64Image, {
     String mime = 'image/jpeg',
   }) async {
-    final h = await _crypto.fingerprint(base64Jpeg);
+    final h = await _crypto.fingerprint(base64Image);
     if (_expectedEchoHash != null &&
         h == _expectedEchoHash &&
         _clock().isBefore(_expectedEchoExpiry!)) {
@@ -95,7 +95,7 @@ class SyncEngine {
       _expectedEchoExpiry = null;
       return const [];
     }
-    final clip = (await _crypto.seal(base64Jpeg, source: _selfDeviceId))
+    final clip = (await _crypto.seal(base64Image, source: _selfDeviceId))
         .copyWith(kind: 'image', mime: mime);
     await _setLastApplied(h);
     return [UploadClip(clip)];

@@ -11,8 +11,10 @@ import 'dart:io';
 /// encrypted-message router that also keeps the last N clips per room (durably,
 /// see [ClipRepository]) so a reconnecting device catches up.
 const int maxHistory = 25;
-// ~1.1MB on the wire — covers a downscaled JPEG image clip (base64 + encrypted).
-const int maxCiphertextChars = 1500000;
+// Images sync at original quality with no downscaling, so this must fit a
+// full-screen Retina PNG raw: ~36MB image × ~1.78 (base64 → encrypted →
+// base64) ≈ 64M chars.
+const int maxCiphertextChars = 64000000;
 const int maxRoomTokenChars = 512;
 
 /// Per-room clip history storage. Consecutive duplicate hashes collapse and the
@@ -176,6 +178,7 @@ Future<void> _handleRequest(HttpRequest req) async {
 // The app builds available for download (allow-listed — no path traversal).
 const _downloads = {
   'Clippy-macOS.zip': 'application/zip',
+  'Clippy-Windows.zip': 'application/zip',
   'Clippy-Android.apk': 'application/vnd.android.package-archive',
 };
 
