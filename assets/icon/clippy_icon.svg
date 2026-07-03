@@ -11,7 +11,7 @@
 
   <!-- The exact in-app Clippy mark (theme.dart ClippyMark, 60x84 viewBox):
        thin stroke-7 clip with eyes, scaled onto the icon canvas. -->
-  <g transform="translate(262 204) scale(8.333)">
+  <g transform="translate(182 105) scale(11)">
     <path d="M18,24 V58 A12,12 0 0 0 42,58 V18 A8,8 0 0 0 26,18 V56 A4,4 0 0 0 34,56 V26"
       fill="none" stroke="url(#clip)" stroke-width="7" stroke-linecap="round"/>
     <circle cx="24" cy="8" r="6.5" fill="#FFFFFF" stroke="#1E2A5A" stroke-width="2"/>
