@@ -82,12 +82,16 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter build macos --release
-      - name: Zip the app
-        run: ditto -c -k --keepParent build/macos/Build/Products/Release/clippy.app Clippy-macOS.zip
+      - name: Package as DMG (drag-to-Applications)
+        run: |
+          mkdir dmg
+          cp -R build/macos/Build/Products/Release/clippy.app "dmg/Clippy.app"
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname Clippy -srcfolder dmg -ov -format UDZO Clippy-macOS.dmg
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-zip
-          path: Clippy-macOS.zip
+          name: macos-dmg
+          path: Clippy-macOS.dmg
           if-no-files-found: error
 
   build-windows:
@@ -105,13 +109,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: flutter pub get
       - run: flutter build windows --release
-      - name: Zip the app
+      - name: Build installer (Inno Setup, preinstalled on the runner)
         shell: pwsh
-        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath Clippy-Windows.zip
+        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" windows\installer.iss'
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-zip
-          path: Clippy-Windows.zip
+          name: windows-setup
+          path: Clippy-Setup.exe
           if-no-files-found: error
 
   # ---- Deploy relay + download page + fresh builds to Railway ----
@@ -128,18 +132,18 @@ jobs:
           path: _dl
       - uses: actions/download-artifact@v4
         with:
-          name: macos-zip
+          name: macos-dmg
           path: _dl
       - uses: actions/download-artifact@v4
         with:
-          name: windows-zip
+          name: windows-setup
           path: _dl
       - name: Stage builds for hosting
         run: |
           mkdir -p server/web/downloads
           cp _dl/app-release.apk server/web/downloads/Clippy-Android.apk
-          cp _dl/Clippy-macOS.zip server/web/downloads/Clippy-macOS.zip
-          cp _dl/Clippy-Windows.zip server/web/downloads/Clippy-Windows.zip
+          cp _dl/Clippy-macOS.dmg server/web/downloads/Clippy-macOS.dmg
+          cp _dl/Clippy-Setup.exe server/web/downloads/Clippy-Setup.exe
           ls -la server/web/downloads
       - uses: actions/setup-node@v4
         with:

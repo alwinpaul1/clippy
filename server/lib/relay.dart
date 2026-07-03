@@ -177,8 +177,8 @@ Future<void> _handleRequest(HttpRequest req) async {
 
 // The app builds available for download (allow-listed — no path traversal).
 const _downloads = {
-  'Clippy-macOS.zip': 'application/zip',
-  'Clippy-Windows.zip': 'application/zip',
+  'Clippy-macOS.dmg': 'application/x-apple-diskimage',
+  'Clippy-Setup.exe': 'application/octet-stream',
   'Clippy-Android.apk': 'application/vnd.android.package-archive',
 };
 
