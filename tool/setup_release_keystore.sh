@@ -15,7 +15,7 @@
 # $variables under `set -u`, so no fancy punctuation in this file.
 set -euo pipefail
 
-REPO="alwinpau1/clippy"
+REPO="alwinpaul1/clippy"
 KEYSTORE="$HOME/.clippy/clippy-release.jks"
 ALIAS="clippy"
 
