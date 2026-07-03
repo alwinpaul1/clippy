@@ -5,6 +5,9 @@ import 'package:clipboard_watcher/clipboard_watcher.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../core/models/remote_clip.dart';
 
 import '../core/backend/websocket_clip_store.dart';
 import '../core/history/history_item.dart';
@@ -81,11 +84,51 @@ class ClipController extends ChangeNotifier
       clock: DateTime.now,
     );
     _historyStore = HistoryStore(crypto: crypto, writer: _writer);
+
+    // Instant open: render the locally cached (still-encrypted) clips before
+    // the relay round-trip completes; the live snapshot replaces them. The
+    // cache key is room-scoped so a re-pair can never surface another room's
+    // clips.
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'clippy.clips.${roomToken.hashCode.toRadixString(16)}';
+    final cached = prefs.getString(cacheKey);
+    if (cached != null) {
+      try {
+        final clips = (jsonDecode(cached) as List).map((m) {
+          final map = (m as Map).cast<String, dynamic>();
+          return RemoteClip.fromMap(
+            map,
+            timestamp: DateTime.parse(map['ts'] as String).toLocal(),
+          );
+        }).toList();
+        history = await _historyStore!.project(clips);
+        notifyListeners();
+      } catch (_) {
+        // Corrupt cache — the live snapshot will overwrite it shortly.
+      }
+    }
+
     _store = WebSocketClipStore.connect(Uri.parse(relayUrl), roomToken);
 
     _historySub = _store!.history.listen((clips) async {
       history = await _historyStore!.project(clips);
       notifyListeners();
+      // Refresh the instant-open cache: encrypted clips only, and skip large
+      // image payloads so prefs stays small (images stream in on connect).
+      final small = clips
+          .where((c) => c.ciphertext.length <= 64000)
+          .map((c) => {
+                'ciphertext': c.ciphertext,
+                'iv': c.iv,
+                'hash': c.hash,
+                'source': c.source,
+                'device': c.device,
+                'kind': c.kind,
+                'mime': c.mime,
+                'ts': c.timestamp.toUtc().toIso8601String(),
+              })
+          .toList();
+      await prefs.setString(cacheKey, jsonEncode(small));
       // If the last-applied clip was deleted (here or on another device),
       // clear its persisted hash so re-copying that content syncs again
       // instead of being deduped by the engine's Rule 2b.

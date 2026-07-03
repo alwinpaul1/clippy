@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -192,8 +193,26 @@ class _HomeBody extends StatefulWidget {
 class _HomeBodyState extends State<_HomeBody> {
   final Set<String> _selected = {};
   bool _selecting = false;
+  // Clip ages ("2m") are computed at build time; without a periodic rebuild
+  // they go stale, so two devices show different ages for the same clip.
+  Timer? _agesTicker;
 
   ClipController get _ctl => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _agesTicker = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => mounted ? setState(() {}) : null,
+    );
+  }
+
+  @override
+  void dispose() {
+    _agesTicker?.cancel();
+    super.dispose();
+  }
 
   void _enterSelection(HistoryItem item) {
     HapticFeedback.selectionClick();
@@ -257,7 +276,7 @@ class _HomeBodyState extends State<_HomeBody> {
   }
 
   Future<void> _deleteOne(HistoryItem item) async {
-    HapticFeedback.lightImpact();
+    HapticFeedback.heavyImpact(); // Samsung gates the subtler constants
     await _ctl.deleteItems([item]);
     if (mounted) HomePage.snack(context, 'Clip deleted');
   }
@@ -377,7 +396,7 @@ class _HomeBodyState extends State<_HomeBody> {
               ? const _EmptyState()
               : _HistoryList(
                   items: items,
-                  topInset: _selecting ? 76 : 108,
+                  topInset: _selecting ? 76 : 122,
                   selecting: _selecting,
                   selected: _selected,
                   onCopy: _copy,
@@ -655,7 +674,9 @@ class _HistoryList extends StatelessWidget {
         children.add(
           Padding(
             padding: EdgeInsets.only(
-              top: lastLabel == null ? 2 : 12,
+              // The first label sits just below the glass header — give it
+              // room so it never renders half-faded under the blur.
+              top: lastLabel == null ? 8 : 12,
               bottom: 2,
             ),
             child: Text(
@@ -814,9 +835,10 @@ class _ClipCard extends StatelessWidget {
       direction: DismissDirection.endToStart,
       dismissThresholds: const {DismissDirection.endToStart: 0.55},
       onUpdate: (d) {
-        // Soft tick the instant the swipe crosses (or backs out of) the delete
-        // threshold, so the gesture feels physical instead of abrupt.
-        if (d.reached != d.previousReached) HapticFeedback.selectionClick();
+        // Tick the instant the swipe crosses (or backs out of) the delete
+        // threshold. heavyImpact, not selectionClick: Samsung gates the
+        // subtle constants (CLOCK_TICK/VIRTUAL_KEY) behind system settings.
+        if (d.reached != d.previousReached) HapticFeedback.heavyImpact();
       },
       background: Container(
         alignment: Alignment.centerRight,

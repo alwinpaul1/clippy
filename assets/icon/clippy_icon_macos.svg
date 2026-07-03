@@ -9,20 +9,13 @@
   <!-- Opaque white full-bleed background (no alpha, required by the macOS generator) -->
   <rect width="1024" height="1024" fill="#FFFFFF"/>
 
-  <g transform="translate(512 500) scale(0.96) translate(-512 -512)">
-    <g transform="rotate(-8 512 512)"
-       fill="none" stroke="url(#clip)" stroke-width="74"
-       stroke-linecap="round" stroke-linejoin="round">
-      <rect x="356" y="236" width="312" height="600" rx="156"/>
-      <rect x="430" y="236" width="164" height="452" rx="82"/>
-    </g>
-    <g>
-      <circle cx="470" cy="356" r="54" fill="#FFFFFF" stroke="#1E2A5A" stroke-width="10"/>
-      <circle cx="479" cy="366" r="26" fill="#1E2A5A"/>
-      <circle cx="468" cy="356" r="9" fill="#FFFFFF"/>
-      <circle cx="588" cy="335" r="54" fill="#FFFFFF" stroke="#1E2A5A" stroke-width="10"/>
-      <circle cx="597" cy="345" r="26" fill="#1E2A5A"/>
-      <circle cx="586" cy="335" r="9" fill="#FFFFFF"/>
-    </g>
+  <!-- The exact in-app Clippy mark (theme.dart ClippyMark), centered. -->
+  <g transform="translate(272 220) scale(8.0)">
+    <path d="M18,24 V58 A12,12 0 0 0 42,58 V18 A8,8 0 0 0 26,18 V56 A4,4 0 0 0 34,56 V26"
+      fill="none" stroke="url(#clip)" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="24" cy="8" r="6.5" fill="#FFFFFF" stroke="#1E2A5A" stroke-width="2"/>
+    <circle cx="38" cy="8" r="6.5" fill="#FFFFFF" stroke="#1E2A5A" stroke-width="2"/>
+    <circle cx="25.5" cy="9" r="3" fill="#1E2A5A"/>
+    <circle cx="39.5" cy="9" r="3" fill="#1E2A5A"/>
   </g>
 </svg>
