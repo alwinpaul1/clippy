@@ -28,5 +28,3 @@ lib/firebase_options.dart
 *.xcworkspace/xcuserdata/
 .DS_Store
 
-# App builds hosted on Railway (not committed to git)
-server/web/downloads/

@@ -1,0 +1,29 @@
+# Railway uses this (not .gitignore) to decide what `railway up` uploads.
+# The root Dockerfile only builds server/, so exclude the Flutter app and
+# build artifacts — but DO include server/ (incl. web/downloads/, the app
+# builds we host; those stay out of git via .gitignore).
+#
+# Patterns are root-anchored (leading /) so they don't also match server/lib,
+# server/test, etc.
+/android/
+/ios/
+/linux/
+/windows/
+/macos/
+/lib/
+/test/
+/assets/
+/docs/
+/tool/
+/build/
+/.dart_tool/
+/.git/
+/.claude/
+/.github/
+/.idea/
+/.metadata
+/.flutter-plugins
+/.flutter-plugins-dependencies
+*.iml
+server/.dart_tool/
+server/build/
