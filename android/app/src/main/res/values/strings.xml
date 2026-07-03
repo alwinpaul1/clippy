@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="a11y_desc">Lets Clippy sync what you copy to your other devices while it runs in the background. Clippy only reads clipboard text — it does not read screen content.</string>
+</resources>

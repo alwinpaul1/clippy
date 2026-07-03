@@ -9,9 +9,11 @@ import 'package:super_clipboard/super_clipboard.dart';
 
 import '../app/relay_config.dart';
 import '../core/backend/websocket_clip_store.dart';
+import '../core/models/clip_event.dart';
 import '../core/state/prefs_state_store.dart';
 import '../core/sync/sync_action.dart';
 import '../core/sync/sync_engine.dart';
+import 'clip_queue.dart';
 import 'device_name.dart';
 import 'image_clipboard.dart';
 import 'secure_key_store.dart';
@@ -26,9 +28,10 @@ void clippyServiceCallback() {
 }
 
 class _BackgroundSyncHandler extends TaskHandler {
-  // Comfortably above the UI's 15s ping interval, so a couple of delayed
-  // pings don't cause a spurious takeover.
-  static const _uiTimeout = Duration(seconds: 40);
+  // Above the UI's 15s ping interval so a delayed ping doesn't cause a
+  // spurious takeover, but low enough that a backgrounded copy the
+  // AccessibilityService captured drains + syncs promptly.
+  static const _uiTimeout = Duration(seconds: 22);
 
   // Samsung saves to DCIM/Screenshots; stock Android to Pictures/Screenshots.
   // With READ_MEDIA_IMAGES granted, media files are readable by direct path
@@ -64,11 +67,29 @@ class _BackgroundSyncHandler extends TaskHandler {
       // The activity's MediaStore observer died with the UI isolate, so the
       // takeover also picks up new screenshots by scanning their folders.
       unawaited(_scanScreenshots());
+      // Drain clips the background AccessibilityService captured.
+      unawaited(_drainQueue());
     } else {
       _stop();
     }
   }
 
+
+  Future<void> _drainQueue() async {
+    final engine = _engine;
+    final store = _store;
+    if (engine == null || store == null) return;
+    for (final text in await ClipQueue.drain()) {
+      final actions = await engine.onLocalClip(
+        ClipEvent(text: text, byteSize: utf8.encode(text).length),
+      );
+      for (final a in actions) {
+        if (a is UploadClip) {
+          await store.append(a.clip.copyWith(device: _deviceName));
+        }
+      }
+    }
+  }
 
   Future<void> _scanScreenshots() async {
     final store = _store;

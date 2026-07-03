@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/models/remote_clip.dart';
+import '../platform/clip_queue.dart';
 
 import '../core/backend/websocket_clip_store.dart';
 import '../core/history/history_item.dart';
@@ -198,6 +199,8 @@ class ClipController extends ChangeNotifier
       // sync new ones directly. Not awaited: the first call pops the
       // photo-access dialog, and startup shouldn't block on the answer.
       unawaited(_startScreenshotSync());
+      // Sync anything the background AccessibilityService captured.
+      unawaited(_drainQueue());
       // Heartbeat the service isolate: while it hears us, it idles; when the
       // UI isolate dies (swipe-away), it takes over the receive loop.
       ForegroundServiceManager.pingAlive();
@@ -227,6 +230,16 @@ class ClipController extends ChangeNotifier
     if (state == AppLifecycleState.resumed && !isDesktop) {
       ForegroundServiceManager.pingAlive();
       onClipboardChanged();
+      unawaited(_drainQueue());
+    }
+  }
+
+  /// Push texts the background AccessibilityService captured while the UI was
+  /// away. Engine dedup absorbs repeats.
+  Future<void> _drainQueue() async {
+    for (final text in await ClipQueue.drain()) {
+      if (_disposed) return;
+      await _pushLocal(text);
     }
   }
 

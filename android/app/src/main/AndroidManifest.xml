@@ -6,6 +6,9 @@
     <!-- Delete/clear haptics via Vibrator (performHapticFeedback is
          unreliable on Samsung — gated behind system touch-vibration). -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Fallback focus-trick overlay for background clipboard reads when the
+         AccessibilityService can't read the content directly. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- Auto-sync new screenshots: watch MediaStore for files in Screenshots/. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <!-- Android 14+: lets us detect the "Select photos" (partial) grant so we
@@ -68,6 +71,21 @@
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
+        <!-- Background clipboard capture (opt-in): an AccessibilityService keeps
+             a privileged, long-lived process that can capture copies without
+             Clippy being the keyboard. -->
+        <service
+            android:name=".ClipboardA11yService"
+            android:label="Clippy clipboard sync"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/a11y_config" />
+        </service>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

@@ -91,6 +91,34 @@ class MainActivity : FlutterActivity() {
         )
         channel!!.setMethodCallHandler { call, result ->
             when (call.method) {
+                "bgSyncStatus" -> {
+                    val id = "$packageName/.ClipboardA11yService"
+                    val enabled = (Settings.Secure.getString(
+                        contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+                    ) ?: "").split(':').any { it.equals(id, ignoreCase = true) }
+                    result.success(
+                        mapOf(
+                            "enabled" to enabled,
+                            "overlay" to Settings.canDrawOverlays(this),
+                        ),
+                    )
+                }
+                "openA11ySettings" -> {
+                    startActivity(
+                        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                    result.success(null)
+                }
+                "requestOverlay" -> {
+                    startActivity(
+                        Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:$packageName"),
+                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                    result.success(null)
+                }
                 "getInitialText" -> {
                     val shared = extractShare(intent)
                     // Consume it so a controller restart won't re-send the same clip.

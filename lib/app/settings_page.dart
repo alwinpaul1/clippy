@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 
+import '../platform/share_channel.dart';
 import 'theme.dart';
 import 'theme_controller.dart';
 
@@ -83,6 +86,21 @@ class SettingsPage extends StatelessWidget {
                       style: Ct.body(12, color: c.muted, height: 1.4),
                     ),
                   ),
+                  if (defaultTargetPlatform == TargetPlatform.android) ...[
+                    const SizedBox(height: 24),
+                    _Label('BACKGROUND SYNC', c),
+                    const SizedBox(height: 4),
+                    const _BgSyncCard(),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+                      child: Text(
+                        'Lets copies sync while Clippy is closed. Android only '
+                        'allows this via an accessibility service; reading the '
+                        'clipboard briefly flickers the screen. Off by default.',
+                        style: Ct.body(12, color: c.muted, height: 1.4),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   _Label('GROUP', c),
                   const SizedBox(height: 4),
@@ -253,6 +271,100 @@ class _ActionRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Background clipboard-sync setup (AccessibilityService + overlay). Two steps
+/// with live status; refreshes when the app resumes from system settings.
+class _BgSyncCard extends StatefulWidget {
+  const _BgSyncCard();
+  @override
+  State<_BgSyncCard> createState() => _BgSyncCardState();
+}
+
+class _BgSyncCardState extends State<_BgSyncCard> with WidgetsBindingObserver {
+  bool _enabled = false;
+  bool _overlay = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final s = await ShareChannel.bgSyncStatus();
+    if (!mounted) return;
+    setState(() {
+      _enabled = s.enabled;
+      _overlay = s.overlay;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ck;
+    final active = _enabled && _overlay;
+    if (active) {
+      return _Card(
+        c,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            child: Row(
+              children: [
+                Icon(Icons.sync, size: 20, color: c.green),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text('Background sync active',
+                      style: Ct.body(14, color: c.green,
+                          weight: FontWeight.w500)),
+                ),
+                Icon(Icons.check_circle, size: 18, color: c.green),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+    return _Card(
+      c,
+      children: [
+        _ActionRow(
+          c,
+          icon: _enabled ? Icons.check_circle_outline : Icons.accessibility_new,
+          iconColor: _enabled ? c.green : c.muted2,
+          label: _enabled ? 'Accessibility enabled' : '1. Enable Clippy sync',
+          labelColor: _enabled ? c.green : c.ink,
+          trailing:
+              _enabled ? null : Icon(Icons.chevron_right, size: 20, color: c.muted),
+          onTap: ShareChannel.openA11ySettings,
+        ),
+        _Divider(c),
+        _ActionRow(
+          c,
+          icon: _overlay ? Icons.check_circle_outline : Icons.layers_outlined,
+          iconColor: _overlay ? c.green : c.muted2,
+          label: _overlay ? 'Overlay allowed' : '2. Allow display over apps',
+          labelColor: _overlay ? c.green : c.ink,
+          trailing:
+              _overlay ? null : Icon(Icons.chevron_right, size: 20, color: c.muted),
+          onTap: ShareChannel.requestOverlay,
+        ),
+      ],
     );
   }
 }
