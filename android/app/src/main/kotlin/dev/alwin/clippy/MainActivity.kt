@@ -13,7 +13,6 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.MediaStore
 import android.provider.Settings
-import android.view.inputmethod.InputMethodManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
@@ -37,14 +36,8 @@ class MainActivity : FlutterActivity() {
     private val channelName = "clippy/share"
     private var channel: MethodChannel? = null
 
-    companion object {
-        /** Same-process bridge for ClippyImeService's instant delivery:
-         *  non-null exactly while the Flutter UI engine is alive. */
-        @Volatile
-        @JvmStatic
-        var activeShareChannel: MethodChannel? = null
-
-        private const val SCREENSHOT_PERMISSION_CODE = 4243
+    private companion object {
+        const val SCREENSHOT_PERMISSION_CODE = 4243
     }
     private var screenshotObserver: ContentObserver? = null
     private val handledScreenshots = ArrayDeque<Long>()
@@ -96,32 +89,8 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             channelName,
         )
-        activeShareChannel = channel
         channel!!.setMethodCallHandler { call, result ->
             when (call.method) {
-                "imeStatus" -> {
-                    val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-                    val myId = "$packageName/.ClippyImeService"
-                    val enabled = imm.enabledInputMethodList.any { it.id == myId }
-                    val current = Settings.Secure.getString(
-                        contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD,
-                    )
-                    result.success(
-                        mapOf("enabled" to enabled, "isDefault" to (current == myId)),
-                    )
-                }
-                "openImeSettings" -> {
-                    startActivity(
-                        Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                    )
-                    result.success(null)
-                }
-                "showImePicker" -> {
-                    (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
-                        .showInputMethodPicker()
-                    result.success(null)
-                }
                 "getInitialText" -> {
                     val shared = extractShare(intent)
                     // Consume it so a controller restart won't re-send the same clip.
@@ -201,7 +170,6 @@ class MainActivity : FlutterActivity() {
             applicationContext.contentResolver.unregisterContentObserver(it)
         }
         screenshotObserver = null
-        activeShareChannel = null
         channel = null
         super.cleanUpFlutterEngine(flutterEngine)
     }

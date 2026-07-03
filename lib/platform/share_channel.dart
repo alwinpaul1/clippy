@@ -68,36 +68,6 @@ abstract class ShareChannel {
     }
   }
 
-  /// Clippy-keyboard status: {enabled: bool, isDefault: bool}. While the
-  /// keyboard is the DEFAULT input method, Android exempts Clippy from the
-  /// background clipboard restriction — copies sync instantly from any app.
-  static Future<({bool enabled, bool isDefault})> imeStatus() async {
-    try {
-      final m = await _channel.invokeMapMethod<String, dynamic>('imeStatus');
-      return (
-        enabled: (m?['enabled'] as bool?) ?? false,
-        isDefault: (m?['isDefault'] as bool?) ?? false,
-      );
-    } on MissingPluginException {
-      return (enabled: false, isDefault: false);
-    } on PlatformException {
-      return (enabled: false, isDefault: false);
-    }
-  }
-
-  /// System "manage keyboards" screen (step 1: enable Clippy Keyboard).
-  static Future<void> openImeSettings() async {
-    try {
-      await _channel.invokeMethod<void>('openImeSettings');
-    } catch (_) {}
-  }
-
-  /// System keyboard picker (step 2: make Clippy the default).
-  static Future<void> showImePicker() async {
-    try {
-      await _channel.invokeMethod<void>('showImePicker');
-    } catch (_) {}
-  }
 
   static void _dispatch(
     dynamic arg,
