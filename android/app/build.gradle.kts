@@ -33,6 +33,11 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // No R8: minification broke mobile_scanner's camera path on fresh
+            // installs (NPE with minified names at scanner start). We don't
+            // ship through the Play Store, so the size win isn't worth it.
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }
