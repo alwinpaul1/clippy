@@ -263,7 +263,9 @@ class ForegroundServiceManager {
         eventAction: ForegroundTaskEventAction.repeat(10000),
         allowWakeLock: true,
         allowWifiLock: true,
-        autoRunOnBoot: false,
+        // Apple-ecosystem feel: sync comes back on its own after a reboot
+        // (the service isolate runs the receive loop until the app is opened).
+        autoRunOnBoot: true,
         // Survive swipe-from-recents: the plugin re-arms a restart alarm
         // instead of stopping (so the background receive loop keeps running).
         stopWithTask: false,
