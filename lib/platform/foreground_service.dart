@@ -227,10 +227,12 @@ class ForegroundServiceManager {
         channelDescription:
             'Keeps your clipboard syncing across devices in the background.',
         onlyAlertOnce: true,
-        // Keep the required foreground-service notification as unobtrusive as
-        // Android allows: no status-bar icon, collapsed below the fold.
-        channelImportance: NotificationChannelImportance.MIN,
-        priority: NotificationPriority.MIN,
+        // LOW, not MIN: Google discourages IMPORTANCE_MIN for a foreground
+        // service — it can backfire into a system-generated "battery usage"
+        // nag. LOW keeps it quiet (no sound/badge) and, since we never request
+        // POST_NOTIFICATIONS, it stays hidden on Android 13+ regardless.
+        channelImportance: NotificationChannelImportance.LOW,
+        priority: NotificationPriority.LOW,
       ),
       iosNotificationOptions: const IOSNotificationOptions(),
       foregroundTaskOptions: ForegroundTaskOptions(
@@ -239,6 +241,9 @@ class ForegroundServiceManager {
         allowWakeLock: true,
         allowWifiLock: true,
         autoRunOnBoot: false,
+        // Survive swipe-from-recents: the plugin re-arms a restart alarm
+        // instead of stopping (so the background receive loop keeps running).
+        stopWithTask: false,
       ),
     );
   }
