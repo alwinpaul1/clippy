@@ -65,16 +65,29 @@
   .others a:hover{color:var(--green)}
   .others .sep{opacity:.5; margin:0 8px}
 
-  /* Feature strip */
-  .features{
-    display:grid; grid-template-columns:repeat(3,1fr); gap:1px;
-    background:var(--border); border:1px solid var(--border);
-    border-radius:16px; overflow:hidden; margin:64px 0;
+  /* Clippy assistant — the tips as a classic Office-Assistant speech bubble */
+  .assistant{display:flex; align-items:center; justify-content:center; gap:6px; margin:60px 0 72px}
+  .bubble{
+    position:relative; flex:1 1 auto; max-width:640px;
+    background:var(--surface); border:1.5px solid var(--border-strong);
+    border-radius:20px; padding:24px 28px;
+    box-shadow:0 10px 34px rgba(31,28,21,.07);
   }
-  .feature{background:var(--bg); padding:26px 24px}
-  .feature .k{font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted2); margin-bottom:10px}
-  .feature h3{font-family:'Newsreader',serif; font-weight:500; font-size:20px; margin:0 0 6px; letter-spacing:-.01em}
-  .feature p{margin:0; font-size:14.5px; color:var(--muted)}
+  .bubble .greet{
+    font-family:'Newsreader',serif; font-style:italic; font-size:17px;
+    color:var(--ink); margin:0 0 16px; line-height:1.35;
+  }
+  .tips{list-style:none; margin:0; padding:0; display:grid; gap:15px}
+  .tips .k{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--green); display:block; margin-bottom:3px}
+  .tips b{font-family:'Newsreader',serif; font-weight:500; font-size:18px; letter-spacing:-.01em; display:block; margin-bottom:2px}
+  .tips em{font-style:normal; font-size:14px; color:var(--muted); display:block}
+  /* Speech-balloon tail, pointing right toward Clippy (border + fill layers) */
+  .bubble::before,.bubble::after{content:''; position:absolute; left:100%; top:50%; width:0; height:0; border-style:solid; transform:translateY(-50%)}
+  .bubble::before{border-width:16px 0 16px 22px; border-color:transparent transparent transparent var(--border-strong)}
+  .bubble::after{margin-left:-1px; border-width:13px 0 13px 18px; border-color:transparent transparent transparent var(--surface)}
+  .assistant .clip{width:104px; height:auto; flex:none}
+  .assistant .clip .body{transform-origin:50% 72%; transform-box:fill-box; animation:bob 5.5s ease-in-out infinite}
+  .assistant .clip .eyes{transform-origin:center; transform-box:fill-box; animation:blink 4.2s linear infinite}
 
   /* Platform cards */
   .platforms-h{text-align:center; margin:0 0 24px}
@@ -125,11 +138,16 @@
   .mascot .eyes{transform-origin:center; transform-box:fill-box; animation:blink 4.2s linear infinite}
 
   @media (max-width:720px){
-    .features{grid-template-columns:1fr}
     .cards{grid-template-columns:1fr}
+    .assistant{flex-direction:column; align-items:center; gap:0}
+    .bubble{width:100%; flex:none}
+    /* Tail flips to point straight down at Clippy below the bubble */
+    .bubble::before{left:50%; margin-left:-16px; top:100%; transform:none; border-width:22px 16px 0 16px; border-color:var(--border-strong) transparent transparent transparent}
+    .bubble::after{left:50%; margin-left:-14px; top:100%; margin-top:-2px; transform:none; border-width:18px 14px 0 14px; border-color:var(--surface) transparent transparent transparent}
+    .assistant .clip{margin-top:14px}
   }
   @media (prefers-reduced-motion:reduce){
-    .mascot .body,.mascot .eyes{animation:none}
+    .mascot .body,.mascot .eyes,.assistant .clip .body,.assistant .clip .eyes{animation:none}
     .btn,.card,.card .dl{transition:none}
   }
 </style>
@@ -164,10 +182,23 @@
       </div>
     </section>
 
-    <section class="features">
-      <div class="feature"><div class="k">Instant</div><h3>The latest copy, always here</h3><p>Copy on any paired device and it lands on this one's clipboard, ready to paste.</p></div>
-      <div class="feature"><div class="k">Private</div><h3>End-to-end encrypted</h3><p>Clips are sealed with AES-256 before they leave your device. The relay only sees ciphertext.</p></div>
-      <div class="feature"><div class="k">Simple</div><h3>Pair with a QR code</h3><p>Scan once to link a device. No sign-up, no email, no password to forget.</p></div>
+    <section class="assistant">
+      <div class="bubble">
+        <p class="greet">It looks like you want your clipboard everywhere. Here's how I help:</p>
+        <ul class="tips">
+          <li><span class="k">Instant</span><b>The latest copy, always here</b><em>Copy on any paired device and it lands on this one's clipboard, ready to paste.</em></li>
+          <li><span class="k">Private</span><b>End-to-end encrypted</b><em>Clips are sealed with AES-256 before they leave your device. The relay only sees ciphertext.</em></li>
+          <li><span class="k">Simple</span><b>Pair with a QR code</b><em>Scan once to link a device. No sign-up, no email, no password to forget.</em></li>
+        </ul>
+      </div>
+      <svg class="clip" viewBox="0 0 60 92" aria-label="Clippy the paperclip">
+        <g class="body">
+          <path d="M18,32 V66 A12,12 0 0 0 42,66 V26 A8,8 0 0 0 26,26 V64 A4,4 0 0 0 34,64 V34" fill="none" stroke="#1F4B3F" stroke-width="7" stroke-linecap="round"/>
+          <circle cx="24" cy="16" r="6.5" fill="#FFFFFF" stroke="#1F4B3F" stroke-width="2"/>
+          <circle cx="38" cy="16" r="6.5" fill="#FFFFFF" stroke="#1F4B3F" stroke-width="2"/>
+          <g class="eyes"><circle cx="25.5" cy="17" r="3" fill="#1F4B3F"/><circle cx="39.5" cy="17" r="3" fill="#1F4B3F"/></g>
+        </g>
+      </svg>
     </section>
 
     <div class="platforms-h" id="get">
