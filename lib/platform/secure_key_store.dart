@@ -10,7 +10,15 @@ class SecureKeyStore {
   static const _key = 'clippy.masterKey.v1';
   final FlutterSecureStorage _storage;
 
-  const SecureKeyStore([this._storage = const FlutterSecureStorage()]);
+  const SecureKeyStore([
+    this._storage = const FlutterSecureStorage(
+      // macOS: the default data-protection keychain needs the app sandbox (or
+      // a keychain-access-group); Clippy runs unsandboxed so the Desktop
+      // screenshot watcher can work. The classic login keychain is still
+      // encrypted at rest and needs no entitlements.
+      mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+    ),
+  ]);
 
   Future<PairingKey?> load() async {
     final b64 = await _storage.read(key: _key);

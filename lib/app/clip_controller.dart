@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:clipboard_watcher/clipboard_watcher.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 
 import '../core/backend/websocket_clip_store.dart';
 import '../core/history/history_item.dart';
@@ -17,6 +18,7 @@ import '../platform/device_name.dart';
 import '../platform/flutter_clipboard_writer.dart';
 import '../platform/foreground_service.dart';
 import '../platform/image_clipboard.dart';
+import '../platform/mac_screenshot_watcher.dart';
 import '../platform/share_channel.dart';
 import 'relay_config.dart';
 
@@ -24,7 +26,8 @@ import 'relay_config.dart';
 /// relay connection → SyncEngine (apply-latest) + HistoryStore (browsable list).
 /// On desktop it auto-captures system-clipboard changes; everywhere it applies
 /// incoming clips and exposes the synced history.
-class ClipController extends ChangeNotifier with ClipboardListener {
+class ClipController extends ChangeNotifier
+    with ClipboardListener, WidgetsBindingObserver {
   final String deviceId;
   ClipController({required this.deviceId});
 
@@ -38,11 +41,23 @@ class ClipController extends ChangeNotifier with ClipboardListener {
   StreamSubscription? _connectedSub;
   bool _watching = false;
   bool _disposed = false;
+  MacScreenshotWatcher? _macShots;
+  Timer? _uiPing;
   String _deviceName = '';
   // After we write an incoming image to the clipboard, ignore the watcher's
   // resulting change for a moment (PNG round-trips aren't byte-identical, so a
   // content fingerprint can't catch this echo).
   DateTime? _suppressImageUntil;
+  // The clipboard content we already synced, in either direction. The resume
+  // hook re-reads the clipboard every time Clippy returns to the foreground,
+  // and the engine's echo window (~2s) can't cover a minutes-later re-read —
+  // without this, every app-open would re-upload the current clip. Text is
+  // matched exactly; an image is remembered as the platform's re-encoded
+  // read-back bytes (write→read isn't byte-identical, so the first read after
+  // our own write is blessed via _incomingImagePending instead of compared).
+  String? _handledText;
+  Uint8List? _handledImage;
+  bool _incomingImagePending = false;
 
   List<HistoryItem> history = const [];
   bool ready = false;
@@ -85,11 +100,13 @@ class ClipController extends ChangeNotifier with ClipboardListener {
             final jpeg = base64Decode(a.text);
             _suppressImageUntil =
                 DateTime.now().add(const Duration(seconds: 3));
+            _incomingImagePending = true;
             await ImageClipboard.write(jpeg);
           } catch (_) {
             // Corrupt payload — skip.
           }
         } else {
+          _handledText = a.text; // suppress the resume/watcher re-read echo
           await _writer.setText(a.text);
         }
       }
@@ -104,11 +121,34 @@ class ClipController extends ChangeNotifier with ClipboardListener {
       clipboardWatcher.addListener(this);
       await clipboardWatcher.start();
       _watching = true;
+      if (defaultTargetPlatform == TargetPlatform.macOS) {
+        // File-saved screenshots (⇧⌘3/4 → Desktop) bypass the clipboard;
+        // watch the screenshot folder and sync those too.
+        _macShots = MacScreenshotWatcher(
+          (bytes, mime) => _pushLocalImage(bytes, mime: mime),
+        );
+        unawaited(_macShots!.start());
+      }
     } else {
       // Keep receiving in the background so copies from other devices land on
       // the phone's clipboard without opening Clippy. Android requires a
       // foreground-service notification for this (kept at MIN importance).
       await ForegroundServiceManager.start();
+      // Android 10+ blocks clipboard reads while backgrounded (for every app,
+      // service or not), so capture outgoing copies the moment Clippy returns
+      // to the foreground instead.
+      WidgetsBinding.instance.addObserver(this);
+      // Screenshots never touch the Android clipboard — watch MediaStore and
+      // sync new ones directly. Deliberately not awaited: the first call pops
+      // the photo-access dialog, and startup shouldn't block on the answer.
+      unawaited(ShareChannel.startScreenshotWatch());
+      // Heartbeat the service isolate: while it hears us, it idles; when the
+      // UI isolate dies (swipe-away), it takes over the receive loop.
+      ForegroundServiceManager.pingAlive();
+      _uiPing = Timer.periodic(
+        const Duration(seconds: 15),
+        (_) => ForegroundServiceManager.pingAlive(),
+      );
     }
 
     ready = true;
@@ -118,12 +158,20 @@ class ClipController extends ChangeNotifier with ClipboardListener {
     // One tap, no special permissions; on desktop the channel is absent.
     ShareChannel.listen(
       onText: _pushLocal,
-      onImage: (bytes, _) => _pushLocalImage(bytes),
+      onImage: (bytes, mime) => _pushLocalImage(bytes, mime: mime),
     );
     await ShareChannel.initial(
       onText: _pushLocal,
-      onImage: (bytes, _) => _pushLocalImage(bytes),
+      onImage: (bytes, mime) => _pushLocalImage(bytes, mime: mime),
     );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !isDesktop) {
+      ForegroundServiceManager.pingAlive();
+      onClipboardChanged();
+    }
   }
 
   @override
@@ -132,26 +180,42 @@ class ClipController extends ChangeNotifier with ClipboardListener {
     // file-path representation, and we must sync the image — not the path.
     final png = await ImageClipboard.read();
     if (png != null) {
+      _handledText = null; // clipboard is an image now — the text guard is stale
+      if (_incomingImagePending) {
+        // First foreground read after we wrote an incoming image: our own
+        // echo. Remember the platform's re-encoding so later reads match.
+        _incomingImagePending = false;
+        _handledImage = png;
+        return;
+      }
+      if (_handledImage != null && listEquals(_handledImage, png)) return;
+      _handledImage = png;
       await _pushLocalImage(png);
       return;
     }
+    // Clipboard no longer holds an image — the image guard is stale.
+    _incomingImagePending = false;
+    _handledImage = null;
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text;
-    if (text != null && text.isNotEmpty) await _pushLocal(text);
+    if (text == null || text.isEmpty || text == _handledText) return;
+    _handledText = text;
+    await _pushLocal(text);
   }
 
   /// Manual capture (phones without background capture, or any device).
   Future<void> addManual(String text) => _pushLocal(text);
 
-  Future<void> _pushLocalImage(Uint8List png) async {
+  Future<void> _pushLocalImage(Uint8List png, {String? mime}) async {
     if (_disposed) return;
     final until = _suppressImageUntil;
     if (until != null && DateTime.now().isBefore(until)) return; // our own echo
     final engine = _engine;
     final store = _store;
     if (engine == null || store == null) return;
-    final jpeg = ImageClipboard.downscaleForRelay(png);
-    final actions = await engine.onLocalImage(base64Encode(jpeg));
+    // Always the original bytes — images sync at full quality, no downscaling.
+    final (bytes, outMime) = ImageClipboard.prepareForRelay(png, mime: mime);
+    final actions = await engine.onLocalImage(base64Encode(bytes), mime: outMime);
     for (final a in actions) {
       if (a is UploadClip) {
         await store.append(a.clip.copyWith(device: _deviceName));
@@ -197,6 +261,9 @@ class ClipController extends ChangeNotifier with ClipboardListener {
   @override
   void dispose() {
     _disposed = true;
+    WidgetsBinding.instance.removeObserver(this);
+    _uiPing?.cancel();
+    _macShots?.stop();
     ShareChannel.listen();
     if (_watching) {
       clipboardWatcher.removeListener(this);

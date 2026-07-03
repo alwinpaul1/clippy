@@ -38,6 +38,19 @@ abstract class ShareChannel {
     }
   }
 
+  /// Start the Android screenshot auto-sync: new screenshots arrive through
+  /// the [listen] onImage handler like shared images. Prompts for the
+  /// photo-read permission on first call; returns whether it's watching.
+  static Future<bool> startScreenshotWatch() async {
+    try {
+      return await _channel.invokeMethod<bool>('startScreenshotWatch') ?? false;
+    } on MissingPluginException {
+      return false; // Desktop / no native channel.
+    } on PlatformException {
+      return false;
+    }
+  }
+
   static void _dispatch(
     dynamic arg,
     void Function(String)? onText,

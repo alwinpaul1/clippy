@@ -1,25 +1,108 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-/// Entry point for the foreground-service isolate. The sync (WebSocket) lives in
-/// the main isolate; this handler just needs to exist so the service can run and
-/// keep the process alive while Clippy is backgrounded.
+import '../app/relay_config.dart';
+import '../core/backend/websocket_clip_store.dart';
+import '../core/state/prefs_state_store.dart';
+import '../core/sync/sync_action.dart';
+import '../core/sync/sync_engine.dart';
+import 'image_clipboard.dart';
+import 'secure_key_store.dart';
+
+/// Entry point for the foreground-service isolate. While the app's UI isolate
+/// is alive it heartbeats us and this handler idles; when the heartbeats stop
+/// (app swiped from Recents), the handler runs the receive loop itself so
+/// incoming clips keep landing on the clipboard.
 @pragma('vm:entry-point')
 void clippyServiceCallback() {
-  FlutterForegroundTask.setTaskHandler(_KeepAliveTaskHandler());
+  FlutterForegroundTask.setTaskHandler(_BackgroundSyncHandler());
 }
 
-class _KeepAliveTaskHandler extends TaskHandler {
+class _BackgroundSyncHandler extends TaskHandler {
+  // Comfortably above the UI's 15s ping interval, so a couple of delayed
+  // pings don't cause a spurious takeover.
+  static const _uiTimeout = Duration(seconds: 40);
+
+  DateTime _lastUiPing = DateTime.now();
+  WebSocketClipStore? _store;
+  StreamSubscription? _sub;
+  SyncEngine? _engine;
+  bool _starting = false;
+
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {}
 
   @override
-  void onRepeatEvent(DateTime timestamp) {}
+  void onReceiveData(Object data) {
+    if (data == ForegroundServiceManager.uiAlivePing) {
+      _lastUiPing = DateTime.now();
+      _stop(); // the UI isolate owns sync while it lives
+    }
+  }
 
   @override
-  Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {}
+  void onRepeatEvent(DateTime timestamp) {
+    if (DateTime.now().difference(_lastUiPing) > _uiTimeout) {
+      unawaited(_ensureRunning());
+    } else {
+      _stop();
+    }
+  }
+
+  Future<void> _ensureRunning() async {
+    if (_store != null || _starting) return;
+    _starting = true;
+    try {
+      final pairing = await const SecureKeyStore().load();
+      if (pairing == null) return; // not paired yet — nothing to sync
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload(); // long-lived isolate: skip stale caches
+      final roomToken = await pairing.roomToken();
+      _engine = SyncEngine(
+        crypto: await pairing.cryptoBox(),
+        state: await PrefsStateStore.create(),
+        selfDeviceId: prefs.getString('clippy.deviceId') ?? 'background',
+        clock: DateTime.now,
+      );
+      final store = WebSocketClipStore.connect(Uri.parse(relayUrl), roomToken);
+      _store = store;
+      _sub = store.incoming.listen((clip) async {
+        final actions = await _engine!.onRemoteSnapshot(clip);
+        for (final a in actions) {
+          if (a is! ApplyToClipboard) continue;
+          try {
+            if (clip.kind == 'image') {
+              await ImageClipboard.write(base64Decode(a.text));
+            } else {
+              await Clipboard.setData(ClipboardData(text: a.text));
+            }
+          } catch (_) {
+            // Background clipboard write failed — the clip stays in room
+            // history and applies on the next app open.
+          }
+        }
+      });
+    } finally {
+      _starting = false;
+    }
+  }
+
+  void _stop() {
+    _sub?.cancel();
+    _sub = null;
+    _store?.close();
+    _store = null;
+    _engine = null;
+  }
+
+  @override
+  Future<void> onDestroy(DateTime timestamp, bool isTimeout) async => _stop();
 }
 
 /// Runs an Android foreground service so Clippy keeps syncing when it isn't the
@@ -27,6 +110,19 @@ class _KeepAliveTaskHandler extends TaskHandler {
 /// No-op on non-Android platforms — desktop apps stay alive anyway.
 class ForegroundServiceManager {
   static bool get _isAndroid => !kIsWeb && Platform.isAndroid;
+
+  /// Heartbeat payload the UI isolate sends while it's alive.
+  static const uiAlivePing = 'clippy.ui-alive';
+
+  /// Tell the service isolate the UI isolate is alive (it idles while so).
+  static void pingAlive() {
+    if (!_isAndroid) return;
+    try {
+      FlutterForegroundTask.sendDataToTask(uiAlivePing);
+    } catch (_) {
+      // Service not up (yet) — the next ping catches it.
+    }
+  }
 
   static void init() {
     if (!_isAndroid) return;
@@ -44,7 +140,8 @@ class ForegroundServiceManager {
       ),
       iosNotificationOptions: const IOSNotificationOptions(),
       foregroundTaskOptions: ForegroundTaskOptions(
-        eventAction: ForegroundTaskEventAction.nothing(),
+        // Drives the heartbeat check in _BackgroundSyncHandler.
+        eventAction: ForegroundTaskEventAction.repeat(10000),
         allowWakeLock: true,
         allowWifiLock: true,
         autoRunOnBoot: false,
@@ -55,10 +152,11 @@ class ForegroundServiceManager {
   static Future<void> start() async {
     if (!_isAndroid) return;
 
-    if (await FlutterForegroundTask.checkNotificationPermission() !=
-        NotificationPermission.granted) {
-      await FlutterForegroundTask.requestNotificationPermission();
-    }
+    // Deliberately NOT requesting notification permission: Clippy posts no
+    // real notifications, and on Android 13+ a foreground service whose app
+    // lacks the permission runs fine with its (required) notification simply
+    // never displayed. That keeps background sync alive with no visible
+    // "sync active" notification.
     if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
       await FlutterForegroundTask.requestIgnoreBatteryOptimization();
     }
