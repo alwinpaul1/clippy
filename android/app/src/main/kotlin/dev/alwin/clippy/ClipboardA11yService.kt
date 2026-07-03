@@ -6,7 +6,6 @@ import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -33,13 +32,11 @@ class ClipboardA11yService : AccessibilityService() {
         super.onServiceConnected()
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.addPrimaryClipChangedListener {
-            Log.d("ClippyA11y", "listener fired")
             pending?.let { main.removeCallbacks(it) }
             val r = Runnable { onClipChanged(cm) }
             pending = r
             main.postDelayed(r, 120)
         }
-        Log.d("ClippyA11y", "connected; clipboard listener registered")
     }
 
     private var lastPoll = 0L
@@ -67,7 +64,6 @@ class ClipboardA11yService : AccessibilityService() {
     private fun onClipChanged(cm: ClipboardManager) {
         // 1) Direct read — does the AS context have clipboard access in bg?
         val direct = readClip(cm)
-        Log.d("ClippyA11y", "direct read: ${direct ?: "DENIED"}")
         if (direct != null) {
             emit(direct)
             return
@@ -104,8 +100,11 @@ class ClipboardA11yService : AccessibilityService() {
             readClip(cm)?.let { emit(it) }
             finish()
         }
-        try { wm.addView(view, params) } catch (e: Exception) {
-            Log.d("ClippyA11y", "overlay failed: $e"); finish(); return
+        try {
+            wm.addView(view, params)
+        } catch (_: Exception) {
+            finish()
+            return
         }
         main.postDelayed({ finish() }, 2000)
     }
@@ -117,7 +116,6 @@ class ClipboardA11yService : AccessibilityService() {
             val dir = File(filesDir, "clip_queue")
             dir.mkdirs()
             File(dir, "${System.currentTimeMillis()}.txt").writeText(text)
-            Log.d("ClippyA11y", "CAPTURED & queued ${text.length} chars")
         } catch (_: Exception) {}
     }
 }
