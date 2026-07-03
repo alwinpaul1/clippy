@@ -227,6 +227,34 @@ class _HomeBodyState extends State<_HomeBody> {
     if (mounted) HomePage.snack(context, 'Copied to clipboard');
   }
 
+  // Turn 6: tapping a clip opens a preview (text sheet / image viewer) with
+  // Copy as the primary action; the row's copy button still copies in one tap.
+  void _openPreview(HistoryItem item) {
+    if (item.isImage && item.imageBytes != null) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          fullscreenDialog: true,
+          builder: (_) => _ImagePreview(
+            item: item,
+            onCopy: () => _copy(item),
+            onDelete: () => _deleteOne(item),
+          ),
+        ),
+      );
+    } else {
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _TextPreview(
+          item: item,
+          onCopy: () => _copy(item),
+          onDelete: () => _deleteOne(item),
+        ),
+      );
+    }
+  }
+
   Future<void> _deleteOne(HistoryItem item) async {
     await _ctl.deleteItems([item]);
     if (mounted) HomePage.snack(context, 'Clip deleted');
@@ -347,6 +375,7 @@ class _HomeBodyState extends State<_HomeBody> {
                   onDelete: _deleteOne,
                   onToggle: _toggle,
                   onLongPress: _enterSelection,
+                  onPreview: _openPreview,
                 ),
         ),
         Positioned(
@@ -594,6 +623,7 @@ class _HistoryList extends StatelessWidget {
   final Future<void> Function(HistoryItem) onDelete;
   final void Function(HistoryItem) onToggle;
   final void Function(HistoryItem) onLongPress;
+  final void Function(HistoryItem) onPreview;
   const _HistoryList({
     required this.items,
     required this.topInset,
@@ -603,6 +633,7 @@ class _HistoryList extends StatelessWidget {
     required this.onDelete,
     required this.onToggle,
     required this.onLongPress,
+    required this.onPreview,
   });
 
   @override
@@ -632,7 +663,8 @@ class _HistoryList extends StatelessWidget {
           item: item,
           selecting: selecting,
           selected: selected.contains(item.hash),
-          onTap: () => selecting ? onToggle(item) : onCopy(item),
+          onTap: () => selecting ? onToggle(item) : onPreview(item),
+          onCopy: () => onCopy(item),
           onLongPress: () => onLongPress(item),
           onDelete: () => onDelete(item),
         ),
@@ -658,6 +690,7 @@ class _ClipCard extends StatelessWidget {
   final bool selecting;
   final bool selected;
   final VoidCallback onTap;
+  final VoidCallback onCopy;
   final VoidCallback onLongPress;
   final VoidCallback onDelete;
   const _ClipCard({
@@ -666,6 +699,7 @@ class _ClipCard extends StatelessWidget {
     required this.selecting,
     required this.selected,
     required this.onTap,
+    required this.onCopy,
     required this.onLongPress,
     required this.onDelete,
   });
@@ -739,17 +773,21 @@ class _ClipCard extends StatelessWidget {
               ),
               if (!selecting) ...[
                 const SizedBox(width: 14),
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: c.border),
-                  ),
-                  child: Icon(
-                    Icons.content_copy_outlined,
-                    size: 15,
-                    color: c.green,
+                GestureDetector(
+                  onTap: onCopy,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: c.border),
+                    ),
+                    child: Icon(
+                      Icons.content_copy_outlined,
+                      size: 15,
+                      color: c.green,
+                    ),
                   ),
                 ),
               ],
@@ -836,6 +874,282 @@ class _EmptyState extends StatelessWidget {
               style: Ct.body(14, color: c.muted),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Turn 6a: text clip preview — an expanding bottom sheet with the full
+/// content and Copy (primary) / Delete actions.
+class _TextPreview extends StatelessWidget {
+  final HistoryItem item;
+  final VoidCallback onCopy;
+  final VoidCallback onDelete;
+  const _TextPreview({
+    required this.item,
+    required this.onCopy,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ck;
+    final dev = item.device.isEmpty ? '' : '${item.device} · ';
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.72,
+      ),
+      decoration: BoxDecoration(
+        color: c.dialogBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        10,
+        20,
+        20 + MediaQuery.of(context).padding.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: c.borderStrong,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              Text('TEXT', style: Ct.sectionLabel().copyWith(color: c.muted)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '· $dev${_rel(item.timestamp)} · ${item.text.length} chars',
+                  style: Ct.mono(11, color: c.muted),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Flexible(
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: c.surface,
+                border: Border.all(color: c.border),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.all(18),
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  item.text,
+                  style: Ct.body(16, color: c.ink, height: 1.55),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: Material(
+                  color: c.green,
+                  borderRadius: BorderRadius.circular(12),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () {
+                      Navigator.pop(context);
+                      onCopy();
+                    },
+                    child: Container(
+                      height: 48,
+                      alignment: Alignment.center,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.content_copy_outlined, size: 16,
+                              color: c.isDark ? c.bg : Ck.bg),
+                          const SizedBox(width: 9),
+                          Text('Copy',
+                              style: Ct.body(14, weight: FontWeight.w500,
+                                  color: c.isDark ? c.bg : Ck.bg)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              _SquareIconBtn(
+                icon: Icons.delete_outline,
+                color: c.rust,
+                border: c.rust.withValues(alpha: 0.35),
+                bg: c.surface,
+                onTap: () {
+                  Navigator.pop(context);
+                  onDelete();
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Turn 6b: image clip preview — a full-screen viewer with Copy image / Delete.
+class _ImagePreview extends StatelessWidget {
+  final HistoryItem item;
+  final VoidCallback onCopy;
+  final VoidCallback onDelete;
+  const _ImagePreview({
+    required this.item,
+    required this.onCopy,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const bg = Color(0xFF141310);
+    const fg = Color(0xFFF4F1EA);
+    const green = Color(0xFF8FBCA6);
+    final kb = ((item.imageBytes?.length ?? 0) / 1024).round();
+    final fmt = item.mime.contains('png') ? 'PNG' : 'JPG';
+    final dev = item.device.isEmpty ? '' : '${item.device} · ';
+    return Scaffold(
+      backgroundColor: bg,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SizedBox(
+              height: 60,
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close, color: fg),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Image',
+                            style: Ct.body(16, weight: FontWeight.w500, color: fg)),
+                        Text('$fmt · $kb KB · $dev${_rel(item.timestamp)}',
+                            style: Ct.mono(10.5, color: const Color(0xFF8A8471))),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Center(
+                  child: item.imageBytes != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: Image.memory(item.imageBytes!,
+                              fit: BoxFit.contain),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                  20, 12, 20, 16 + MediaQuery.of(context).padding.bottom),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Material(
+                      color: green,
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () {
+                          Navigator.pop(context);
+                          onCopy();
+                        },
+                        child: Container(
+                          height: 48,
+                          alignment: Alignment.center,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.content_copy_outlined,
+                                  size: 16, color: bg),
+                              const SizedBox(width: 9),
+                              Text('Copy image',
+                                  style: Ct.body(14,
+                                      weight: FontWeight.w500, color: bg)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  _SquareIconBtn(
+                    icon: Icons.delete_outline,
+                    color: const Color(0xFFC97B66),
+                    border: const Color(0xFF4A2E26),
+                    bg: bg,
+                    onTap: () {
+                      Navigator.pop(context);
+                      onDelete();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SquareIconBtn extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final Color border;
+  final Color bg;
+  final VoidCallback onTap;
+  const _SquareIconBtn({
+    required this.icon,
+    required this.color,
+    required this.border,
+    required this.bg,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Ink(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            border: Border.all(color: border),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, size: 18, color: color),
         ),
       ),
     );

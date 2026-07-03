@@ -79,7 +79,8 @@ void main() {
     transports[0].emit(historyMsg(['a', 'b']));
     final snapshot = await future;
     expect(snapshot.map((c) => c.ciphertext).toList(), ['enc:a', 'enc:b']);
-    expect(snapshot.first.timestamp, DateTime.utc(2026, 7, 2));
+    // Timestamps are converted to local time for display (same instant).
+    expect(snapshot.first.timestamp, DateTime.utc(2026, 7, 2).toLocal());
   });
 
   test('an incoming clip is appended to history and emitted on incoming',
