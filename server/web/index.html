@@ -66,38 +66,16 @@
   .others a:hover{color:var(--green)}
   .others .sep{opacity:.5; margin:0 8px}
 
-  /* Clippy assistant — the tips as a classic Office-Assistant speech bubble */
-  .assistant{display:flex; align-items:center; justify-content:center; gap:6px; margin:60px 0 72px}
-  .bubble{
-    position:relative; flex:1 1 auto; max-width:640px;
-    background:var(--surface); border:1.5px solid var(--border-strong);
-    border-radius:20px; padding:24px 28px;
-    box-shadow:0 10px 34px rgba(31,28,21,.07);
+  /* The three tips as small cards (same design language as platform cards;
+     they share the 3D tilt via the .feature selector in the tilt JS/CSS). */
+  .features{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:60px 0 72px}
+  .feature{
+    position:relative; background:var(--surface); border:1px solid var(--border);
+    border-radius:14px; padding:18px 18px 16px;
   }
-  .bubble .greet{
-    font-family:'Newsreader',serif; font-style:italic; font-size:17px;
-    color:var(--ink); margin:0 0 16px; line-height:1.35;
-  }
-  /* One tip at a time: all stacked in the same grid cell (the cell sizes to
-     the tallest tip, so the bubble never jumps), JS crossfades between them. */
-  .tips{list-style:none; margin:0; padding:0; display:grid}
-  .tips li{grid-area:1/1; opacity:0; transform:translateY(9px); transition:opacity .55s ease, transform .55s ease; pointer-events:none}
-  .tips li.active{opacity:1; transform:translateY(0); pointer-events:auto}
-  .tips .k{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--green); display:block; margin-bottom:3px}
-  .tips b{font-family:'Newsreader',serif; font-weight:500; font-size:18px; letter-spacing:-.01em; display:block; margin-bottom:2px}
-  .tips em{font-style:normal; font-size:14px; color:var(--muted); display:block}
-  /* Little progress dots so the rotation reads as intentional */
-  .tip-dots{display:flex; gap:6px; margin-top:16px}
-  .tip-dots i{width:6px; height:6px; border-radius:50%; background:var(--border-strong); transition:background .3s ease, transform .3s ease}
-  .tip-dots i.on{background:var(--green); transform:scale(1.25)}
-  @media (prefers-reduced-motion:reduce){.tips li{transition:none}}
-  /* Speech-balloon tail, pointing right toward Clippy (border + fill layers) */
-  .bubble::before,.bubble::after{content:''; position:absolute; left:100%; top:50%; width:0; height:0; border-style:solid; transform:translateY(-50%)}
-  .bubble::before{border-width:16px 0 16px 22px; border-color:transparent transparent transparent var(--border-strong)}
-  .bubble::after{margin-left:-1px; border-width:13px 0 13px 18px; border-color:transparent transparent transparent var(--surface)}
-  .assistant .clip{width:104px; height:auto; flex:none}
-  .assistant .clip .body{transform-origin:50% 72%; transform-box:fill-box; animation:bob 5.5s ease-in-out infinite}
-  .assistant .clip .eyes{transform-origin:center; transform-box:fill-box; animation:blink 4.2s linear infinite}
+  .feature .k{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--green); margin-bottom:8px}
+  .feature h3{font-family:'Newsreader',serif; font-weight:500; font-size:18px; margin:0 0 5px; letter-spacing:-.01em}
+  .feature p{margin:0; font-size:13.5px; color:var(--muted); line-height:1.5}
 
   /* Platform cards */
   .platforms-h{text-align:center; margin:0 0 24px}
@@ -113,22 +91,22 @@
   /* 3D tilt + cursor glare on hover, mouse only (mirrors the TiltCard effect).
      JS sets --rx/--ry (tilt) and --gx/--gy (glare origin) per card. */
   @media (hover:hover) and (pointer:fine){
-    .cards{perspective:1000px}
-    .card{
+    .cards,.features{perspective:1000px}
+    .card,.feature{
       transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));
       transform-style:preserve-3d;
       transition:transform .13s ease-out, border-color .18s ease, box-shadow .22s ease;
       will-change:transform;
     }
-    .card:hover{box-shadow:0 20px 44px rgba(31,28,21,.17); border-color:var(--border-strong)}
-    .card::after{
+    .card:hover,.feature:hover{box-shadow:0 20px 44px rgba(31,28,21,.17); border-color:var(--border-strong)}
+    .card::after,.feature::after{
       content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
       background:radial-gradient(circle at var(--gx,50%) var(--gy,50%), rgba(255,255,255,.55), transparent 46%);
       opacity:0; transition:opacity .2s ease;
     }
-    .card:hover::after{opacity:.28}
+    .card:hover::after,.feature:hover::after{opacity:.28}
   }
-  @media (prefers-reduced-motion:reduce){.card{transform:none !important}}
+  @media (prefers-reduced-motion:reduce){.card,.feature{transform:none !important}}
   /* Briefly highlight a card when you jump to it from an "Also on" link. */
   .card.flash{animation:cardFlash 1.4s ease}
   @keyframes cardFlash{0%,100%{box-shadow:0 0 0 0 rgba(31,75,63,0)}30%{box-shadow:0 0 0 3px rgba(31,75,63,.35)}}
@@ -166,15 +144,10 @@
 
   @media (max-width:720px){
     .cards{grid-template-columns:1fr}
-    .assistant{flex-direction:column; align-items:center; gap:0}
-    .bubble{width:100%; flex:none}
-    /* Tail flips to point straight down at Clippy below the bubble */
-    .bubble::before{left:50%; margin-left:-16px; top:100%; transform:none; border-width:22px 16px 0 16px; border-color:var(--border-strong) transparent transparent transparent}
-    .bubble::after{left:50%; margin-left:-14px; top:100%; margin-top:-2px; transform:none; border-width:18px 14px 0 14px; border-color:var(--surface) transparent transparent transparent}
-    .assistant .clip{margin-top:14px}
+    .features{grid-template-columns:1fr}
   }
   @media (prefers-reduced-motion:reduce){
-    .mascot .body,.mascot .eyes,.assistant .clip .body,.assistant .clip .eyes,
+    .mascot .body,.mascot .eyes,
     .topbar .mark .body,.topbar .mark .eyes{animation:none}
     .btn,.card,.card .dl{transition:none}
   }
@@ -210,24 +183,10 @@
       </div>
     </section>
 
-    <section class="assistant">
-      <div class="bubble">
-        <p class="greet">It looks like you want your clipboard everywhere. Here's how I help:</p>
-        <ul class="tips">
-          <li class="active"><span class="k">Instant</span><b>The latest copy, always here</b><em>Copy on any paired device and it lands on this one's clipboard, ready to paste.</em></li>
-          <li><span class="k">Private</span><b>End-to-end encrypted</b><em>Clips are sealed with AES-256 before they leave your device. The relay only sees ciphertext.</em></li>
-          <li><span class="k">Simple</span><b>Pair with a QR code</b><em>Scan once to link a device. No sign-up, no email, no password to forget.</em></li>
-        </ul>
-        <div class="tip-dots"><i class="on"></i><i></i><i></i></div>
-      </div>
-      <svg class="clip" viewBox="0 0 60 92" aria-label="Clippy the paperclip">
-        <g class="body">
-          <path d="M18,32 V66 A12,12 0 0 0 42,66 V26 A8,8 0 0 0 26,26 V64 A4,4 0 0 0 34,64 V34" fill="none" stroke="#1F4B3F" stroke-width="7" stroke-linecap="round"/>
-          <circle cx="24" cy="16" r="6.5" fill="#FFFFFF" stroke="#1F4B3F" stroke-width="2"/>
-          <circle cx="38" cy="16" r="6.5" fill="#FFFFFF" stroke="#1F4B3F" stroke-width="2"/>
-          <g class="eyes"><circle cx="25.5" cy="17" r="3" fill="#1F4B3F"/><circle cx="39.5" cy="17" r="3" fill="#1F4B3F"/></g>
-        </g>
-      </svg>
+    <section class="features">
+      <div class="feature"><div class="k">Instant</div><h3>The latest copy, always here</h3><p>Copy on any paired device and it lands on this one's clipboard, ready to paste.</p></div>
+      <div class="feature"><div class="k">Private</div><h3>End-to-end encrypted</h3><p>Clips are sealed with AES-256 before they leave your device. The relay only sees ciphertext.</p></div>
+      <div class="feature"><div class="k">Simple</div><h3>Pair with a QR code</h3><p>Scan once to link a device. No sign-up, no email, no password to forget.</p></div>
     </section>
 
     <div class="platforms-h" id="get">
@@ -332,22 +291,6 @@
   var mine=document.querySelector('.card[data-os="'+primaryOS+'"]');
   if(mine && (os===primaryOS)){ mine.classList.add('you'); var y=mine.querySelector('.yours'); if(y) y.hidden=false; }
 
-  // Clippy's speech bubble cycles one tip at a time (~4s), like the real
-  // Office Assistant rotating its advice.
-  (function(){
-    var tips = document.querySelectorAll('.tips li');
-    var dots = document.querySelectorAll('.tip-dots i');
-    if(tips.length < 2) return;
-    var i = 0;
-    setInterval(function(){
-      tips[i].classList.remove('active');
-      if(dots[i]) dots[i].classList.remove('on');
-      i = (i + 1) % tips.length;
-      tips[i].classList.add('active');
-      if(dots[i]) dots[i].classList.add('on');
-    }, 4000);
-  })();
-
   // 3D tilt + cursor glare on the platform cards. Mouse only, and off when the
   // visitor prefers reduced motion (mirrors the TiltCard useHoverCapable /
   // useReducedMotion guards). CSS reads the vars we set here.
@@ -357,7 +300,7 @@
     var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if(!fine || reduce) return;
     var MAX = 9; // degrees of tilt at the card edges
-    Array.prototype.forEach.call(document.querySelectorAll('.card'), function(card){
+    Array.prototype.forEach.call(document.querySelectorAll('.card, .feature'), function(card){
       card.addEventListener('mousemove', function(e){
         var r = card.getBoundingClientRect();
         var px = (e.clientX - r.left) / r.width;
