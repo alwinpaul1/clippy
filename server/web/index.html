@@ -95,10 +95,30 @@
   .platforms-h p{margin:0; color:var(--muted); font-size:15px}
   .cards{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin:0 0 72px}
   .card{
+    position:relative;
     background:var(--surface); border:1px solid var(--border); border-radius:16px;
     padding:24px 22px; display:flex; flex-direction:column; gap:4px;
     transition:border-color .18s ease, box-shadow .18s ease; scroll-margin-top:24px;
   }
+  /* 3D tilt + cursor glare on hover, mouse only (mirrors the TiltCard effect).
+     JS sets --rx/--ry (tilt) and --gx/--gy (glare origin) per card. */
+  @media (hover:hover) and (pointer:fine){
+    .cards{perspective:1000px}
+    .card{
+      transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));
+      transform-style:preserve-3d;
+      transition:transform .13s ease-out, border-color .18s ease, box-shadow .22s ease;
+      will-change:transform;
+    }
+    .card:hover{box-shadow:0 20px 44px rgba(31,28,21,.17); border-color:var(--border-strong)}
+    .card::after{
+      content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+      background:radial-gradient(circle at var(--gx,50%) var(--gy,50%), rgba(255,255,255,.55), transparent 46%);
+      opacity:0; transition:opacity .2s ease;
+    }
+    .card:hover::after{opacity:.28}
+  }
+  @media (prefers-reduced-motion:reduce){.card{transform:none !important}}
   /* Briefly highlight a card when you jump to it from an "Also on" link. */
   .card.flash{animation:cardFlash 1.4s ease}
   @keyframes cardFlash{0%,100%{box-shadow:0 0 0 0 rgba(31,75,63,0)}30%{box-shadow:0 0 0 3px rgba(31,75,63,.35)}}
@@ -307,6 +327,32 @@
   if(os==='ios'){ /* iOS: no build; leave primary as macos, note phone */ }
   var mine=document.querySelector('.card[data-os="'+primaryOS+'"]');
   if(mine && (os===primaryOS)){ mine.classList.add('you'); var y=mine.querySelector('.yours'); if(y) y.hidden=false; }
+
+  // 3D tilt + cursor glare on the platform cards. Mouse only, and off when the
+  // visitor prefers reduced motion (mirrors the TiltCard useHoverCapable /
+  // useReducedMotion guards). CSS reads the vars we set here.
+  (function(){
+    if(!window.matchMedia) return;
+    var fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(!fine || reduce) return;
+    var MAX = 9; // degrees of tilt at the card edges
+    Array.prototype.forEach.call(document.querySelectorAll('.card'), function(card){
+      card.addEventListener('mousemove', function(e){
+        var r = card.getBoundingClientRect();
+        var px = (e.clientX - r.left) / r.width;
+        var py = (e.clientY - r.top) / r.height;
+        card.style.setProperty('--ry', ((px - 0.5) * MAX).toFixed(2) + 'deg');
+        card.style.setProperty('--rx', ((0.5 - py) * MAX).toFixed(2) + 'deg');
+        card.style.setProperty('--gx', (px * 100).toFixed(1) + '%');
+        card.style.setProperty('--gy', (py * 100).toFixed(1) + '%');
+      });
+      card.addEventListener('mouseleave', function(){
+        card.style.setProperty('--rx','0deg');
+        card.style.setProperty('--ry','0deg');
+      });
+    });
+  })();
 </script>
 </body>
 </html>
