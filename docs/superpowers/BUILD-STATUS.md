@@ -1,7 +1,7 @@
 # Clippy — Build Status
 
 **Updated:** 2026-07-02
-**Repo:** github.com/alwinpau1/clippy (private) · branch `main`
+**Repo:** github.com/alwinpaul1/clippy (private) · branch `main`
 
 ## Architecture (current)
 
