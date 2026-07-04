@@ -103,10 +103,14 @@ jobs:
           cp -R build/macos/Build/Products/Release/clippy.app "dmg/Clippy.app"
           ln -s /Applications dmg/Applications
           hdiutil create -volname Clippy -srcfolder dmg -ov -format UDZO Clippy-macOS.dmg
+      - name: Zip the .app (for in-app self-update)
+        run: ditto -c -k --keepParent build/macos/Build/Products/Release/clippy.app Clippy-macOS.zip
       - uses: actions/upload-artifact@v7
         with:
           name: macos-dmg
-          path: Clippy-macOS.dmg
+          path: |
+            Clippy-macOS.dmg
+            Clippy-macOS.zip
           if-no-files-found: error
 
   build-windows:
@@ -158,8 +162,24 @@ jobs:
           mkdir -p server/web/downloads
           cp _dl/app-release.apk server/web/downloads/Clippy-Android.apk
           cp _dl/Clippy-macOS.dmg server/web/downloads/Clippy-macOS.dmg
+          cp _dl/Clippy-macOS.zip server/web/downloads/Clippy-macOS.zip
           cp _dl/Clippy-Setup.exe server/web/downloads/Clippy-Setup.exe
           ls -la server/web/downloads
+      - name: Generate update manifest (version.json)
+        run: |
+          VER=$(grep -E '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//' | tr -d '[:space:]')
+          SEMVER=${VER%%+*}; BUILD=${VER##*+}
+          python3 - "$SEMVER" "$BUILD" <<'PY'
+          import json, sys
+          notes = json.load(open('release.json'))['notes']
+          json.dump({
+              'version': sys.argv[1], 'build': int(sys.argv[2]), 'notes': notes,
+              'android': '/download/Clippy-Android.apk',
+              'macos':   '/download/Clippy-macOS.zip',
+              'windows': '/download/Clippy-Setup.exe',
+          }, open('server/web/downloads/version.json', 'w'))
+          print(open('server/web/downloads/version.json').read())
+          PY
       - uses: actions/setup-node@v6
         with:
           node-version: "22"

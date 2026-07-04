@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../platform/share_channel.dart';
 import 'theme.dart';
 import 'theme_controller.dart';
+import 'update_controller.dart';
+import 'update_sheet.dart';
 
 /// Settings (mockup turn 3c): appearance (Light / Dark / System) and group
 /// actions (add another device, unpair). Theme-aware.
@@ -109,6 +111,24 @@ class SettingsPage extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: 24),
+                  _Label('ABOUT', c),
+                  const SizedBox(height: 4),
+                  _Card(
+                    c,
+                    children: [
+                      _ActionRow(
+                        c,
+                        icon: Icons.system_update_outlined,
+                        iconColor: c.muted2,
+                        label: 'Check for updates',
+                        labelColor: c.ink,
+                        trailing:
+                            Icon(Icons.chevron_right, size: 20, color: c.muted),
+                        onTap: () => _checkForUpdates(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
                   _Label('GROUP', c),
                   const SizedBox(height: 4),
                   _Card(
@@ -148,6 +168,25 @@ class SettingsPage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _checkForUpdates(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final result = await updater.checkNow();
+    if (!context.mounted) return;
+    switch (result) {
+      case CheckResult.updateAvailable:
+        final info = updater.available.value;
+        if (info != null) await showUpdateSheet(context, info);
+      case CheckResult.upToDate:
+        messenger.showSnackBar(
+          const SnackBar(content: Text("You're on the latest version.")),
+        );
+      case CheckResult.failed:
+        messenger.showSnackBar(
+          const SnackBar(content: Text("Couldn't check for updates.")),
+        );
+    }
   }
 }
 

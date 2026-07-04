@@ -192,6 +192,38 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        // In-app update: hand the downloaded APK to the system installer, which
+        // updates the existing app in place (same signature).
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "clippy/update",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "installApk" -> {
+                    try {
+                        val path = call.argument<String>("path")!!
+                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                            this, "$packageName.fileprovider", java.io.File(path),
+                        )
+                        startActivity(
+                            Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(
+                                    uri, "application/vnd.android.package-archive",
+                                )
+                                addFlags(
+                                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                        Intent.FLAG_ACTIVITY_NEW_TASK,
+                                )
+                            },
+                        )
+                        result.success(null)
+                    } catch (e: Exception) {
+                        result.error("install_failed", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 
     private fun vibrate(ms: Long, amplitude: Int) {
