@@ -57,6 +57,7 @@ class _BackgroundSyncHandler extends TaskHandler {
   WebSocketClipStore? _store;
   StreamSubscription? _sub;
   StreamSubscription? _queueWatch;
+  final List<StreamSubscription> _shotWatches = [];
   RemoteClip? _skippedWhileUiAlive;
   SyncEngine? _engine;
   bool _starting = false;
@@ -216,6 +217,24 @@ class _BackgroundSyncHandler extends TaskHandler {
       // writes a captured copy (the 10s tick stays as a safety net).
       final queueEvents = await ClipQueue.watch();
       _queueWatch = queueEvents?.listen((_) => unawaited(_drainQueue()));
+      // Instant background screenshots: watch the screenshot folders so a
+      // new file triggers the scan right away instead of waiting for the
+      // tick. Delayed past the 2s settle window the scan enforces (the
+      // create event fires while the file is still being written).
+      for (final dirPath in _screenshotDirs) {
+        try {
+          final dir = Directory(dirPath);
+          if (!dir.existsSync()) continue;
+          _shotWatches.add(dir.watch().listen((_) {
+            if (_uiAlive) return; // observer in the activity covers this
+            Future.delayed(const Duration(milliseconds: 2300), () {
+              if (!_uiAlive) unawaited(_scanScreenshots());
+            });
+          }));
+        } catch (_) {
+          // inotify unavailable on this mount — the 10s tick still covers it.
+        }
+      }
     } finally {
       _starting = false;
     }
@@ -248,6 +267,10 @@ class _BackgroundSyncHandler extends TaskHandler {
   }
 
   void _stop() {
+    for (final w in _shotWatches) {
+      w.cancel();
+    }
+    _shotWatches.clear();
     _queueWatch?.cancel();
     _queueWatch = null;
     _sub?.cancel();
