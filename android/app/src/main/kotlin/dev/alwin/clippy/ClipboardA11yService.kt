@@ -134,6 +134,7 @@ class ClipboardA11yService : AccessibilityService() {
 
     private var lastPoll = 0L
     private var trailing: Runnable? = null
+    private var lastTyping = 0L
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         // The bg clipboard listener is dead on One UI, so use accessibility
@@ -149,6 +150,23 @@ class ClipboardA11yService : AccessibilityService() {
             t != AccessibilityEvent.TYPE_VIEW_CLICKED
         ) return
         val now = System.currentTimeMillis()
+        // TYPING must never trigger the focus-trick — its one-frame focus
+        // steal reads as screen flicker (seen replying from a WhatsApp
+        // notification). Typing looks like: events from the keyboard app,
+        // or cursor moves (selection-changed) inside an EditText. Mute those
+        // AND everything within 2s of them (the Send/Reply tap right after).
+        val pkg = event.packageName?.toString().orEmpty().lowercase()
+        val cls = event.className?.toString().orEmpty()
+        val fromIme = pkg.contains("inputmethod") || pkg.contains("keyboard") ||
+            pkg.contains("honeyboard") || pkg.contains("gboard") ||
+            pkg.contains("swiftkey")
+        val cursorMove = t == AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED &&
+            cls.contains("EditText")
+        if (fromIme || cursorMove) {
+            lastTyping = now
+            return
+        }
+        if (now - lastTyping < 2000) return
         val wait = 800 - (now - lastPoll)
         if (wait <= 0) {
             lastPoll = now
