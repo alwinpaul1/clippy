@@ -3,9 +3,12 @@ package dev.alwin.clippy
 import android.accessibilityservice.AccessibilityService
 import android.content.ClipboardManager
 import android.content.Context
+import android.database.ContentObserver
 import android.graphics.PixelFormat
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -28,6 +31,15 @@ class ClipboardA11yService : AccessibilityService() {
     private val main = Handler(Looper.getMainLooper())
     private var pending: Runnable? = null
 
+    // Screenshots taken while the app is swiped-away: the activity's MediaStore
+    // observer died with it, and Directory.watch on external storage's FUSE
+    // mount doesn't deliver inotify — but THIS service's process survives, so a
+    // ContentObserver here catches new screenshots and queues them to filesDir
+    // (where the Dart queue-watcher's inotify IS reliable) for instant sync.
+    private var shotObserver: ContentObserver? = null
+    private val handledShots = ArrayDeque<Long>()
+    private val startedAtSec = System.currentTimeMillis() / 1000
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -36,6 +48,87 @@ class ClipboardA11yService : AccessibilityService() {
             val r = Runnable { onClipChanged(cm) }
             pending = r
             main.postDelayed(r, 120)
+        }
+        watchScreenshots()
+    }
+
+    private fun watchScreenshots() {
+        if (shotObserver != null) return
+        val observer = object : ContentObserver(main) {
+            override fun onChange(selfChange: Boolean, uri: Uri?) {
+                uri ?: return
+                uri.lastPathSegment?.toLongOrNull() ?: return // item URIs only
+                // Delay the read: MediaStore inserts the row before the file
+                // bytes are flushed, so an immediate read gets a partial/empty
+                // file. If it's still not ready, an empty read leaves the id
+                // unmarked and a later onChange retries.
+                main.postDelayed({ Thread { queueIfNewScreenshot(uri) }.start() }, 600)
+            }
+        }
+        try {
+            applicationContext.contentResolver.registerContentObserver(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, observer,
+            )
+            shotObserver = observer
+        } catch (_: Exception) {
+            // No photo permission yet — the FGS folder-scan tick still covers it.
+        }
+    }
+
+    private fun queueIfNewScreenshot(uri: Uri) {
+        val resolver = applicationContext.contentResolver
+        val projection = arrayOf(
+            MediaStore.Images.Media._ID,
+            MediaStore.Images.Media.DISPLAY_NAME,
+            MediaStore.Images.Media.RELATIVE_PATH,
+            MediaStore.Images.Media.DATE_ADDED,
+        )
+        val cursor = try {
+            resolver.query(uri, projection, null, null, null)
+        } catch (_: Exception) {
+            null
+        } ?: return
+        cursor.use { c ->
+            if (!c.moveToFirst()) return
+            val id = c.getLong(0)
+            val name = c.getString(1) ?: ""
+            val path = c.getString(2) ?: ""
+            val added = c.getLong(3)
+            // A real screenshot's DISPLAY_NAME starts with "Screenshot";
+            // Samsung also emits a "thumbnail_Screenshot…" whose PATH contains
+            // "Screenshot" — exclude it so we sync the full image, not the 13KB
+            // thumbnail.
+            val isThumb = name.startsWith("thumbnail", ignoreCase = true) ||
+                path.contains(".thumbnails", ignoreCase = true)
+            val looksLikeShot = !isThumb &&
+                name.startsWith("Screenshot", ignoreCase = true)
+            if (!looksLikeShot) return
+            // Fresh only: taken after we started AND within the last 20s (skip
+            // edits/rescans of old files, and never the phone's whole history).
+            val nowSec = System.currentTimeMillis() / 1000
+            if (added < startedAtSec || nowSec - added > 20) return
+            synchronized(handledShots) {
+                if (handledShots.contains(id)) return
+            }
+            val bytes = try {
+                resolver.openInputStream(uri)?.use { it.readBytes() }
+            } catch (_: Exception) {
+                null
+            }
+            // Mark handled only after a real read — if the file wasn't flushed
+            // yet, let a later onChange retry instead of dropping it forever.
+            if (bytes == null || bytes.isEmpty()) return
+            synchronized(handledShots) {
+                if (handledShots.contains(id)) return
+                handledShots.addLast(id)
+                if (handledShots.size > 8) handledShots.removeFirst()
+            }
+            val ext = when (resolver.getType(uri)) {
+                "image/jpeg" -> "jpg"
+                "image/webp" -> "webp"
+                else -> "png"
+            }
+            emitImage(bytes, ext)
         }
     }
 
@@ -143,5 +236,28 @@ class ClipboardA11yService : AccessibilityService() {
             dir.mkdirs()
             File(dir, "${System.currentTimeMillis()}.txt").writeText(text)
         } catch (_: Exception) {}
+    }
+
+    private fun emitImage(bytes: ByteArray, ext: String) {
+        try {
+            val dir = File(filesDir, "clip_queue")
+            dir.mkdirs()
+            // Stage as .part then rename: the Dart watcher fires on create, and
+            // an atomic rename guarantees it never reads a half-written image.
+            val ts = System.currentTimeMillis()
+            val part = File(dir, "$ts.$ext.part")
+            part.writeBytes(bytes)
+            part.renameTo(File(dir, "$ts.$ext"))
+        } catch (_: Exception) {}
+    }
+
+    override fun onDestroy() {
+        shotObserver?.let {
+            try {
+                applicationContext.contentResolver.unregisterContentObserver(it)
+            } catch (_: Exception) {}
+        }
+        shotObserver = null
+        super.onDestroy()
     }
 }

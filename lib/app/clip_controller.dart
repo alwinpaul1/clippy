@@ -241,9 +241,13 @@ class ClipController extends ChangeNotifier
   /// Push texts the background AccessibilityService captured while the UI was
   /// away. Engine dedup absorbs repeats.
   Future<void> _drainQueue() async {
-    for (final text in await ClipQueue.drain()) {
+    for (final item in await ClipQueue.drain()) {
       if (_disposed) return;
-      await _pushLocal(text);
+      if (item.isImage) {
+        await _pushLocalImage(item.imageBytes!, mime: item.mime);
+      } else {
+        await _pushLocal(item.text!);
+      }
     }
   }
 

@@ -57,7 +57,6 @@ class _BackgroundSyncHandler extends TaskHandler {
   WebSocketClipStore? _store;
   StreamSubscription? _sub;
   StreamSubscription? _queueWatch;
-  final List<StreamSubscription> _shotWatches = [];
   RemoteClip? _skippedWhileUiAlive;
   SyncEngine? _engine;
   bool _starting = false;
@@ -104,10 +103,18 @@ class _BackgroundSyncHandler extends TaskHandler {
     final engine = _engine;
     final store = _store;
     if (engine == null || store == null) return;
-    for (final text in await ClipQueue.drain()) {
-      final actions = await engine.onLocalClip(
-        ClipEvent(text: text, byteSize: utf8.encode(text).length),
-      );
+    for (final item in await ClipQueue.drain()) {
+      final actions = item.isImage
+          ? await engine.onLocalImage(
+              base64Encode(item.imageBytes!),
+              mime: item.mime ?? 'image/png',
+            )
+          : await engine.onLocalClip(
+              ClipEvent(
+                text: item.text!,
+                byteSize: utf8.encode(item.text!).length,
+              ),
+            );
       for (final a in actions) {
         if (a is UploadClip) {
           await store.append(a.clip.copyWith(device: _deviceName));
@@ -203,38 +210,29 @@ class _BackgroundSyncHandler extends TaskHandler {
       _sub = store.incoming.listen((clip) async {
         // While the UI isolate lives it applies incoming clips itself. But a
         // stale heartbeat can lie for up to _uiTimeout after a swipe-away, so
-        // don't discard: remember the newest skipped clip and apply it from
-        // the tick once the pings are confirmed dead (engine dedup absorbs
-        // the case where the UI really did apply it).
+        // don't discard: buffer the newest skipped clip and apply it the
+        // MOMENT the ownership window expires (not at the next 10s tick), so a
+        // Mac->phone copy right after swiping lands with no tick latency.
         if (_uiAlive) {
           _skippedWhileUiAlive = clip;
+          final remaining = _uiTimeout - DateTime.now().difference(_lastUiPing);
+          Future.delayed(remaining + const Duration(milliseconds: 200), () {
+            final pending = _skippedWhileUiAlive;
+            if (pending == null || _uiAlive) return;
+            _skippedWhileUiAlive = null;
+            unawaited(_applyIncoming(pending));
+          });
           return;
         }
         _skippedWhileUiAlive = null;
         await _applyIncoming(clip);
       });
-      // Instant outgoing sync: drain the moment the AccessibilityService
-      // writes a captured copy (the 10s tick stays as a safety net).
+      // Instant outgoing sync: text AND screenshots the AccessibilityService
+      // captures land in filesDir/clip_queue, whose inotify watch is reliable
+      // (app-private ext4, unlike external storage's FUSE). The 10s tick stays
+      // as a safety net and the no-accessibility fallback.
       final queueEvents = await ClipQueue.watch();
       _queueWatch = queueEvents?.listen((_) => unawaited(_drainQueue()));
-      // Instant background screenshots: watch the screenshot folders so a
-      // new file triggers the scan right away instead of waiting for the
-      // tick. Delayed past the 2s settle window the scan enforces (the
-      // create event fires while the file is still being written).
-      for (final dirPath in _screenshotDirs) {
-        try {
-          final dir = Directory(dirPath);
-          if (!dir.existsSync()) continue;
-          _shotWatches.add(dir.watch().listen((_) {
-            if (_uiAlive) return; // observer in the activity covers this
-            Future.delayed(const Duration(milliseconds: 2300), () {
-              if (!_uiAlive) unawaited(_scanScreenshots());
-            });
-          }));
-        } catch (_) {
-          // inotify unavailable on this mount — the 10s tick still covers it.
-        }
-      }
     } finally {
       _starting = false;
     }
@@ -267,10 +265,6 @@ class _BackgroundSyncHandler extends TaskHandler {
   }
 
   void _stop() {
-    for (final w in _shotWatches) {
-      w.cancel();
-    }
-    _shotWatches.clear();
     _queueWatch?.cancel();
     _queueWatch = null;
     _sub?.cancel();
