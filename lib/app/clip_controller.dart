@@ -206,7 +206,7 @@ class ClipController extends ChangeNotifier
       // (swipe-away) — the heartbeat decides ownership, not connection.
       ForegroundServiceManager.pingAlive();
       _uiPing = Timer.periodic(
-        const Duration(seconds: 5),
+        ForegroundServiceManager.uiPingInterval,
         (_) => ForegroundServiceManager.pingAlive(),
       );
       // Queue items the AccessibilityService captures are drained instantly

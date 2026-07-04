@@ -237,17 +237,11 @@ class _HomeBodyState extends State<_HomeBody> {
       const Duration(seconds: 30),
       (_) => mounted ? setState(() {}) : null,
     );
-    _ctl.addListener(_onCtlChanged);
-  }
-
-  void _onCtlChanged() {
-    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _agesTicker?.cancel();
-    _ctl.removeListener(_onCtlChanged);
     super.dispose();
   }
 

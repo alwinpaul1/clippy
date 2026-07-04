@@ -38,7 +38,16 @@ abstract class ClipQueue {
         } catch (_) {
           continue; // mid-write race — the next drain gets it
         }
-        if (t.isEmpty) continue; // created but not yet written
+        if (t.isEmpty) {
+          // Created but not yet written — leave it for the next drain. If it
+          // STAYS empty (writer killed mid-write), reap it after a grace
+          // window or it gets re-listed on every drain forever.
+          try {
+            final age = DateTime.now().difference(f.statSync().modified);
+            if (age > const Duration(seconds: 30)) await f.delete();
+          } catch (_) {}
+          continue;
+        }
         texts.add(t);
         try {
           await f.delete();

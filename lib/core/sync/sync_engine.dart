@@ -16,10 +16,6 @@ class SyncEngine {
   final Duration _freshnessWindow;
   final Duration _echoWindow;
 
-  // Persisted-across-restarts dedup key, cached in memory after first load.
-  String? _lastAppliedHash;
-  bool _lastAppliedLoaded = false;
-
   // One-shot echo suppression: set when we apply a remote clip, consumed by
   // the next matching local event, and time-boxed by _echoWindow.
   String? _expectedEchoHash;
@@ -44,15 +40,7 @@ class SyncEngine {
         _freshnessWindow = freshnessWindow,
         _echoWindow = echoWindow;
 
-  Future<void> _ensureLoaded() async {
-    if (_lastAppliedLoaded) return;
-    _lastAppliedHash = await _state.readLastAppliedHash();
-    _lastAppliedLoaded = true;
-  }
-
   Future<void> _setLastApplied(String hash) async {
-    _lastAppliedHash = hash;
-    _lastAppliedLoaded = true;
     await _state.writeLastAppliedHash(hash);
   }
 
@@ -114,9 +102,11 @@ class SyncEngine {
     // Rule 1: never react to our own writes.
     if (clip.source == _selfDeviceId) return const [];
 
-    // Rule 2: already applied (also absorbs reconnect / cold-start re-delivery).
-    await _ensureLoaded();
-    if (clip.hash == _lastAppliedHash) return const [];
+    // Rule 2: already applied (also absorbs reconnect / cold-start
+    // re-delivery). Read through the store, not an in-memory cache: on
+    // Android two isolates run engines against the same key, and a cached
+    // value goes stale the moment the other isolate applies a clip.
+    if (clip.hash == await _state.readLastAppliedHash()) return const [];
 
     // From here this counts as a "considered" snapshot for the freshness gate.
     final isFirstConsidered = !_firstSnapshotConsidered;

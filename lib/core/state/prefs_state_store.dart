@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../sync/state_store.dart';
@@ -18,14 +21,17 @@ class PrefsStateStore implements StateStore {
 
   @override
   Future<String?> readLastAppliedHash() async {
-    // The UI isolate and the Android service isolate both run engines against
-    // this key (dedup Rule 2b). SharedPreferences caches per isolate, so
-    // reload before reading or one isolate re-uploads what the other already
-    // synced. Clip events are infrequent; the disk re-read is negligible.
-    try {
-      await _prefs.reload();
-    } catch (_) {
-      // Reload unsupported (tests) — cached value is still correct there.
+    // On Android the UI isolate and the service isolate both run engines
+    // against this key (dedup Rule 2b). SharedPreferences caches per isolate,
+    // so reload before reading or one isolate re-applies/re-uploads what the
+    // other already synced. Desktop has a single isolate — skip the platform
+    // round-trip there.
+    if (!kIsWeb && Platform.isAndroid) {
+      try {
+        await _prefs.reload();
+      } catch (_) {
+        // Reload unsupported — cached value is still correct then.
+      }
     }
     return _prefs.getString(_key);
   }

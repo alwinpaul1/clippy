@@ -10,6 +10,7 @@ import 'package:super_clipboard/super_clipboard.dart';
 import '../app/relay_config.dart';
 import '../core/backend/websocket_clip_store.dart';
 import '../core/models/clip_event.dart';
+import '../core/models/remote_clip.dart';
 import '../core/state/prefs_state_store.dart';
 import '../core/sync/sync_action.dart';
 import '../core/sync/sync_engine.dart';
@@ -31,8 +32,11 @@ class _BackgroundSyncHandler extends TaskHandler {
   // The service stays connected at ALL times (so there is zero handover gap
   // when the app is swiped from Recents) — this timeout only decides who
   // WRITES the clipboard / scans screenshots: while the UI pings, it owns
-  // those; when pings stop, this isolate takes them over.
-  static const _uiTimeout = Duration(seconds: 12);
+  // those; when pings stop, this isolate takes them over. Sized to tolerate
+  // two dropped heartbeats (see uiPingInterval below) before flipping.
+  static const _uiTimeout = Duration(
+    seconds: ForegroundServiceManager.uiPingIntervalSeconds * 2 + 2,
+  );
 
   // Samsung saves to DCIM/Screenshots; stock Android to Pictures/Screenshots.
   // With READ_MEDIA_IMAGES granted, media files are readable by direct path
@@ -46,9 +50,14 @@ class _BackgroundSyncHandler extends TaskHandler {
   // assume it's dead (boot autostart). Worst case both isolates briefly apply
   // the same incoming text — harmless; the reverse (neither applies) isn't.
   DateTime _lastUiPing = DateTime.fromMillisecondsSinceEpoch(0);
+  // Screenshot-scan floor. _lastUiPing can't serve: at boot it's the epoch,
+  // and without this floor the first scan would upload the phone's ENTIRE
+  // screenshot history to the room.
+  final DateTime _serviceStart = DateTime.now();
   WebSocketClipStore? _store;
   StreamSubscription? _sub;
   StreamSubscription? _queueWatch;
+  RemoteClip? _skippedWhileUiAlive;
   SyncEngine? _engine;
   bool _starting = false;
   String _deviceName = '';
@@ -77,6 +86,12 @@ class _BackgroundSyncHandler extends TaskHandler {
     // watcher fires instantly; this tick is the fallback).
     unawaited(_drainQueue());
     if (!_uiAlive) {
+      // A clip that arrived while the last heartbeat was stale (UI already
+      // dead but _uiTimeout not yet elapsed) was skipped, not lost — apply
+      // it now that the UI is confirmed gone.
+      final skipped = _skippedWhileUiAlive;
+      _skippedWhileUiAlive = null;
+      if (skipped != null) unawaited(_applyIncoming(skipped));
       // The activity's MediaStore observer died with the UI isolate, so pick
       // up new screenshots by scanning their folders.
       unawaited(_scanScreenshots());
@@ -129,11 +144,13 @@ class _BackgroundSyncHandler extends TaskHandler {
         } catch (_) {
           continue;
         }
-        // Only screenshots taken after the UI's last sign of life (older ones
-        // were the activity observer's job), and settled for 2s+ so we never
-        // read a half-written file.
+        // Only screenshots taken after the UI's last sign of life AND after
+        // this service came up (pre-existing files are never ours to push),
+        // settled for 2s+ so we never read a half-written file.
         final age = DateTime.now().difference(modified);
-        if (modified.isBefore(_lastUiPing) || age < const Duration(seconds: 2)) {
+        if (modified.isBefore(_lastUiPing) ||
+            modified.isBefore(_serviceStart) ||
+            age < const Duration(seconds: 2)) {
           continue;
         }
         _pushedShots.add(e.path);
@@ -177,52 +194,56 @@ class _BackgroundSyncHandler extends TaskHandler {
       final store = WebSocketClipStore.connect(Uri.parse(relayUrl), roomToken);
       _store = store;
       if (kDebugMode) {
-        debugPrint('[clippy-bg] takeover: receive loop started');
+        debugPrint('[clippy-bg] receive loop started');
         unawaited(store.history.first.then(
           (h) => debugPrint('[clippy-bg] snapshot: ${h.length} clips'),
         ));
       }
       _sub = store.incoming.listen((clip) async {
-        // While the UI isolate lives it applies incoming clips itself; this
-        // isolate only records them (engine dedup) and stays warm.
-        if (_uiAlive) return;
-        final actions = await _engine!.onRemoteSnapshot(clip);
-        if (kDebugMode) {
-          debugPrint('[clippy-bg] incoming ${clip.kind} '
-              'age=${DateTime.now().difference(clip.timestamp).inSeconds}s '
-              '-> ${actions.map((a) => a.runtimeType).toList()}');
+        // While the UI isolate lives it applies incoming clips itself. But a
+        // stale heartbeat can lie for up to _uiTimeout after a swipe-away, so
+        // don't discard: remember the newest skipped clip and apply it from
+        // the tick once the pings are confirmed dead (engine dedup absorbs
+        // the case where the UI really did apply it).
+        if (_uiAlive) {
+          _skippedWhileUiAlive = clip;
+          return;
         }
-        for (final a in actions) {
-          if (a is! ApplyToClipboard) continue;
-          try {
-            if (clip.kind == 'image') {
-              await ImageClipboard.write(base64Decode(a.text));
-            } else {
-              // NOT Clipboard.setData: SystemChannels.platform needs an
-              // Activity-backed engine, which this headless service isolate
-              // lacks. super_clipboard is a real plugin (registered in the
-              // service engine) and writes fine from here.
-              final cb = SystemClipboard.instance;
-              if (cb == null) continue;
-              final item = DataWriterItem()..add(Formats.plainText(a.text));
-              await cb.write([item]);
-            }
-            if (kDebugMode) {
-              debugPrint('[clippy-bg] applied ${clip.kind} to clipboard');
-            }
-          } catch (_) {
-            // Background clipboard write failed — the clip stays in room
-            // history and applies on the next app open.
-          }
-        }
+        _skippedWhileUiAlive = null;
+        await _applyIncoming(clip);
       });
-      // Instant outgoing sync during takeover: drain the moment the
-      // AccessibilityService writes a captured copy (the 10s tick stays as a
-      // safety net).
+      // Instant outgoing sync: drain the moment the AccessibilityService
+      // writes a captured copy (the 10s tick stays as a safety net).
       final queueEvents = await ClipQueue.watch();
       _queueWatch = queueEvents?.listen((_) => unawaited(_drainQueue()));
     } finally {
       _starting = false;
+    }
+  }
+
+  Future<void> _applyIncoming(RemoteClip clip) async {
+    final engine = _engine;
+    if (engine == null) return;
+    final actions = await engine.onRemoteSnapshot(clip);
+    for (final a in actions) {
+      if (a is! ApplyToClipboard) continue;
+      try {
+        if (clip.kind == 'image') {
+          await ImageClipboard.write(base64Decode(a.text));
+        } else {
+          // NOT Clipboard.setData: SystemChannels.platform needs an
+          // Activity-backed engine, which this headless service isolate
+          // lacks. super_clipboard is a real plugin (registered in the
+          // service engine) and writes fine from here.
+          final cb = SystemClipboard.instance;
+          if (cb == null) continue;
+          final item = DataWriterItem()..add(Formats.plainText(a.text));
+          await cb.write([item]);
+        }
+      } catch (_) {
+        // Background clipboard write failed — the clip stays in room
+        // history and applies on the next app open.
+      }
     }
   }
 
@@ -248,6 +269,11 @@ class ForegroundServiceManager {
 
   /// Heartbeat payload the UI isolate sends while it's alive.
   static const uiAlivePing = 'clippy.ui-alive';
+
+  /// Heartbeat cadence — coupled to the service's ownership timeout
+  /// (_uiTimeout = 2 intervals + 2s), so tune them together, here.
+  static const uiPingIntervalSeconds = 5;
+  static const uiPingInterval = Duration(seconds: uiPingIntervalSeconds);
 
   /// Tell the service isolate the UI isolate is alive (it idles while so).
   static void pingAlive() {
