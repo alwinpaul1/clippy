@@ -17,7 +17,18 @@ class PrefsStateStore implements StateStore {
       PrefsStateStore._(await SharedPreferences.getInstance());
 
   @override
-  Future<String?> readLastAppliedHash() async => _prefs.getString(_key);
+  Future<String?> readLastAppliedHash() async {
+    // The UI isolate and the Android service isolate both run engines against
+    // this key (dedup Rule 2b). SharedPreferences caches per isolate, so
+    // reload before reading or one isolate re-uploads what the other already
+    // synced. Clip events are infrequent; the disk re-read is negligible.
+    try {
+      await _prefs.reload();
+    } catch (_) {
+      // Reload unsupported (tests) — cached value is still correct there.
+    }
+    return _prefs.getString(_key);
+  }
 
   @override
   Future<void> writeLastAppliedHash(String hash) async =>

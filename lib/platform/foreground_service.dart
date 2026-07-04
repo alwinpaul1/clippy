@@ -18,20 +18,21 @@ import 'device_name.dart';
 import 'image_clipboard.dart';
 import 'secure_key_store.dart';
 
-/// Entry point for the foreground-service isolate. While the app's UI isolate
-/// is alive it heartbeats us and this handler idles; when the heartbeats stop
-/// (app swiped from Recents), the handler runs the receive loop itself so
-/// incoming clips keep landing on the clipboard.
+/// Entry point for the foreground-service isolate. The handler keeps a relay
+/// connection and clip-queue watcher alive AT ALL TIMES (zero handover gap on
+/// swipe-from-Recents); the UI isolate's heartbeat only decides who applies
+/// incoming clips to the clipboard and who scans for screenshots.
 @pragma('vm:entry-point')
 void clippyServiceCallback() {
   FlutterForegroundTask.setTaskHandler(_BackgroundSyncHandler());
 }
 
 class _BackgroundSyncHandler extends TaskHandler {
-  // Above the UI's 15s ping interval so a delayed ping doesn't cause a
-  // spurious takeover, but low enough that a backgrounded copy the
-  // AccessibilityService captured drains + syncs promptly.
-  static const _uiTimeout = Duration(seconds: 22);
+  // The service stays connected at ALL times (so there is zero handover gap
+  // when the app is swiped from Recents) — this timeout only decides who
+  // WRITES the clipboard / scans screenshots: while the UI pings, it owns
+  // those; when pings stop, this isolate takes them over.
+  static const _uiTimeout = Duration(seconds: 12);
 
   // Samsung saves to DCIM/Screenshots; stock Android to Pictures/Screenshots.
   // With READ_MEDIA_IMAGES granted, media files are readable by direct path
@@ -41,7 +42,10 @@ class _BackgroundSyncHandler extends TaskHandler {
     '/storage/emulated/0/Pictures/Screenshots',
   ];
 
-  DateTime _lastUiPing = DateTime.now();
+  // Epoch, not now(): until a heartbeat proves the UI isolate is alive,
+  // assume it's dead (boot autostart). Worst case both isolates briefly apply
+  // the same incoming text — harmless; the reverse (neither applies) isn't.
+  DateTime _lastUiPing = DateTime.fromMillisecondsSinceEpoch(0);
   WebSocketClipStore? _store;
   StreamSubscription? _sub;
   StreamSubscription? _queueWatch;
@@ -50,28 +54,32 @@ class _BackgroundSyncHandler extends TaskHandler {
   String _deviceName = '';
   final Set<String> _pushedShots = {};
 
+  bool get _uiAlive => DateTime.now().difference(_lastUiPing) <= _uiTimeout;
+
   @override
-  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {}
+  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
+    // Connect immediately and stay connected — a copy made right after the
+    // app is swiped away must sync with no handover gap.
+    unawaited(_ensureRunning());
+  }
 
   @override
   void onReceiveData(Object data) {
     if (data == ForegroundServiceManager.uiAlivePing) {
       _lastUiPing = DateTime.now();
-      _stop(); // the UI isolate owns sync while it lives
     }
   }
 
   @override
   void onRepeatEvent(DateTime timestamp) {
-    if (DateTime.now().difference(_lastUiPing) > _uiTimeout) {
-      unawaited(_ensureRunning());
-      // The activity's MediaStore observer died with the UI isolate, so the
-      // takeover also picks up new screenshots by scanning their folders.
+    unawaited(_ensureRunning()); // reconnect safety net
+    // Drain clips the background AccessibilityService captured (the queue
+    // watcher fires instantly; this tick is the fallback).
+    unawaited(_drainQueue());
+    if (!_uiAlive) {
+      // The activity's MediaStore observer died with the UI isolate, so pick
+      // up new screenshots by scanning their folders.
       unawaited(_scanScreenshots());
-      // Drain clips the background AccessibilityService captured.
-      unawaited(_drainQueue());
-    } else {
-      _stop();
     }
   }
 
@@ -175,6 +183,9 @@ class _BackgroundSyncHandler extends TaskHandler {
         ));
       }
       _sub = store.incoming.listen((clip) async {
+        // While the UI isolate lives it applies incoming clips itself; this
+        // isolate only records them (engine dedup) and stays warm.
+        if (_uiAlive) return;
         final actions = await _engine!.onRemoteSnapshot(clip);
         if (kDebugMode) {
           debugPrint('[clippy-bg] incoming ${clip.kind} '

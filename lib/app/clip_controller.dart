@@ -47,8 +47,6 @@ class ClipController extends ChangeNotifier
   bool _disposed = false;
   MacScreenshotWatcher? _macShots;
   Timer? _uiPing;
-  Timer? _bgDrain;
-  StreamSubscription? _queueWatch;
   String _deviceName = '';
   // After we write an incoming image to the clipboard, ignore the watcher's
   // resulting change for a moment (PNG round-trips aren't byte-identical, so a
@@ -203,24 +201,17 @@ class ClipController extends ChangeNotifier
       unawaited(_startScreenshotSync());
       // Sync anything the background AccessibilityService captured.
       unawaited(_drainQueue());
-      // Heartbeat the service isolate: while it hears us, it idles; when the
-      // UI isolate dies (swipe-away), it takes over the receive loop.
+      // Heartbeat the service isolate: it stays connected at all times, but
+      // only writes the clipboard / scans screenshots when our pings stop
+      // (swipe-away) — the heartbeat decides ownership, not connection.
       ForegroundServiceManager.pingAlive();
       _uiPing = Timer.periodic(
-        const Duration(seconds: 15),
+        const Duration(seconds: 5),
         (_) => ForegroundServiceManager.pingAlive(),
       );
-      // While Clippy is backgrounded-but-alive (in Recents), the service
-      // handler idles (it hears our pings) and the resume hook hasn't fired —
-      // so nobody would drain copies the AccessibilityService queues. Watch
-      // the queue directory (inotify) so a captured copy syncs the instant
-      // it's written, with a slow poll as a safety net.
-      final queueEvents = await ClipQueue.watch();
-      _queueWatch = queueEvents?.listen((_) => unawaited(_drainQueue()));
-      _bgDrain = Timer.periodic(
-        const Duration(seconds: 10),
-        (_) => unawaited(_drainQueue()),
-      );
+      // Queue items the AccessibilityService captures are drained instantly
+      // by the always-connected service isolate; the start/resume drains in
+      // this isolate are only a safety net for when the service isn't up.
     }
 
     ready = true;
@@ -353,8 +344,6 @@ class ClipController extends ChangeNotifier
     _disposed = true;
     WidgetsBinding.instance.removeObserver(this);
     _uiPing?.cancel();
-    _bgDrain?.cancel();
-    _queueWatch?.cancel();
     _macShots?.stop();
     ShareChannel.listen();
     if (_watching) {
