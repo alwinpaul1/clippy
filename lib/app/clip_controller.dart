@@ -252,7 +252,17 @@ class ClipController extends ChangeNotifier
   void onClipboardChanged() async {
     // Image first: a screenshot or copied image file can also carry a text /
     // file-path representation, and we must sync the image — not the path.
-    final png = await ImageClipboard.read();
+    // Gallery-style copies hold only a content:// URI, invisible to
+    // super_clipboard — the native fallback resolves those (Android only).
+    String? clipMime;
+    var png = await ImageClipboard.read();
+    if (png == null) {
+      final uriImage = await ShareChannel.readClipImage();
+      if (uriImage != null) {
+        png = uriImage.bytes;
+        clipMime = uriImage.mime;
+      }
+    }
     if (png != null) {
       _handledText = null; // clipboard is an image now — the text guard is stale
       if (_incomingImagePending) {
@@ -264,7 +274,7 @@ class ClipController extends ChangeNotifier
       }
       if (_handledImage != null && listEquals(_handledImage, png)) return;
       _handledImage = png;
-      await _pushLocalImage(png);
+      await _pushLocalImage(png, mime: clipMime);
       return;
     }
     // Clipboard no longer holds an image — the image guard is stale.

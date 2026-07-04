@@ -119,6 +119,31 @@ class MainActivity : FlutterActivity() {
                     )
                     result.success(null)
                 }
+                // Gallery-style image copies put a content:// URI on the
+                // clipboard, not bytes — super_clipboard's PNG/JPEG probes
+                // all miss it. Resolve the URI ourselves (the focused app is
+                // granted read access to clipboard URIs).
+                "readClipImage" -> {
+                    val cm = getSystemService(CLIPBOARD_SERVICE)
+                        as android.content.ClipboardManager
+                    val item = cm.primaryClip
+                        ?.takeIf { it.itemCount > 0 }?.getItemAt(0)
+                    val uri = item?.uri
+                    val mime = uri?.let { contentResolver.getType(it) } ?: ""
+                    if (uri == null || !mime.startsWith("image/")) {
+                        result.success(null)
+                    } else {
+                        val bytes = try {
+                            contentResolver.openInputStream(uri)
+                                ?.use { it.readBytes() }
+                        } catch (_: Exception) {
+                            null
+                        }
+                        result.success(
+                            bytes?.let { mapOf("mime" to mime, "bytes" to it) },
+                        )
+                    }
+                }
                 "getInitialText" -> {
                     val shared = extractShare(intent)
                     // Consume it so a controller restart won't re-send the same clip.

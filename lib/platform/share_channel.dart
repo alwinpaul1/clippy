@@ -85,6 +85,22 @@ abstract class ShareChannel {
     } catch (_) {}
   }
 
+  /// Android fallback for image clipboard reads: Gallery-style copies put a
+  /// content:// URI on the clipboard (no byte representation), which
+  /// super_clipboard can't surface — the native side resolves the URI to
+  /// bytes. Returns null when the clipboard holds no readable image URI.
+  static Future<({Uint8List bytes, String mime})?> readClipImage() async {
+    try {
+      final m =
+          await _channel.invokeMapMethod<String, dynamic>('readClipImage');
+      final bytes = m?['bytes'];
+      if (bytes is! Uint8List || bytes.isEmpty) return null;
+      return (bytes: bytes, mime: (m?['mime'] as String?) ?? 'image/*');
+    } catch (_) {
+      return null; // Desktop / no native channel / no image on clipboard.
+    }
+  }
+
   /// Open Clippy's app-settings page so the user can switch photo access from
   /// "Select photos" to "Allow all" (partial can't be upgraded in-app).
   static Future<void> openPhotoSettings() async {
