@@ -134,6 +134,7 @@ class ClipboardA11yService : AccessibilityService() {
 
     private var lastPoll = 0L
     private var trailing: Runnable? = null
+    private var editTextRangedSel = false
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         // On One UI the bg clipboard listener is dead, so use accessibility
@@ -142,7 +143,11 @@ class ClipboardA11yService : AccessibilityService() {
         // selection (TEXT_SELECTION_CHANGED with from == to) — our copy signal.
         // Some apps' Copy is a real TYPE_VIEW_CLICKED — keep that too. A RANGED
         // selection (from != to) is a drag: skip it (reading then only flickers,
-        // nothing's on the clipboard yet). Typing (IME / EditText) is skipped.
+        // nothing's on the clipboard yet). Typing (IME / EditText) is skipped —
+        // EXCEPT that EditTexts (Chrome's URL bar is one) also emit their Copy
+        // as a collapse. Typing only ever collapses a collapsed cursor, while
+        // select-then-Copy is ranged→collapsed, so in an EditText we treat a
+        // collapse as a copy only when it directly follows a ranged selection.
         val t = event?.eventType ?: return
         val isSel = t == AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED
         val isClick = t == AccessibilityEvent.TYPE_VIEW_CLICKED
@@ -152,8 +157,17 @@ class ClipboardA11yService : AccessibilityService() {
         val fromIme = pkg.contains("inputmethod") || pkg.contains("keyboard") ||
             pkg.contains("honeyboard") || pkg.contains("gboard") ||
             pkg.contains("swiftkey")
-        if (fromIme || cls.contains("EditText")) return
-        if (isSel && event.fromIndex != event.toIndex) return
+        if (fromIme) return
+        val isEditText = cls.contains("EditText")
+        if (isEditText && isClick) return
+        if (isSel && event.fromIndex != event.toIndex) {
+            if (isEditText) editTextRangedSel = true
+            return
+        }
+        if (isEditText) {
+            if (!editTextRangedSel) return
+            editTextRangedSel = false
+        }
         val now = System.currentTimeMillis()
         val wait = 800 - (now - lastPoll)
         if (wait <= 0) {
