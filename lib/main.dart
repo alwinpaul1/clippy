@@ -8,6 +8,7 @@ import 'app/home_page.dart';
 import 'app/pairing_page.dart';
 import 'app/theme.dart';
 import 'app/theme_controller.dart';
+import 'app/update_controller.dart';
 import 'core/pairing/pairing_key.dart';
 import 'platform/desktop_tray.dart';
 import 'platform/foreground_service.dart';
@@ -77,6 +78,9 @@ class _ClippyRootState extends State<ClippyRoot> {
   void initState() {
     super.initState();
     _bootstrap();
+    // Non-blocking: surfaces the update banner on the home screen if a newer
+    // release is out and not already dismissed.
+    updater.checkOnStartup();
   }
 
   Future<String> _deviceId() async {

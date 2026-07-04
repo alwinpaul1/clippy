@@ -11,10 +11,13 @@ import '../core/history/history_item.dart';
 import '../platform/haptics.dart';
 import '../platform/share_channel.dart';
 import '../core/pairing/pairing_key.dart';
+import '../core/update/update_info.dart';
 import 'clip_controller.dart';
 import 'settings_page.dart';
 import 'theme.dart';
 import 'theme_controller.dart';
+import 'update_controller.dart';
+import 'update_sheet.dart';
 
 /// The main Clippy screen: synced clipboard history (tap to copy) under a
 /// frosted-glass header with the living mascot, a manual add box, delete
@@ -479,6 +482,19 @@ class _HomeBodyState extends State<_HomeBody> {
             bottom: 16,
             child: SafeArea(child: _ShotAccessBanner()),
           ),
+        // In-app update available.
+        Positioned(
+          left: 16,
+          right: 16,
+          bottom: 16,
+          child: SafeArea(
+            child: ValueListenableBuilder<UpdateInfo?>(
+              valueListenable: updater.available,
+              builder: (context, info, _) =>
+                  info == null ? const SizedBox.shrink() : UpdateBanner(info: info),
+            ),
+          ),
+        ),
       ],
     );
   }
