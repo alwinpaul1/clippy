@@ -193,6 +193,9 @@ jobs:
             echo "project token as the RAILWAY_TOKEN repo secret to enable auto-deploy."
             exit 0
           fi
-          # railway up uploads the working dir (trimmed by .railwayignore), which
-          # now includes the freshly-built binaries in server/web/downloads/.
-          railway up --ci --service clippy-relay
+          # railway up uploads the working dir. --no-gitignore is REQUIRED: newer
+          # railway CLIs honour .gitignore (which excludes server/web/downloads/,
+          # the CI-staged artifacts), so without it the download files + version
+          # .json are dropped and every /download 404s. .railwayignore still
+          # trims build/, .dart_tool/, the Flutter app dirs, etc.
+          railway up --ci --no-gitignore --service clippy-relay
