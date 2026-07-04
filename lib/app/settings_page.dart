@@ -30,7 +30,14 @@ class SettingsPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 20, 8),
+              // Extra top padding on macOS so the back arrow + title clear
+              // the floating traffic-light window buttons.
+              padding: EdgeInsets.fromLTRB(
+                10,
+                defaultTargetPlatform == TargetPlatform.macOS ? 34 : 8,
+                20,
+                8,
+              ),
               child: Row(
                 children: [
                   IconButton(
