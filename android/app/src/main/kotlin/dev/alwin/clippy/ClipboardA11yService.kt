@@ -134,7 +134,6 @@ class ClipboardA11yService : AccessibilityService() {
 
     private var lastPoll = 0L
     private var trailing: Runnable? = null
-    private var lastTyping = 0L
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         // The bg clipboard listener is dead on One UI, so use accessibility
@@ -152,21 +151,19 @@ class ClipboardA11yService : AccessibilityService() {
         val now = System.currentTimeMillis()
         // TYPING must never trigger the focus-trick — its one-frame focus
         // steal reads as screen flicker (seen replying from a WhatsApp
-        // notification). Typing looks like: events from the keyboard app,
-        // or cursor moves (selection-changed) inside an EditText. Mute those
-        // AND everything within 2s of them (the Send/Reply tap right after).
+        // notification). Typing arrives as events from the keyboard app, or as
+        // cursor-move (selection-changed) events inside an EditText. Just drop
+        // those — no focus-trick, no flicker. We deliberately do NOT set a
+        // cooldown: the Copy toolbar button is a Button/TextView (not an
+        // EditText), so its click still fires a read, and selecting-then-
+        // copying text INSIDE a field keeps working.
         val pkg = event.packageName?.toString().orEmpty().lowercase()
         val cls = event.className?.toString().orEmpty()
         val fromIme = pkg.contains("inputmethod") || pkg.contains("keyboard") ||
             pkg.contains("honeyboard") || pkg.contains("gboard") ||
             pkg.contains("swiftkey")
-        val cursorMove = t == AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED &&
-            cls.contains("EditText")
-        if (fromIme || cursorMove) {
-            lastTyping = now
-            return
-        }
-        if (now - lastTyping < 2000) return
+        val inEditText = cls.contains("EditText")
+        if (fromIme || inEditText) return
         val wait = 800 - (now - lastPoll)
         if (wait <= 0) {
             lastPoll = now
