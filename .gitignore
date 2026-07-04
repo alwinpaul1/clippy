@@ -28,3 +28,6 @@ lib/firebase_options.dart
 *.xcworkspace/xcuserdata/
 .DS_Store
 
+
+# CI stages release artifacts + version.json here at deploy time.
+server/web/downloads/
