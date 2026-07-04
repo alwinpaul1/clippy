@@ -136,27 +136,31 @@ class ClipboardA11yService : AccessibilityService() {
     private var trailing: Runnable? = null
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // The bg clipboard listener is dead on One UI, so use a Copy-button
-        // click as the "user just copied" trigger to read the clipboard via
-        // the focus-trick. Throttled so a double-fire doesn't thrash, with a
-        // TRAILING read because the click can land just before the system
-        // commits the clipboard.
-        // Trigger ONLY on a real click — the "Copy" toolbar button fires
-        // TYPE_VIEW_CLICKED (verified: cls=Button). We deliberately do NOT
-        // trigger on TEXT_SELECTION_CHANGED: selecting/dragging never changes
-        // the clipboard, and reading on every drag event flickered the screen
-        // (the focus-trick steals focus for a frame). Typing likewise fires no
-        // clicks, so it can't flicker either.
+        // The bg clipboard listener is dead on One UI, so use accessibility
+        // events as the "user just copied" trigger to read via the focus-trick.
+        // Two signals (verified on-device):
+        //  - Tapping "Copy" in Chrome's toolbar fires NO click; it COLLAPSES
+        //    the text selection -> TEXT_SELECTION_CHANGED with from == to.
+        //    That collapse is our reliable copy signal.
+        //  - Some apps' Copy is a real TYPE_VIEW_CLICKED. Keep that too.
+        // We must NOT read on a RANGED selection (from != to): that fires
+        // continuously while you drag the selection handles, and each read
+        // steals focus for a frame = visible flicker, for nothing (selecting
+        // never changes the clipboard). Typing (IME / EditText events) is
+        // likewise skipped.
         val t = event?.eventType ?: return
-        if (t != AccessibilityEvent.TYPE_VIEW_CLICKED) return
-        // Tapping INTO a text field (or an IME key) is a click too, but never a
-        // copy — skip those so focusing a field to type doesn't flicker.
+        val isSel = t == AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED
+        val isClick = t == AccessibilityEvent.TYPE_VIEW_CLICKED
+        if (!isSel && !isClick) return
         val pkg = event.packageName?.toString().orEmpty().lowercase()
         val cls = event.className?.toString().orEmpty()
         val fromIme = pkg.contains("inputmethod") || pkg.contains("keyboard") ||
             pkg.contains("honeyboard") || pkg.contains("gboard") ||
             pkg.contains("swiftkey")
         if (fromIme || cls.contains("EditText")) return
+        // Ranged selection = active drag -> skip (no flicker). Collapsed
+        // selection (from == to) = copy/deselect -> read.
+        if (isSel && event.fromIndex != event.toIndex) return
         val now = System.currentTimeMillis()
         val wait = 800 - (now - lastPoll)
         if (wait <= 0) {
