@@ -136,18 +136,13 @@ class ClipboardA11yService : AccessibilityService() {
     private var trailing: Runnable? = null
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // The bg clipboard listener is dead on One UI, so use accessibility
+        // On One UI the bg clipboard listener is dead, so use accessibility
         // events as the "user just copied" trigger to read via the focus-trick.
-        // Two signals (verified on-device):
-        //  - Tapping "Copy" in Chrome's toolbar fires NO click; it COLLAPSES
-        //    the text selection -> TEXT_SELECTION_CHANGED with from == to.
-        //    That collapse is our reliable copy signal.
-        //  - Some apps' Copy is a real TYPE_VIEW_CLICKED. Keep that too.
-        // We must NOT read on a RANGED selection (from != to): that fires
-        // continuously while you drag the selection handles, and each read
-        // steals focus for a frame = visible flicker, for nothing (selecting
-        // never changes the clipboard). Typing (IME / EditText events) is
-        // likewise skipped.
+        // Tapping "Copy" in Chrome fires NO click; it COLLAPSES the text
+        // selection (TEXT_SELECTION_CHANGED with from == to) — our copy signal.
+        // Some apps' Copy is a real TYPE_VIEW_CLICKED — keep that too. A RANGED
+        // selection (from != to) is a drag: skip it (reading then only flickers,
+        // nothing's on the clipboard yet). Typing (IME / EditText) is skipped.
         val t = event?.eventType ?: return
         val isSel = t == AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED
         val isClick = t == AccessibilityEvent.TYPE_VIEW_CLICKED
@@ -158,8 +153,6 @@ class ClipboardA11yService : AccessibilityService() {
             pkg.contains("honeyboard") || pkg.contains("gboard") ||
             pkg.contains("swiftkey")
         if (fromIme || cls.contains("EditText")) return
-        // Ranged selection = active drag -> skip (no flicker). Collapsed
-        // selection (from == to) = copy/deselect -> read.
         if (isSel && event.fromIndex != event.toIndex) return
         val now = System.currentTimeMillis()
         val wait = 800 - (now - lastPoll)
@@ -260,7 +253,9 @@ class ClipboardA11yService : AccessibilityService() {
             val ts = System.currentTimeMillis()
             val part = File(dir, "$ts.$ext.part")
             part.writeBytes(bytes)
-            part.renameTo(File(dir, "$ts.$ext"))
+            // On rename failure the drain would never pick up the .part; delete
+            // it so a retry (next onChange) isn't blocked by a stale orphan.
+            if (!part.renameTo(File(dir, "$ts.$ext"))) part.delete()
         } catch (_: Exception) {}
     }
 

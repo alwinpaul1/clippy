@@ -269,8 +269,13 @@ class MainActivity : FlutterActivity() {
             val name = c.getString(1) ?: ""
             val path = c.getString(2) ?: ""
             val added = c.getLong(3)
-            val looksLikeShot = path.contains("Screenshot", ignoreCase = true) ||
-                name.startsWith("Screenshot", ignoreCase = true)
+            // Exclude Samsung's "thumbnail_Screenshot…" (a small derivative)
+            // so we sync the full image, not the ~13KB thumbnail.
+            val isThumb = name.startsWith("thumbnail", ignoreCase = true) ||
+                path.contains(".thumbnails", ignoreCase = true)
+            val looksLikeShot = !isThumb &&
+                (path.contains("Screenshot", ignoreCase = true) ||
+                    name.startsWith("Screenshot", ignoreCase = true))
             if (!looksLikeShot) return
             // Fresh rows only — MediaStore also fires for edits and rescans.
             if (System.currentTimeMillis() / 1000 - added > 20) return

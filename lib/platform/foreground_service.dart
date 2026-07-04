@@ -76,6 +76,10 @@ class _BackgroundSyncHandler extends TaskHandler {
   void onReceiveData(Object data) {
     if (data == ForegroundServiceManager.uiAlivePing) {
       _lastUiPing = DateTime.now();
+      // UI is alive and owns applying incoming clips, so drop any buffered
+      // one — keeping it risks re-applying a stale/superseded clip on a later
+      // swipe-away.
+      _skippedWhileUiAlive = null;
     }
   }
 
@@ -132,6 +136,7 @@ class _BackgroundSyncHandler extends TaskHandler {
       'jpg': 'image/jpeg',
       'jpeg': 'image/jpeg',
       'webp': 'image/webp',
+      'gif': 'image/gif',
     };
     for (final dirPath in _screenshotDirs) {
       final dir = Directory(dirPath);

@@ -235,11 +235,15 @@ class ClipController extends ChangeNotifier
       ForegroundServiceManager.pingAlive();
       onClipboardChanged();
       unawaited(_drainQueue());
+      // Re-check photo access: the user may have just returned from granting
+      // full access via the "Fix" banner, which should now clear it.
+      unawaited(_startScreenshotSync());
     }
   }
 
-  /// Push texts the background AccessibilityService captured while the UI was
-  /// away. Engine dedup absorbs repeats.
+  /// Push text AND images the background native code captured while the UI was
+  /// away (focus-trick text + the MediaStore screenshot observer). Engine dedup
+  /// absorbs repeats.
   Future<void> _drainQueue() async {
     for (final item in await ClipQueue.drain()) {
       if (_disposed) return;

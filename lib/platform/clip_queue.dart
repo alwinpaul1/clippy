@@ -56,8 +56,13 @@ abstract class ClipQueue {
       for (final f in files) {
         final ext = f.path.split('.').last.toLowerCase();
         // Images are staged as `<name>.part` then renamed in, so a `.part`
-        // seen mid-rename is incomplete — the next drain gets it.
-        if (ext == 'part') continue;
+        // seen mid-rename is incomplete — the next drain gets it. But a rename
+        // that never completed (writer killed, rename failed) would otherwise
+        // orphan the file forever — reap it once it's clearly stale.
+        if (ext == 'part') {
+          _reapIfStale(f);
+          continue;
+        }
         final mime = _imageMimes[ext];
         final item =
             mime != null ? await _drainImage(f, mime) : await _drainText(f);
