@@ -136,34 +136,28 @@ class ClipboardA11yService : AccessibilityService() {
     private var trailing: Runnable? = null
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // The bg clipboard listener is dead on One UI, so use accessibility
-        // events as a "user might have copied" trigger to read the clipboard
-        // via the focus-trick. Only text-selection / clicks (copies happen
-        // around those) — NOT text-changed, which fires while typing and would
-        // flicker constantly. Throttled so rapid events don't thrash, but a
-        // throttled event schedules a TRAILING read instead of being dropped:
-        // long-press-select fires an event, and the Copy tap ~1s later would
-        // otherwise land inside the window and never be read.
+        // The bg clipboard listener is dead on One UI, so use a Copy-button
+        // click as the "user just copied" trigger to read the clipboard via
+        // the focus-trick. Throttled so a double-fire doesn't thrash, with a
+        // TRAILING read because the click can land just before the system
+        // commits the clipboard.
+        // Trigger ONLY on a real click — the "Copy" toolbar button fires
+        // TYPE_VIEW_CLICKED (verified: cls=Button). We deliberately do NOT
+        // trigger on TEXT_SELECTION_CHANGED: selecting/dragging never changes
+        // the clipboard, and reading on every drag event flickered the screen
+        // (the focus-trick steals focus for a frame). Typing likewise fires no
+        // clicks, so it can't flicker either.
         val t = event?.eventType ?: return
-        if (t != AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED &&
-            t != AccessibilityEvent.TYPE_VIEW_CLICKED
-        ) return
-        val now = System.currentTimeMillis()
-        // TYPING must never trigger the focus-trick — its one-frame focus
-        // steal reads as screen flicker (seen replying from a WhatsApp
-        // notification). Typing arrives as events from the keyboard app, or as
-        // cursor-move (selection-changed) events inside an EditText. Just drop
-        // those — no focus-trick, no flicker. We deliberately do NOT set a
-        // cooldown: the Copy toolbar button is a Button/TextView (not an
-        // EditText), so its click still fires a read, and selecting-then-
-        // copying text INSIDE a field keeps working.
+        if (t != AccessibilityEvent.TYPE_VIEW_CLICKED) return
+        // Tapping INTO a text field (or an IME key) is a click too, but never a
+        // copy — skip those so focusing a field to type doesn't flicker.
         val pkg = event.packageName?.toString().orEmpty().lowercase()
         val cls = event.className?.toString().orEmpty()
         val fromIme = pkg.contains("inputmethod") || pkg.contains("keyboard") ||
             pkg.contains("honeyboard") || pkg.contains("gboard") ||
             pkg.contains("swiftkey")
-        val inEditText = cls.contains("EditText")
-        if (fromIme || inEditText) return
+        if (fromIme || cls.contains("EditText")) return
+        val now = System.currentTimeMillis()
         val wait = 800 - (now - lastPoll)
         if (wait <= 0) {
             lastPoll = now
