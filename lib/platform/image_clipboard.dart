@@ -1,15 +1,19 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:super_clipboard/super_clipboard.dart';
 
-/// System-clipboard image read/write via super_clipboard, plus JPEG downscaling
-/// for relay transport. Only meaningful where super_clipboard is supported
-/// (macOS, Android, …); returns null / no-ops elsewhere.
+/// System-clipboard image read/write via super_clipboard. Incoming images are
+/// put on the clipboard in their own format (bytes verbatim — instant and
+/// lossless); only meaningful where super_clipboard is supported (macOS,
+/// Android, …); returns null / no-ops elsewhere.
 abstract class ImageClipboard {
   static SystemClipboard? get _cb => SystemClipboard.instance;
+  static const _androidChannel = MethodChannel('clippy/share');
 
   /// Read an image off the clipboard as raw bytes, or null if there's none.
   /// Tries several formats (macOS screenshots land as PNG; other apps may use
@@ -50,23 +54,84 @@ abstract class ImageClipboard {
     return completer.future;
   }
 
-  /// Put an image on the clipboard. Non-PNG bytes are transcoded to PNG for the
-  /// widest paste compatibility; PNG bytes go on as-is.
+  /// Put an image on the clipboard in its own format, bytes verbatim — instant
+  /// and lossless at any size. On macOS/Windows a PNG rendition is attached
+  /// lazily (super_clipboard provides it on demand), so the rare paste target
+  /// that only accepts PNG still works without paying the encode up front.
+  /// Android needs no PNG rendition — its clipboard is a format-agnostic content
+  /// URI, so a JPEG/webp/… pastes into any app as-is. Unrecognized bytes fall
+  /// back to a one-off PNG transcode.
   static Future<void> write(Uint8List bytes) async {
+    // Android: write via the native ClipboardManager + FileProvider URI.
+    // super_clipboard's own image write serves an EMPTY file to paste targets
+    // (its DataProvider returns no bytes), so images it wrote could not be
+    // pasted into other apps. The native path lives on the UI-isolate engine's
+    // channel; from a background isolate the call throws (no handler) and we
+    // fall back to super_clipboard.
+    if (!kIsWeb && Platform.isAndroid) {
+      try {
+        final ok = await _androidChannel.invokeMethod<bool>(
+          'writeClipImage', {'bytes': bytes, 'ext': _extFor(bytes)},
+        );
+        if (ok == true) return;
+      } catch (_) {
+        // No handler (background isolate) — fall through to super_clipboard.
+      }
+    }
     final cb = _cb;
     if (cb == null) return;
-    final png = await encodeToPng(bytes);
-    if (png == null) return;
+    final fmt = imageFormatFor(bytes);
     final item = DataWriterItem();
-    item.add(Formats.png(png));
+    if (fmt == null) {
+      final png = await encodeToPng(bytes);
+      if (png == null) return;
+      item.add(Formats.png(png));
+    } else {
+      item.add(fmt(bytes));
+      if (!identical(fmt, Formats.png) && _lazyPngPlatform) {
+        item.add(Formats.png.lazy(() async => await encodeToPng(bytes) ?? bytes));
+      }
+    }
     await cb.write([item]);
   }
 
-  /// Transcode arbitrary image bytes to PNG for the clipboard. PNG input is
-  /// returned untouched. Non-PNG input is encoded with the native (Skia) codec
-  /// — milliseconds even for a large photo — and only falls back to the
-  /// pure-Dart encoder if the native codec is unavailable (e.g. certain
-  /// background isolates). Returns null if the bytes can't be decoded at all.
+  /// File extension for the native clipboard write, from the image's format.
+  static String _extFor(Uint8List b) {
+    final fmt = imageFormatFor(b);
+    if (identical(fmt, Formats.jpeg)) return 'jpg';
+    if (identical(fmt, Formats.gif)) return 'gif';
+    if (identical(fmt, Formats.webp)) return 'webp';
+    if (identical(fmt, Formats.bmp)) return 'bmp';
+    return 'png';
+  }
+
+  /// Platforms where super_clipboard provides lazy data on demand (rather than
+  /// resolving it eagerly), so a lazy PNG rendition never blocks the write.
+  static bool get _lazyPngPlatform =>
+      !kIsWeb && (Platform.isMacOS || Platform.isWindows);
+
+  /// The super_clipboard format matching the image's magic bytes, or null if
+  /// the bytes aren't a recognized image format.
+  @visibleForTesting
+  static SimpleFileFormat? imageFormatFor(Uint8List b) {
+    if (b.length >= 4) {
+      if (b[0] == 0x89 && b[1] == 0x50) return Formats.png;
+      if (b[0] == 0xFF && b[1] == 0xD8) return Formats.jpeg;
+      if (b[0] == 0x47 && b[1] == 0x49) return Formats.gif;
+      if (b[0] == 0x42 && b[1] == 0x4D) return Formats.bmp;
+      if (b.length >= 12 &&
+          b[0] == 0x52 && b[1] == 0x49 && b[2] == 0x46 && b[3] == 0x46 &&
+          b[8] == 0x57 && b[9] == 0x45 && b[10] == 0x42 && b[11] == 0x50) {
+        return Formats.webp;
+      }
+    }
+    return null;
+  }
+
+  /// Transcode arbitrary image bytes to PNG. Used only for the lazy desktop PNG
+  /// rendition (computed on demand) and the unrecognized-format fallback — never
+  /// on the fast path. Native (Skia) codec, with a pure-Dart fallback for
+  /// isolates where the native codec is unavailable. Null if undecodable.
   @visibleForTesting
   static Future<Uint8List?> encodeToPng(Uint8List bytes) async {
     final isPng = bytes.length >= 2 && bytes[0] == 0x89 && bytes[1] == 0x50;

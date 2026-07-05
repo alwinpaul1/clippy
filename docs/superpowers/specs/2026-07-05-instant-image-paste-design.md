@@ -1,8 +1,38 @@
 # Instant image paste via native PNG encoding
 
 **Date:** 2026-07-05
-**Status:** Approved (design)
-**Scope:** `lib/platform/image_clipboard.dart` (one file)
+**Status:** Implemented (approach revised during on-device verification — see revision note)
+**Scope:** `lib/platform/image_clipboard.dart`, `MainActivity.kt`, `AndroidManifest.xml`
+
+## Revision note (what was actually built)
+
+On-device verification showed the original plan — encode every non-PNG image
+to PNG via the native Skia codec — did **not** meet "zero delay": PNG-encoding a
+large bitmap is inherently CPU-heavy even natively (measured on a Galaxy S23:
+400px = 109 ms, 2000px = 1.1 s, **12MP = 8.4 s**). "Fast with no quality loss"
+requires **no re-encode at all**. The final approach:
+
+1. **Write the image in its native format, bytes verbatim** — instant at any
+   size, lossless. `imageFormatFor` picks the super_clipboard format by magic
+   bytes; the pure-Dart/Skia PNG encode (`encodeToPng`) is retained only for the
+   lazy desktop PNG rendition and the unrecognized-format fallback.
+2. **macOS/Windows:** attach a PNG rendition **lazily** (`Formats.png.lazy`) so a
+   PNG-only paste target still works, computed on demand — never blocking.
+3. **Android paste fix:** super_clipboard's own image write serves an **empty
+   file** to paste targets (its `DataProvider` returns no bytes) — and the
+   required `SuperClipboardDataProvider` was never declared, so image paste into
+   other apps had never worked. Fix = (a) declare the provider in the manifest,
+   and (b) write images to the clipboard **natively** via `ClipboardManager` +
+   a FileProvider content URI (new `writeClipImage` method on the `clippy/share`
+   channel), bypassing super_clipboard's broken serving. Verified: a synced JPEG
+   now pastes as a real image into Gmail. Limitation: the native write runs on
+   the UI-isolate engine's channel; a receive while Clippy is swiped away (FGS
+   isolate) falls back to super_clipboard.
+
+The sections below are the original design and are kept for history.
+
+---
+
 
 ## Problem
 
