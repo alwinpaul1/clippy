@@ -169,6 +169,47 @@ abstract class ImageClipboard {
     }
   }
 
+  /// A format-agnostic fingerprint of an image's *picture* rather than its raw
+  /// bytes: a JPEG and the PNG it gets re-encoded to on a clipboard round-trip
+  /// decode to the same pixels, so they share one fingerprint. The sync layer
+  /// uses this to recognise an image it just received coming back off the
+  /// clipboard in a different format (the receive→re-read echo) — a raw-byte or
+  /// content-hash compare can't, because JPEG≠PNG bytes. Null if undecodable.
+  static Future<String?> fingerprint(Uint8List bytes) async {
+    ui.Image? image;
+    try {
+      final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+      final descriptor = await ui.ImageDescriptor.encoded(buffer);
+      final w = descriptor.width;
+      final h = descriptor.height;
+      // Decode to a small fixed raster — cheap, and identical for either format
+      // of the same picture.
+      final codec = await descriptor.instantiateCodec(
+        targetWidth: 64,
+        targetHeight: 64,
+      );
+      final frame = await codec.getNextFrame();
+      image = frame.image;
+      final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (data == null) return null;
+      return '${w}x$h:${_fnv1a(data.buffer.asUint8List())}';
+    } catch (_) {
+      return null;
+    } finally {
+      image?.dispose();
+    }
+  }
+
+  /// FNV-1a 32-bit — a fast non-crypto hash, enough for a stable dedup key.
+  static int _fnv1a(Uint8List data) {
+    var hash = 0x811c9dc5;
+    for (final b in data) {
+      hash = (hash ^ b) & 0xFFFFFFFF;
+      hash = (hash * 0x01000193) & 0xFFFFFFFF;
+    }
+    return hash;
+  }
+
   /// Prepare an image for relay transport: the original bytes, untouched —
   /// no downscaling, no re-encoding, ever. Returns the bytes plus their mime
   /// type; [mime] is the caller's hint, else it's sniffed from the bytes.

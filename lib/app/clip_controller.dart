@@ -56,11 +56,11 @@ class ClipController extends ChangeNotifier
   // hook re-reads the clipboard every time Clippy returns to the foreground,
   // and the engine's echo window (~2s) can't cover a minutes-later re-read —
   // without this, every app-open would re-upload the current clip. Text is
-  // matched exactly; an image is remembered as the platform's re-encoded
-  // read-back bytes (write→read isn't byte-identical, so the first read after
-  // our own write is blessed via _incomingImagePending instead of compared).
+  // matched exactly; an image is matched by a format-agnostic fingerprint of
+  // its picture — the platform hands our own write back re-encoded (a received
+  // JPEG re-reads as PNG), so a raw-byte / content-hash compare misses the echo.
   String? _handledText;
-  Uint8List? _handledImage;
+  String? _handledImageFp;
   bool _incomingImagePending = false;
 
   List<HistoryItem> history = const [];
@@ -158,6 +158,10 @@ class ClipController extends ChangeNotifier
             _suppressImageUntil =
                 DateTime.now().add(const Duration(seconds: 3));
             _incomingImagePending = true;
+            // Register the picture up front so the watcher's re-encoded
+            // read-back is recognised as our own echo however much later it
+            // fires (macOS App Nap can delay it well past the time window).
+            _handledImageFp = await ImageClipboard.fingerprint(jpeg);
             await ImageClipboard.write(jpeg);
           } catch (_) {
             // Corrupt payload — skip.
@@ -273,21 +277,24 @@ class ClipController extends ChangeNotifier
     }
     if (png != null) {
       _handledText = null; // clipboard is an image now — the text guard is stale
+      final fp = await ImageClipboard.fingerprint(png);
       if (_incomingImagePending) {
-        // First foreground read after we wrote an incoming image: our own
-        // echo. Remember the platform's re-encoding so later reads match.
+        // First read after we wrote an incoming image: our own echo. Remember
+        // its fingerprint so any later re-read (in any format) also matches.
         _incomingImagePending = false;
-        _handledImage = png;
+        _handledImageFp = fp;
         return;
       }
-      if (_handledImage != null && listEquals(_handledImage, png)) return;
-      _handledImage = png;
+      // Same picture we last synced, in either direction — regardless of the
+      // clipboard's re-encoded format → our own echo, don't re-upload it.
+      if (fp != null && fp == _handledImageFp) return;
+      _handledImageFp = fp;
       await _pushLocalImage(png, mime: clipMime);
       return;
     }
     // Clipboard no longer holds an image — the image guard is stale.
     _incomingImagePending = false;
-    _handledImage = null;
+    _handledImageFp = null;
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text;
     if (text == null || text.isEmpty || text == _handledText) return;
