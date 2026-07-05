@@ -208,11 +208,15 @@ jobs:
           # Trust the served result, not the CLI: poll version.json until the
           # relay serves the version we just built (the artifacts + manifest are
           # part of this same upload). Fails only if it never goes live.
-          EXPECT=$(grep -E '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//' | cut -d'+' -f1 | tr -d '[:space:]')
+          # Full SEMVER+BUILD (e.g. 1.0.10+11). Keeping the build is essential:
+          # for a build-only re-release the OLD manifest already serves the same
+          # semver, so comparing semver alone would "verify" instantly even if
+          # the deploy failed. The manifest carries both fields.
+          EXPECT=$(grep -E '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//' | tr -d '[:space:]')
           URL="https://clippy-relay-production.up.railway.app/version.json"
           echo "Waiting for relay to serve $EXPECT ..."
           for i in $(seq 1 40); do
-            GOT=$(curl -fsS "$URL" 2>/dev/null | python3 -c "import sys,json;print(json.load(sys.stdin).get('version',''))" 2>/dev/null || true)
+            GOT=$(curl -fsS "$URL" 2>/dev/null | python3 -c "import sys,json;d=json.load(sys.stdin);print(f\"{d.get('version','')}+{d.get('build','')}\")" 2>/dev/null || true)
             echo "  poll $i: served=${GOT:-<none>} expect=$EXPECT"
             if [ "$GOT" = "$EXPECT" ]; then
               echo "::notice::Deploy verified — relay serving $EXPECT"

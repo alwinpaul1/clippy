@@ -278,16 +278,18 @@ class ClipController extends ChangeNotifier
     if (png != null) {
       _handledText = null; // clipboard is an image now — the text guard is stale
       final fp = await ImageClipboard.fingerprint(png);
-      if (_incomingImagePending) {
-        // First read after we wrote an incoming image: our own echo. Remember
-        // its fingerprint so any later re-read (in any format) also matches.
-        _incomingImagePending = false;
-        _handledImageFp = fp;
-        return;
-      }
-      // Same picture we last synced, in either direction — regardless of the
-      // clipboard's re-encoded format → our own echo, don't re-upload it.
+      // Our own echo of an image we just applied — matched by the format-
+      // agnostic fingerprint registered up front on the incoming path (so it
+      // holds even after the OS re-encodes the read-back). Compare rather than
+      // blindly bless the pending read: a DIFFERENT image copied before the
+      // echo arrives (the window can be minutes on Android — receive while
+      // backgrounded, read on resume) must still sync. An undecodable read-back
+      // (fp == null) inside the just-wrote window is treated as the echo to
+      // avoid a re-upload loop.
+      final expectingEcho = _incomingImagePending;
+      _incomingImagePending = false;
       if (fp != null && fp == _handledImageFp) return;
+      if (expectingEcho && fp == null) return;
       _handledImageFp = fp;
       await _pushLocalImage(png, mime: clipMime);
       return;

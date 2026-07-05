@@ -46,14 +46,14 @@ class UpdateController {
   Future<void> checkOnStartup() async {
     final info = await _service.check();
     if (info == null) return;
-    if (await _service.isDismissed(info.version)) return;
+    if (await _service.isDismissed('${info.version}+${info.build}')) return;
     available.value = info;
   }
 
   /// Manual check (Settings). Always surfaces the update even if dismissed.
   Future<CheckResult> checkNow() async {
     try {
-      final info = await _service.check();
+      final info = await _service.checkOrThrow();
       if (info == null) return CheckResult.upToDate;
       available.value = info;
       return CheckResult.updateAvailable;
@@ -64,7 +64,7 @@ class UpdateController {
 
   Future<void> dismiss() async {
     final info = available.value;
-    if (info != null) await _service.dismiss(info.version);
+    if (info != null) await _service.dismiss('${info.version}+${info.build}');
     available.value = null;
   }
 
