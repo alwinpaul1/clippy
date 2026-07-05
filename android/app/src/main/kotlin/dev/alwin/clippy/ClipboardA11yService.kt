@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -27,6 +28,7 @@ import java.io.File
  */
 class ClipboardA11yService : AccessibilityService() {
     private var lastText: String? = null
+    private var lastImageKey: String? = null
     private var busy = false
     private val main = Handler(Looper.getMainLooper())
     private var pending: Runnable? = null
@@ -209,7 +211,7 @@ class ClipboardA11yService : AccessibilityService() {
 
     private fun attemptRead() {
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        readClip(cm)?.let { emit(it); return }
+        if (capture(cm)) return
         focusTrickRead(cm)
     }
 
@@ -217,20 +219,66 @@ class ClipboardA11yService : AccessibilityService() {
 
     private fun onClipChanged(cm: ClipboardManager) {
         // 1) Direct read — does the AS context have clipboard access in bg?
-        val direct = readClip(cm)
-        if (direct != null) {
-            emit(direct)
-            return
-        }
+        if (capture(cm)) return
         // 2) Fallback: focus-trick overlay (needs SYSTEM_ALERT_WINDOW).
         focusTrickRead(cm)
     }
 
-    private fun readClip(cm: ClipboardManager): String? = try {
-        cm.primaryClip?.takeIf { it.itemCount > 0 }
-            ?.getItemAt(0)?.coerceToText(this)?.toString()?.takeIf { it.isNotBlank() }
-    } catch (_: Exception) {
-        null
+    // Read whatever's on the clipboard and queue it. Image first: a Gallery-style
+    // copy is a bare content:// image URI (coerceToText would yield the useless
+    // "content://…" string), so resolve the bytes and NEVER fall through to text
+    // for an image clip. Returns true once something was captured.
+    private fun capture(cm: ClipboardManager): Boolean {
+        val item = try {
+            cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)
+        } catch (_: Exception) {
+            null
+        } ?: return false
+        val uri = item.uri
+        if (uri != null) {
+            val mime = try {
+                contentResolver.getType(uri)
+            } catch (_: Exception) {
+                null
+            } ?: ""
+            if (mime.startsWith("image/")) return emitClipImage(uri, mime)
+        }
+        val text = try {
+            item.coerceToText(this)?.toString()?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        } ?: return false
+        emit(text)
+        return true
+    }
+
+    // Resolve a clipboard image URI to bytes and queue it. The open can fail with
+    // SecurityException if the background service isn't granted read access to the
+    // source app's URI — the caller then falls back to the focus-trick, which puts
+    // us in focus for a frame so the grant applies.
+    private fun emitClipImage(uri: Uri, mime: String): Boolean {
+        return try {
+            val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            if (bytes == null || bytes.isEmpty()) {
+                Log.w("ClippyImg", "clip image empty/unreadable: $uri")
+                return false
+            }
+            val key = "$uri:${bytes.size}"
+            if (key == lastImageKey) return true // already captured this copy
+            lastImageKey = key
+            val ext = when (mime) {
+                "image/jpeg" -> "jpg"
+                "image/webp" -> "webp"
+                "image/gif" -> "gif"
+                else -> "png"
+            }
+            Log.i("ClippyImg", "captured clip image ${bytes.size}B $mime")
+            emitImage(bytes, ext)
+            true
+        } catch (e: Exception) {
+            Log.w("ClippyImg", "clip image read failed: ${e.javaClass.simpleName} ${e.message}")
+            false
+        }
     }
 
     private fun focusTrickRead(cm: ClipboardManager) {
@@ -251,7 +299,7 @@ class ClipboardA11yService : AccessibilityService() {
         }
         view.viewTreeObserver.addOnWindowFocusChangeListener { hasFocus ->
             if (!hasFocus) return@addOnWindowFocusChangeListener
-            readClip(cm)?.let { emit(it) }
+            capture(cm)
             finish()
         }
         try {
