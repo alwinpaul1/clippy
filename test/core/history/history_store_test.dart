@@ -15,8 +15,9 @@ class RecordingClipboardWriter implements ClipboardWriter {
   Future<void> setText(String text) async => written.add(text);
 }
 
-/// Wraps [FakeCryptoBox] and counts open() calls — to assert decryption is
-/// memoised across projections.
+/// Wraps [FakeCryptoBox] and counts decrypted clips — to assert decryption is
+/// memoised across projections. project() now decrypts via openAll (one batch,
+/// off the UI isolate in production), so count per clip there.
 class CountingCryptoBox implements CryptoBox {
   final FakeCryptoBox _inner = FakeCryptoBox();
   int opens = 0;
@@ -31,6 +32,12 @@ class CountingCryptoBox implements CryptoBox {
   Future<String> open(RemoteClip clip) {
     opens++;
     return _inner.open(clip);
+  }
+
+  @override
+  Future<List<String>> openAll(List<RemoteClip> clips) {
+    opens += clips.length;
+    return _inner.openAll(clips);
   }
 }
 
