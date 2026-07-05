@@ -1,6 +1,8 @@
+import 'package:clippy/core/crypto/crypto_box.dart';
 import 'package:clippy/core/history/clipboard_writer.dart';
 import 'package:clippy/core/history/history_item.dart';
 import 'package:clippy/core/history/history_store.dart';
+import 'package:clippy/core/models/encrypted_clip.dart';
 import 'package:clippy/core/models/remote_clip.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -11,6 +13,25 @@ class RecordingClipboardWriter implements ClipboardWriter {
   final List<String> written = [];
   @override
   Future<void> setText(String text) async => written.add(text);
+}
+
+/// Wraps [FakeCryptoBox] and counts open() calls — to assert decryption is
+/// memoised across projections.
+class CountingCryptoBox implements CryptoBox {
+  final FakeCryptoBox _inner = FakeCryptoBox();
+  int opens = 0;
+  @override
+  bool get isPaired => _inner.isPaired;
+  @override
+  Future<String> fingerprint(String plaintext) => _inner.fingerprint(plaintext);
+  @override
+  Future<EncryptedClip> seal(String plaintext, {required String source}) =>
+      _inner.seal(plaintext, source: source);
+  @override
+  Future<String> open(RemoteClip clip) {
+    opens++;
+    return _inner.open(clip);
+  }
 }
 
 void main() {
@@ -94,5 +115,30 @@ void main() {
     expect(only.hash, 'h:t');
     expect(only.source, 'macA');
     expect(only.timestamp, base.subtract(const Duration(seconds: 5)));
+  });
+
+  test('project memoises decryption — re-projection does not re-decrypt',
+      () async {
+    final counting = CountingCryptoBox();
+    final store = HistoryStore(crypto: counting, writer: writer);
+    final clips = [clip('a', agoSeconds: 1), clip('b', agoSeconds: 2)];
+    expect((await store.project(clips)).map((i) => i.text).toList(), ['a', 'b']);
+    expect(counting.opens, 2);
+    // The relay re-emits the whole snapshot on every change — the second
+    // projection must serve both items from cache.
+    expect((await store.project(clips)).map((i) => i.text).toList(), ['a', 'b']);
+    expect(counting.opens, 2); // no new decrypts
+  });
+
+  test('re-projection reuses cached plaintext but takes metadata fresh',
+      () async {
+    final counting = CountingCryptoBox();
+    final store = HistoryStore(crypto: counting, writer: writer);
+    await store.project([clip('a', agoSeconds: 1, source: 'devX')]);
+    expect(counting.opens, 1);
+    // Same content (hash 'h:a'), different source → cached decrypt, fresh meta.
+    final items = await store.project([clip('a', agoSeconds: 1, source: 'devY')]);
+    expect(counting.opens, 1);
+    expect(items.single.source, 'devY');
   });
 }

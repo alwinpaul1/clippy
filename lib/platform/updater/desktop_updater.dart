@@ -63,10 +63,13 @@ open "$installedApp"
   ) async {
     final setup = File('${tmp.path}\\Clippy-Setup.exe');
     await downloadTo(url, setup, onProgress: onProgress);
-    // Inno Setup: silent, close the running app, relaunch after install.
+    // Inno Setup: silent install, close the running app. The installer's [Run]
+    // entry relaunches Clippy when it finishes (its skipifsilent flag was
+    // removed so silent updates reopen the app — Restart Manager can't, as a
+    // Flutter app doesn't register with it). /NORESTART: never reboot Windows.
     await Process.start(
       setup.path,
-      ['/SILENT', '/CLOSEAPPLICATIONS', '/RESTARTAPPLICATIONS', '/NORESTART'],
+      ['/SILENT', '/CLOSEAPPLICATIONS', '/NORESTART'],
       mode: ProcessStartMode.detached,
     );
     exit(0);
