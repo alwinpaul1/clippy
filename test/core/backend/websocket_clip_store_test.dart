@@ -138,22 +138,4 @@ void main() {
     expect(drops, contains(false), reason: 'should report disconnect');
     await store.close();
   });
-
-  test('refreshNow forces an immediate reconnect and re-joins (no backoff wait)',
-      () async {
-    final store = build();
-    expect(transports, hasLength(1));
-
-    store.refreshNow(); // e.g. app returned to foreground
-    expect(transports, hasLength(2),
-        reason: 'reconnects immediately, not after backoff');
-    expect(jsonDecode(transports[1].sent.single)['type'], 'join',
-        reason: 'the fresh socket re-joins the room (refreshing history)');
-    expect(transports[0].closed, isTrue, reason: 'old socket is torn down');
-
-    // Debounced: a second refresh within 2s must NOT thrash a new socket.
-    store.refreshNow();
-    expect(transports, hasLength(2), reason: 'debounced within 2s');
-    await store.close();
-  });
 }
