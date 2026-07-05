@@ -60,4 +60,46 @@ void main() {
     final out = await ImageClipboard.encodeToPng(Uint8List.fromList([1, 2, 3, 4]));
     expect(out, isNull);
   });
+
+  group('fingerprint (format-agnostic image identity)', () {
+    // A picture with structure, so JPEG artefacts and the raster hash are
+    // meaningful (not a degenerate solid block).
+    Uint8List sampleJpeg({int seed = 0}) {
+      final im = img.Image(width: 32, height: 32);
+      for (var y = 0; y < 32; y++) {
+        for (var x = 0; x < 32; x++) {
+          im.setPixelRgb(x, y, (x * 8 + seed) % 256, (y * 8) % 256, (x + y) % 256);
+        }
+      }
+      return Uint8List.fromList(img.encodeJpg(im, quality: 90));
+    }
+
+    test('a JPEG and its PNG re-encode share one fingerprint', () async {
+      final jpeg = sampleJpeg();
+      // The clipboard round-trip form: macOS/Windows hand the image back as PNG.
+      final png = await ImageClipboard.encodeToPng(jpeg);
+      expect(png, isNotNull);
+      expect(jpeg[0], 0xFF); // JPEG
+      expect(png![0], 0x89); // PNG — different bytes...
+
+      final fpJpeg = await ImageClipboard.fingerprint(jpeg);
+      final fpPng = await ImageClipboard.fingerprint(png);
+      expect(fpJpeg, isNotNull);
+      expect(fpJpeg, fpPng); // ...same picture → same fingerprint
+    });
+
+    test('different pictures get different fingerprints', () async {
+      final a = await ImageClipboard.fingerprint(sampleJpeg(seed: 0));
+      final b = await ImageClipboard.fingerprint(sampleJpeg(seed: 133));
+      expect(a, isNotNull);
+      expect(a, isNot(b));
+    });
+
+    test('undecodable bytes -> null', () async {
+      expect(
+        await ImageClipboard.fingerprint(Uint8List.fromList([1, 2, 3, 4])),
+        isNull,
+      );
+    });
+  });
 }
