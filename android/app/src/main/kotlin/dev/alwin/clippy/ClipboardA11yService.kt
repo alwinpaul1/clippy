@@ -27,8 +27,13 @@ import java.io.File
  * service drains and syncs (engine dedup absorbs repeats).
  */
 class ClipboardA11yService : AccessibilityService() {
-    private var lastText: String? = null
-    private var lastImageKey: String? = null
+    // @Volatile: written from the capture worker thread (a large image's read +
+    // queue write run off the a11y main thread) and the screenshot-observer
+    // thread, and read on the main thread by the focus-trick path — publish the
+    // writes across threads. They're dedup HINTS (a stale read only risks a
+    // harmless re-emit the downstream engine dedup absorbs), so no lock needed.
+    @Volatile private var lastText: String? = null
+    @Volatile private var lastImageKey: String? = null
     private var busy = false
     private val main = Handler(Looper.getMainLooper())
     private var pending: Runnable? = null
@@ -211,7 +216,7 @@ class ClipboardA11yService : AccessibilityService() {
 
     private fun attemptRead() {
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        if (capture(cm)) return
+        if (capture(cm, allowFocusTrick = true)) return
         focusTrickRead(cm)
     }
 
@@ -219,7 +224,7 @@ class ClipboardA11yService : AccessibilityService() {
 
     private fun onClipChanged(cm: ClipboardManager) {
         // 1) Direct read — does the AS context have clipboard access in bg?
-        if (capture(cm)) return
+        if (capture(cm, allowFocusTrick = true)) return
         // 2) Fallback: focus-trick overlay (needs SYSTEM_ALERT_WINDOW).
         focusTrickRead(cm)
     }
@@ -227,8 +232,17 @@ class ClipboardA11yService : AccessibilityService() {
     // Read whatever's on the clipboard and queue it. Image first: a Gallery-style
     // copy is a bare content:// image URI (coerceToText would yield the useless
     // "content://…" string), so resolve the bytes and NEVER fall through to text
-    // for an image clip. Returns true once something was captured.
-    private fun capture(cm: ClipboardManager): Boolean {
+    // for an image clip. Returns true once something was captured (or, for the
+    // direct-read image path, once the read has been handed to a worker).
+    //
+    // [allowFocusTrick] is true on the DIRECT read (attemptRead / clip listener):
+    // an image's full readBytes + queue write are offloaded to a worker so a large
+    // image can't ANR the a11y main thread, and a read failure (the URI grant
+    // needs focus) posts the focus-trick fallback. On the focus-trick's OWN
+    // re-read it is false — the read must run synchronously WHILE the 1px overlay
+    // holds focus (so the grant applies), and it must not re-arm the focus-trick
+    // (which would loop). Clip detection stays on the main thread either way.
+    private fun capture(cm: ClipboardManager, allowFocusTrick: Boolean): Boolean {
         val item = try {
             cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)
         } catch (_: Exception) {
@@ -241,7 +255,13 @@ class ClipboardA11yService : AccessibilityService() {
             } catch (_: Exception) {
                 null
             } ?: ""
-            if (mime.startsWith("image/")) return emitClipImage(uri, mime)
+            if (mime.startsWith("image/")) {
+                if (!allowFocusTrick) return emitClipImage(uri, mime)
+                Thread {
+                    if (!emitClipImage(uri, mime)) main.post { focusTrickRead(cm) }
+                }.start()
+                return true
+            }
         }
         val text = try {
             item.coerceToText(this)?.toString()?.takeIf { it.isNotBlank() }
@@ -299,7 +319,9 @@ class ClipboardA11yService : AccessibilityService() {
         }
         view.viewTreeObserver.addOnWindowFocusChangeListener { hasFocus ->
             if (!hasFocus) return@addOnWindowFocusChangeListener
-            capture(cm)
+            // Synchronous read while we still hold focus (allowFocusTrick = false:
+            // read now, don't re-arm the overlay), then drop the overlay.
+            capture(cm, allowFocusTrick = false)
             finish()
         }
         try {
@@ -314,6 +336,11 @@ class ClipboardA11yService : AccessibilityService() {
     private fun emit(text: String) {
         if (text == lastText) return
         lastText = text
+        // A text copy supersedes the last image, so a LATER re-copy of that image
+        // is genuine — clear the image guard (emitImage clears the text guard for
+        // the reverse). Without this the two guards never reset each other, so an
+        // interleaved re-copy (image → text → same image) is silently dropped.
+        lastImageKey = null
         try {
             val dir = File(filesDir, "clip_queue")
             dir.mkdirs()
@@ -322,6 +349,7 @@ class ClipboardA11yService : AccessibilityService() {
     }
 
     private fun emitImage(bytes: ByteArray, ext: String) {
+        lastText = null // an image copy supersedes the last text (see emit)
         try {
             val dir = File(filesDir, "clip_queue")
             dir.mkdirs()
