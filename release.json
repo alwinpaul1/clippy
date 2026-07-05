@@ -1,12 +1,7 @@
 {
   "notes": {
     "features": [],
-    "improvements": [
-      "Images now sync instantly, at full quality"
-    ],
-    "fixes": [
-      "Copying from your browser's address bar now syncs",
-      "Synced images now paste into other apps"
-    ]
+    "improvements": [],
+    "fixes": []
   }
 }
