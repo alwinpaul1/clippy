@@ -29,6 +29,10 @@ class FakeCryptoBox implements CryptoBox {
     }
     return clip.ciphertext.substring('enc:'.length);
   }
+
+  @override
+  Future<List<String>> openAll(List<RemoteClip> clips) async =>
+      [for (final c in clips) await open(c)];
 }
 
 class InMemoryStateStore implements StateStore {

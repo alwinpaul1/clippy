@@ -39,14 +39,29 @@ class HistoryStore {
     final sorted = [...clips]
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-    final items = <HistoryItem>[];
+    // Pass 1: pick the clips to show (collapse consecutive dupes, cap to
+    // capacity) — no decryption yet.
+    final chosen = <RemoteClip>[];
     String? previousHash;
     for (final clip in sorted) {
       if (clip.hash == previousHash) continue; // collapse consecutive dupes
       previousHash = clip.hash;
-      var dec = _decrypted[clip.hash];
-      if (dec == null) {
-        final text = await _crypto.open(clip);
+      chosen.add(clip);
+      if (chosen.length >= _capacity) break;
+    }
+
+    // Pass 2: decrypt only the clips we haven't seen before, in ONE batch that
+    // the crypto box runs off the UI isolate (so a snapshot of image clips
+    // can't freeze the loading spinner). Cached hashes are reused as-is.
+    final uncached = [
+      for (final c in chosen)
+        if (!_decrypted.containsKey(c.hash)) c,
+    ];
+    if (uncached.isNotEmpty) {
+      final plains = await _crypto.openAll(uncached);
+      for (var i = 0; i < uncached.length; i++) {
+        final clip = uncached[i];
+        final text = plains[i];
         Uint8List? bytes;
         if (clip.kind == 'image') {
           try {
@@ -55,21 +70,23 @@ class HistoryStore {
             bytes = null;
           }
         }
-        dec = (text: text, bytes: bytes);
-        _decrypted[clip.hash] = dec;
+        _decrypted[clip.hash] = (text: text, bytes: bytes);
       }
-      items.add(HistoryItem(
-        text: dec.text,
-        hash: clip.hash,
-        source: clip.source,
-        device: clip.device,
-        kind: clip.kind,
-        mime: clip.mime,
-        imageBytes: dec.bytes,
-        timestamp: clip.timestamp,
-      ));
-      if (items.length >= _capacity) break;
     }
+
+    final items = [
+      for (final clip in chosen)
+        HistoryItem(
+          text: _decrypted[clip.hash]!.text,
+          hash: clip.hash,
+          source: clip.source,
+          device: clip.device,
+          kind: clip.kind,
+          mime: clip.mime,
+          imageBytes: _decrypted[clip.hash]!.bytes,
+          timestamp: clip.timestamp,
+        ),
+    ];
     // Bound the cache to what's currently shown, so it can't grow past capacity
     // (an image payload each) as clips scroll past the cap.
     final shown = items.map((i) => i.hash).toSet();
