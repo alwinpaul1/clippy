@@ -134,15 +134,14 @@ class ClipController extends ChangeNotifier
               })
           .toList();
       await prefs.setString(cacheKey, jsonEncode(small));
-      // If the last-applied clip was deleted (here or on another device),
-      // clear its persisted hash so re-copying that content syncs again
-      // instead of being deduped by the engine's Rule 2b.
-      final last = await state.readLastAppliedHash();
-      if (last != null &&
-          last.isNotEmpty &&
-          history.every((i) => i.hash != last)) {
-        await state.writeLastAppliedHash('');
-      }
+      // NB: we deliberately do NOT clear lastAppliedHash when the applied clip
+      // leaves history (Clear all / deleting the current clip). The content is
+      // usually still on the system clipboard, so wiping the dedup guard makes
+      // the next passive re-read (app reopen, a fresh isolate, the background
+      // drain) re-upload it — the cleared/deleted clip "bounces back" as a new
+      // clip. Keeping the guard makes Clear all actually stick. Tradeoff:
+      // re-copying that exact content again is deduped until something else is
+      // copied first (a rare edge; copying anything else resets the guard).
     });
     _incomingSub = _store!.incoming.listen((clip) async {
       final actions = await _engine!.onRemoteSnapshot(clip);
