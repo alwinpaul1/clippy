@@ -14,6 +14,7 @@ import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Background clipboard capture without being the keyboard, via an
@@ -27,14 +28,18 @@ import java.io.File
  * service drains and syncs (engine dedup absorbs repeats).
  */
 class ClipboardA11yService : AccessibilityService() {
-    // @Volatile: written from the capture worker thread (a large image's read +
-    // queue write run off the a11y main thread) and the screenshot-observer
-    // thread, and read on the main thread by the focus-trick path — publish the
-    // writes across threads. They're dedup HINTS (a stale read only risks a
-    // harmless re-emit the downstream engine dedup absorbs), so no lock needed.
-    @Volatile private var lastText: String? = null
-    @Volatile private var lastImageKey: String? = null
+    // The last text / image we queued, for consecutive-duplicate dedup. Written
+    // and read only on the a11y main thread (clipboard capture is synchronous;
+    // the screenshot observer's worker calls emitImage but never touches these),
+    // so no cross-thread synchronization is needed.
+    private var lastText: String? = null
+    private var lastImageKey: String? = null
     private var busy = false
+    // Guarantees unique queue filenames: emitImage is reachable from both the
+    // main thread (clipboard capture) and the screenshot-observer worker, so two
+    // images produced in the same millisecond would otherwise write the same
+    // `<ts>.<ext>` file and one would be lost/corrupted.
+    private val emitSeq = AtomicInteger(0)
     private val main = Handler(Looper.getMainLooper())
     private var pending: Runnable? = null
 
@@ -216,7 +221,7 @@ class ClipboardA11yService : AccessibilityService() {
 
     private fun attemptRead() {
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        if (capture(cm, allowFocusTrick = true)) return
+        if (capture(cm)) return
         focusTrickRead(cm)
     }
 
@@ -224,7 +229,7 @@ class ClipboardA11yService : AccessibilityService() {
 
     private fun onClipChanged(cm: ClipboardManager) {
         // 1) Direct read — does the AS context have clipboard access in bg?
-        if (capture(cm, allowFocusTrick = true)) return
+        if (capture(cm)) return
         // 2) Fallback: focus-trick overlay (needs SYSTEM_ALERT_WINDOW).
         focusTrickRead(cm)
     }
@@ -232,17 +237,15 @@ class ClipboardA11yService : AccessibilityService() {
     // Read whatever's on the clipboard and queue it. Image first: a Gallery-style
     // copy is a bare content:// image URI (coerceToText would yield the useless
     // "content://…" string), so resolve the bytes and NEVER fall through to text
-    // for an image clip. Returns true once something was captured (or, for the
-    // direct-read image path, once the read has been handed to a worker).
+    // for an image clip. Returns true once something was captured.
     //
-    // [allowFocusTrick] is true on the DIRECT read (attemptRead / clip listener):
-    // an image's full readBytes + queue write are offloaded to a worker so a large
-    // image can't ANR the a11y main thread, and a read failure (the URI grant
-    // needs focus) posts the focus-trick fallback. On the focus-trick's OWN
-    // re-read it is false — the read must run synchronously WHILE the 1px overlay
-    // holds focus (so the grant applies), and it must not re-arm the focus-trick
-    // (which would loop). Clip detection stays on the main thread either way.
-    private fun capture(cm: ClipboardManager, allowFocusTrick: Boolean): Boolean {
+    // Runs synchronously on the a11y main thread. Every caller (attemptRead, the
+    // clip listener, the focus-trick focus callback) dispatches on main, so the
+    // capture/dedup path is serialized — the lastText/lastImageKey check-then-set
+    // and the emit filename generation rely on that. (A large image reads inline
+    // here; offloading it must preserve this serialization AND the focus-trick's
+    // read-while-focused grant, which needs on-device verification — not done.)
+    private fun capture(cm: ClipboardManager): Boolean {
         val item = try {
             cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)
         } catch (_: Exception) {
@@ -255,13 +258,7 @@ class ClipboardA11yService : AccessibilityService() {
             } catch (_: Exception) {
                 null
             } ?: ""
-            if (mime.startsWith("image/")) {
-                if (!allowFocusTrick) return emitClipImage(uri, mime)
-                Thread {
-                    if (!emitClipImage(uri, mime)) main.post { focusTrickRead(cm) }
-                }.start()
-                return true
-            }
+            if (mime.startsWith("image/")) return emitClipImage(uri, mime)
         }
         val text = try {
             item.coerceToText(this)?.toString()?.takeIf { it.isNotBlank() }
@@ -286,6 +283,12 @@ class ClipboardA11yService : AccessibilityService() {
             val key = "$uri:${bytes.size}"
             if (key == lastImageKey) return true // already captured this copy
             lastImageKey = key
+            // A clipboard image supersedes the last text, so a later re-copy of
+            // that text is genuine — clear the text guard (emit() clears the image
+            // guard for the reverse). Done HERE, not in emitImage: the screenshot
+            // observer also calls emitImage but never changes the clipboard, so it
+            // must not disturb the text guard.
+            lastText = null
             val ext = when (mime) {
                 "image/jpeg" -> "jpg"
                 "image/webp" -> "webp"
@@ -319,9 +322,7 @@ class ClipboardA11yService : AccessibilityService() {
         }
         view.viewTreeObserver.addOnWindowFocusChangeListener { hasFocus ->
             if (!hasFocus) return@addOnWindowFocusChangeListener
-            // Synchronous read while we still hold focus (allowFocusTrick = false:
-            // read now, don't re-arm the overlay), then drop the overlay.
-            capture(cm, allowFocusTrick = false)
+            capture(cm)
             finish()
         }
         try {
@@ -337,30 +338,32 @@ class ClipboardA11yService : AccessibilityService() {
         if (text == lastText) return
         lastText = text
         // A text copy supersedes the last image, so a LATER re-copy of that image
-        // is genuine — clear the image guard (emitImage clears the text guard for
-        // the reverse). Without this the two guards never reset each other, so an
-        // interleaved re-copy (image → text → same image) is silently dropped.
+        // is genuine — clear the image guard (emitClipImage clears the text guard
+        // for the reverse). Without this the two guards never reset each other, so
+        // an interleaved re-copy (image → text → same image) is silently dropped.
         lastImageKey = null
         try {
             val dir = File(filesDir, "clip_queue")
             dir.mkdirs()
-            File(dir, "${System.currentTimeMillis()}.txt").writeText(text)
+            val name = "${System.currentTimeMillis()}_${emitSeq.getAndIncrement()}"
+            File(dir, "$name.txt").writeText(text)
         } catch (_: Exception) {}
     }
 
     private fun emitImage(bytes: ByteArray, ext: String) {
-        lastText = null // an image copy supersedes the last text (see emit)
         try {
             val dir = File(filesDir, "clip_queue")
             dir.mkdirs()
             // Stage as .part then rename: the Dart watcher fires on create, and
             // an atomic rename guarantees it never reads a half-written image.
-            val ts = System.currentTimeMillis()
-            val part = File(dir, "$ts.$ext.part")
+            // The seq suffix keeps the name unique across concurrent callers (the
+            // drain keys off the final `.ext` only, so `<ts>_<n>.<ext>` is fine).
+            val name = "${System.currentTimeMillis()}_${emitSeq.getAndIncrement()}"
+            val part = File(dir, "$name.$ext.part")
             part.writeBytes(bytes)
             // On rename failure the drain would never pick up the .part; delete
             // it so a retry (next onChange) isn't blocked by a stale orphan.
-            if (!part.renameTo(File(dir, "$ts.$ext"))) part.delete()
+            if (!part.renameTo(File(dir, "$name.$ext"))) part.delete()
         } catch (_: Exception) {}
     }
 
