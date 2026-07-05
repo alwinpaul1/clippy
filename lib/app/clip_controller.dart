@@ -346,10 +346,23 @@ class ClipController extends ChangeNotifier
     }
   }
 
+  /// Tap-to-apply: put an existing history item back on the system clipboard.
+  /// It must NOT re-upload — it is already in the room. So first record it as
+  /// last-applied (before writing, so the persisted hash is in place when the
+  /// re-capture drains): on Android the write pops the "Copied" toast that our
+  /// AccessibilityService treats as a copy, and on desktop the clipboard
+  /// watcher fires — both would otherwise re-broadcast a duplicate. The
+  /// engine's echo guard (Rule 2b, persisted + cross-isolate) then drops it.
+  /// Images also prime the format-agnostic fingerprint so a re-encoded
+  /// read-back (macOS hands a JPEG back as PNG) is still caught on the watcher
+  /// path; text primes the exact-match guard.
   Future<void> applyItem(HistoryItem item) async {
+    await _engine?.noteApplied(item.hash);
     if (item.isImage && item.imageBytes != null) {
+      _handledImageFp = await ImageClipboard.fingerprint(item.imageBytes!);
       await ImageClipboard.write(item.imageBytes!);
     } else {
+      _handledText = item.text;
       await _historyStore?.applyItem(item);
     }
   }
