@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:clippy/core/update/update_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:clippy/core/update/update_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 UpdateService svc(String body, {int code = 200}) => UpdateService(
       manifestUri: Uri.parse('https://relay.test/version.json'),
@@ -36,5 +38,38 @@ void main() {
 
   test('null on malformed json', () async {
     expect(await svc('not-json').check(), isNull);
+  });
+
+  // checkOrThrow — the manual "Check for updates" path must distinguish
+  // "up to date" from a real failure (so Settings can say "Couldn't check").
+  test('checkOrThrow throws on a non-200 manifest', () {
+    expect(svc('nope', code: 500).checkOrThrow(), throwsA(anything));
+  });
+
+  test('checkOrThrow rethrows a network error (offline)', () {
+    final s = UpdateService(
+      manifestUri: Uri.parse('https://relay.test/version.json'),
+      currentVersion: () async => (version: '1.0.0', build: 1),
+      client: MockClient((_) async => throw const SocketException('offline')),
+    );
+    expect(s.checkOrThrow(), throwsA(anything));
+  });
+
+  test('checkOrThrow returns null when up to date', () async {
+    expect(
+      await svc(jsonEncode({'version': '1.0.0', 'build': 1})).checkOrThrow(),
+      isNull,
+    );
+  });
+
+  // Dismissal is keyed on version+build, so a build-only re-release of the
+  // same semver is not permanently suppressed by dismissing the earlier build.
+  test('dismissal round-trips on the version+build key', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({});
+    final s = svc('{}');
+    await s.dismiss('1.0.1+2');
+    expect(await s.isDismissed('1.0.1+2'), isTrue);
+    expect(await s.isDismissed('1.0.1+3'), isFalse); // build-only bump not hidden
   });
 }

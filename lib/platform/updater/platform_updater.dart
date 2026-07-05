@@ -46,12 +46,17 @@ Future<void> downloadTo(
     final total = res.contentLength ?? 0;
     var received = 0;
     final sink = dest.openWrite();
-    await for (final chunk in res.stream) {
-      sink.add(chunk);
-      received += chunk.length;
-      if (total > 0) onProgress?.call(received / total);
+    try {
+      await for (final chunk in res.stream) {
+        sink.add(chunk);
+        received += chunk.length;
+        if (total > 0) onProgress?.call(received / total);
+      }
+    } finally {
+      // Close even if the stream errors mid-download, so a dropped connection
+      // doesn't leak the file handle onto the partial artifact.
+      await sink.close();
     }
-    await sink.close();
   } finally {
     if (client == null) c.close();
   }
