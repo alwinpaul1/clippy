@@ -193,9 +193,32 @@ jobs:
             echo "project token as the RAILWAY_TOKEN repo secret to enable auto-deploy."
             exit 0
           fi
-          # railway up uploads the working dir. --no-gitignore is REQUIRED: newer
+          # Upload DETACHED, then verify for real (below). With --ci the CLI
+          # attaches to Railway's build-log stream and derives its exit code from
+          # it — so a flaky stream ("Failed to stream build logs") makes it exit 1
+          # even when the deploy succeeds (it can't read the terminal status, so
+          # it fails pessimistically). --detach returns once the build is queued
+          # and can't be tripped by the stream. --no-gitignore is REQUIRED: newer
           # railway CLIs honour .gitignore (which excludes server/web/downloads/,
           # the CI-staged artifacts), so without it the download files + version
           # .json are dropped and every /download 404s. .railwayignore still
           # trims build/, .dart_tool/, the Flutter app dirs, etc.
-          railway up --ci --no-gitignore --service clippy-relay
+          railway up --detach --no-gitignore --service clippy-relay
+
+          # Trust the served result, not the CLI: poll version.json until the
+          # relay serves the version we just built (the artifacts + manifest are
+          # part of this same upload). Fails only if it never goes live.
+          EXPECT=$(grep -E '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//' | cut -d'+' -f1 | tr -d '[:space:]')
+          URL="https://clippy-relay-production.up.railway.app/version.json"
+          echo "Waiting for relay to serve $EXPECT ..."
+          for i in $(seq 1 40); do
+            GOT=$(curl -fsS "$URL" 2>/dev/null | python3 -c "import sys,json;print(json.load(sys.stdin).get('version',''))" 2>/dev/null || true)
+            echo "  poll $i: served=${GOT:-<none>} expect=$EXPECT"
+            if [ "$GOT" = "$EXPECT" ]; then
+              echo "::notice::Deploy verified — relay serving $EXPECT"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Relay did not serve $EXPECT within ~10 min — deploy may have failed."
+          exit 1
