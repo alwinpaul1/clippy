@@ -155,9 +155,6 @@ class ClipboardA11yService : AccessibilityService() {
         }
     }
 
-    private var lastPoll = 0L
-    private var trailing: Runnable? = null
-
     // Lowercased "copied to clipboard" toast wording for the locales we can
     // reasonably expect. Matching keeps the trigger off unrelated system toasts
     // (e.g. "Screenshot saved") so it doesn't flicker. Other languages fall
@@ -192,43 +189,14 @@ class ClipboardA11yService : AccessibilityService() {
             }
             return
         }
-        // SECONDARY trigger (apps whose copy does NOT toast): a Copy-toolbar tap
-        // arrives as TYPE_VIEW_CLICKED. We deliberately do NOT trigger on
-        // TYPE_VIEW_TEXT_SELECTION_CHANGED: every keystroke while typing fires a
-        // (collapsed) selection change, and in a NON-EditText input (Compose /
-        // WebView / custom field — which the EditText guard below can't catch)
-        // that fired the focus-trick overlay on each character, flickering the
-        // screen. A selection change is never itself a copy; real copies are
-        // covered by the Toast trigger above plus this click path.
-        if (t != AccessibilityEvent.TYPE_VIEW_CLICKED) return
-        val pkg = event.packageName?.toString().orEmpty().lowercase()
-        val cls = event.className?.toString().orEmpty()
-        val fromIme = pkg.contains("inputmethod") || pkg.contains("keyboard") ||
-            pkg.contains("honeyboard") || pkg.contains("gboard") ||
-            pkg.contains("swiftkey")
-        if (fromIme || cls.contains("EditText")) return
-        val now = System.currentTimeMillis()
-        val wait = 800 - (now - lastPoll)
-        if (wait <= 0) {
-            lastPoll = now
-            attemptRead()
-            // A Copy tap's click event can arrive BEFORE the system commits
-            // the clipboard — one follow-up read catches the fresh content.
-            scheduleTrailing(600)
-        } else if (trailing == null) {
-            scheduleTrailing(wait)
-        }
-    }
-
-    private fun scheduleTrailing(delayMs: Long) {
-        if (trailing != null) return
-        val r = Runnable {
-            trailing = null
-            lastPoll = System.currentTimeMillis()
-            attemptRead()
-        }
-        trailing = r
-        main.postDelayed(r, delayMs)
+        // No other trigger. We used to also fire on TYPE_VIEW_CLICKED (a Copy-
+        // toolbar tap) and TYPE_VIEW_TEXT_SELECTION_CHANGED, but while Clippy is
+        // backgrounded the read pops a 1px focus-grabbing overlay, so firing it
+        // on every tap/keystroke flashed the screen (tapping a non-EditText
+        // input, opening a keyboard, tapping a button, …). The "Copied." system
+        // toast above is a precise copy signal, so we trigger ONLY on that. A
+        // copy still briefly flashes as the overlay grabs focus to read; taps
+        // and keyboards no longer do.
     }
 
     private fun attemptRead() {
