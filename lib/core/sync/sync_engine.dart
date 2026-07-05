@@ -97,6 +97,22 @@ class SyncEngine {
     return [UploadClip(clip)];
   }
 
+  /// Record that WE just placed [hash]'s content on the system clipboard
+  /// ourselves — tap-to-apply of an existing history item
+  /// (`ClipController.applyItem`). The resulting local re-capture (desktop
+  /// clipboard watcher, or Android's AccessibilityService firing on the system
+  /// "Copied" toast → clip queue → drain) must NOT be re-uploaded as a new
+  /// clip. Suppress it exactly as applying a remote clip does: the one-shot
+  /// in-memory echo window (Rule 2) plus the persisted last-applied hash
+  /// (Rule 2b) — the latter is what covers the Android drain, which may run in
+  /// the foreground-service isolate rather than this one. [hash] is the item's
+  /// content fingerprint (RemoteClip.hash == fingerprint(plaintext)).
+  Future<void> noteApplied(String hash) async {
+    _expectedEchoHash = hash;
+    _expectedEchoExpiry = _clock().add(_echoWindow);
+    await _setLastApplied(hash);
+  }
+
   /// Spec §7 — On remote snapshot.
   Future<List<SyncAction>> onRemoteSnapshot(RemoteClip clip) async {
     // Rule 1: never react to our own writes.

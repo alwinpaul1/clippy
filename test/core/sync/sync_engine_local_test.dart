@@ -143,6 +143,34 @@ void main() {
     final actions = await engine.onLocalImage('imgdata');
     expect(actions, isEmpty);
   });
+
+  // noteApplied — tap-to-apply of an existing history item must not re-upload.
+  test('noteApplied suppresses the re-capture echo of a tapped text item',
+      () async {
+    final engine = build();
+    // Tapping an OLDER item (not the current lastApplied) re-applies it.
+    await engine.noteApplied('h:old-note');
+    final echo = await engine
+        .onLocalClip(const ClipEvent(text: 'old-note', byteSize: 8));
+    expect(echo, isEmpty, reason: 're-applied item must not re-broadcast');
+    // And it persisted, so the cross-isolate Android drain dedups it too.
+    expect(await store.readLastAppliedHash(), 'h:old-note');
+  });
+
+  test('noteApplied suppresses an image re-capture (persisted Rule 2b)',
+      () async {
+    final engine = build();
+    await engine.noteApplied('h:imgbytes');
+    expect(await engine.onLocalImage('imgbytes'), isEmpty);
+  });
+
+  test('a DIFFERENT clip copied after noteApplied still uploads', () async {
+    final engine = build();
+    await engine.noteApplied('h:tapped');
+    final other =
+        await engine.onLocalClip(const ClipEvent(text: 'fresh', byteSize: 5));
+    expect(other.single, isA<UploadClip>());
+  });
 }
 
 // Mutable clock backing for the expiry test.
