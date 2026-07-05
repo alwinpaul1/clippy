@@ -22,8 +22,12 @@ class WebSocketClipStore {
 
   RelayTransport? _transport;
   StreamSubscription<String>? _sub;
+  Timer? _reconnectTimer;
   bool _closed = false;
   int _backoffMs = _minBackoffMs;
+  // Debounce for refreshNow so rapid app focus/blur toggles don't thrash the
+  // socket. Epoch start = "never refreshed", so the first resume always fires.
+  DateTime _lastRefresh = DateTime.fromMillisecondsSinceEpoch(0);
 
   final List<RemoteClip> _history = [];
   final _historyController = StreamController<List<RemoteClip>>.broadcast();
@@ -76,9 +80,30 @@ class WebSocketClipStore {
     _setConnected(false);
     final delay = _backoffMs;
     _backoffMs = (_backoffMs * 2).clamp(_minBackoffMs, _maxBackoffMs);
-    Timer(Duration(milliseconds: delay), () {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(Duration(milliseconds: delay), () {
       if (!_closed) _open();
     });
+  }
+
+  /// Force an immediate reconnect + history refresh, bypassing backoff. Called
+  /// when the app returns to the foreground: a socket that went HALF-OPEN while
+  /// backgrounded / asleep looks connected but delivers nothing, so waiting for
+  /// the keepalive ping to notice would leave stale history for up to ~2× the
+  /// ping interval. Reconnecting on resume makes sync feel instant the moment
+  /// you look at a device. Debounced (2s) so focus/blur churn can't thrash it.
+  void refreshNow() {
+    if (_closed) return;
+    final now = DateTime.now();
+    if (now.difference(_lastRefresh) < const Duration(seconds: 2)) return;
+    _lastRefresh = now;
+    // Cancel the old subscription FIRST so closing the stale transport can't
+    // fire onDone -> _onDrop and schedule a competing reconnect.
+    _sub?.cancel();
+    _reconnectTimer?.cancel();
+    _transport?.close();
+    _backoffMs = _minBackoffMs;
+    _open();
   }
 
   void _setConnected(bool value) {
@@ -161,6 +186,7 @@ class WebSocketClipStore {
 
   Future<void> close() async {
     _closed = true;
+    _reconnectTimer?.cancel();
     await _sub?.cancel();
     await _transport?.close();
     await _historyController.close();
