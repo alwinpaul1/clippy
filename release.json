@@ -2,8 +2,11 @@
   "notes": {
     "features": [],
     "improvements": [
-      "In-app updates: Clippy now tells you when a new version is out and updates itself."
+      "Images now sync instantly, at full quality"
     ],
-    "fixes": []
+    "fixes": [
+      "Copying from your browser's address bar now syncs",
+      "Synced images now paste into other apps"
+    ]
   }
 }
