@@ -92,7 +92,8 @@ class _UpdateSheetState extends State<_UpdateSheet> {
       );
       // On Android the OS installer takes over; on desktop the app exits and
       // relaunches. Nothing more to do here.
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('In-app update failed: $e\n$st');
       if (mounted) {
         setState(() {
           _progress = null;
