@@ -88,4 +88,33 @@ void main() {
     expect(() => base64.decode(sealed.ciphertext), returnsNormally);
     expect(() => base64.decode(sealed.iv), returnsNormally);
   });
+
+  // openAll runs the batch on a background isolate (Isolate.run). These verify
+  // package:cryptography composes there and that order/large payloads survive.
+  test('openAll round-trips a batch in order (off-isolate decryption)',
+      () async {
+    final box = await AesGcmCryptoBox.fromMasterKey(keyA);
+    final plaintexts = [
+      'first',
+      'second',
+      base64.encode(List<int>.generate(200000, (i) => i % 256)), // ~image-sized
+      'last',
+    ];
+    final clips = [
+      for (final p in plaintexts) toRemote(await box.seal(p, source: 'macA')),
+    ];
+    expect(await box.openAll(clips), plaintexts);
+  });
+
+  test('openAll on an empty list returns empty (no isolate spawned)', () async {
+    final box = await AesGcmCryptoBox.fromMasterKey(keyA);
+    expect(await box.openAll(const []), isEmpty);
+  });
+
+  test('openAll throws if any clip is undecryptable (wrong key)', () async {
+    final mac = await AesGcmCryptoBox.fromMasterKey(keyA);
+    final attacker = await AesGcmCryptoBox.fromMasterKey(keyB);
+    final clips = [toRemote(await mac.seal('secret', source: 'macA'))];
+    expect(() => attacker.openAll(clips), throwsA(anything));
+  });
 }

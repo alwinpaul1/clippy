@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:cryptography/cryptography.dart';
 
@@ -82,4 +83,47 @@ class AesGcmCryptoBox implements CryptoBox {
     final clear = await _aes.decrypt(box, secretKey: _encKey);
     return utf8.decode(clear);
   }
+
+  @override
+  Future<List<String>> openAll(List<RemoteClip> clips) async {
+    if (clips.isEmpty) return const [];
+    // AES-GCM here is pure-Dart and CPU-bound; decrypting a whole snapshot
+    // (esp. image clips, MBs each) on the UI isolate freezes the loading
+    // spinner. Extract the raw key and run the batch on a throwaway isolate so
+    // the UI isolate stays free. The key never leaves the app; the spawned
+    // isolate is pure computation (no platform channels), so this is portable
+    // across macOS / Windows / Android.
+    final keyBytes = await _encKey.extractBytes();
+    final payloads = [
+      for (final c in clips) (c.ciphertext, c.iv),
+    ];
+    return Isolate.run(() => _decryptBatch(keyBytes, payloads));
+  }
+}
+
+/// Runs on a background isolate (see [AesGcmCryptoBox.openAll]). Rebuilds the
+/// cipher from the raw key bytes and decrypts each (ciphertext, iv) payload,
+/// returning plaintexts in order. Throws on the first undecryptable clip.
+Future<List<String>> _decryptBatch(
+  List<int> keyBytes,
+  List<(String, String)> payloads,
+) async {
+  final aes = AesGcm.with256bits();
+  final key = SecretKey(keyBytes);
+  final out = <String>[];
+  for (final (ciphertext, iv) in payloads) {
+    final blob = base64.decode(ciphertext);
+    final nonce = base64.decode(iv);
+    if (blob.length < AesGcmCryptoBox._gcmMacLength) {
+      throw const FormatException('ciphertext shorter than GCM MAC');
+    }
+    final cut = blob.length - AesGcmCryptoBox._gcmMacLength;
+    final box = SecretBox(
+      blob.sublist(0, cut),
+      nonce: nonce,
+      mac: Mac(blob.sublist(cut)),
+    );
+    out.add(utf8.decode(await aes.decrypt(box, secretKey: key)));
+  }
+  return out;
 }

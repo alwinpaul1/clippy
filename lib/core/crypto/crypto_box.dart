@@ -8,6 +8,13 @@ import '../models/remote_clip.dart';
 abstract class CryptoBox {
   Future<EncryptedClip> seal(String plaintext, {required String source});
   Future<String> open(RemoteClip clip);
+
+  /// Decrypt several clips at once, returning their plaintexts in the same
+  /// order. Exists so an implementation can move the (CPU-bound, pure-Dart)
+  /// decryption of a whole history snapshot OFF the UI isolate in one batch —
+  /// see [AesGcmCryptoBox]. Throws if any clip fails to decrypt.
+  Future<List<String>> openAll(List<RemoteClip> clips);
+
   Future<String> fingerprint(String plaintext);
 
   /// True once a shared key has been established (QR pairing, Plan 2).
