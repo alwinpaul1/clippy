@@ -29,6 +29,11 @@ abstract class ClipRepository {
 
   /// Drop the whole room's history.
   void clear(String room);
+
+  /// Remove the room entirely (its key too, not just its clips). Used to
+  /// reclaim a pairing code that holds no clips and has no connected devices —
+  /// an empty room has no data to lose and is recreated on the next clip.
+  void delete(String room);
 }
 
 class InMemoryClipRepository implements ClipRepository {
@@ -68,6 +73,11 @@ class InMemoryClipRepository implements ClipRepository {
   void clear(String room) {
     rooms[room]?.clear();
   }
+
+  @override
+  void delete(String room) {
+    rooms.remove(room);
+  }
 }
 
 /// Persists history to a JSON file (atomic temp-write + rename) so it survives
@@ -90,6 +100,12 @@ class FileClipRepository extends InMemoryClipRepository {
             .map((c) => (c as Map).cast<String, dynamic>())
             .toList();
       });
+      // Reclaim empty pairing codes left in the file (e.g. a room whose history
+      // was cleared while no device was connected, so the disconnect-time sweep
+      // never ran). An empty room has no data, so this loses nothing.
+      final before = rooms.length;
+      rooms.removeWhere((_, clips) => clips.isEmpty);
+      if (rooms.length != before) _persist();
     } catch (_) {
       // Corrupt/absent file → start empty.
     }
@@ -123,6 +139,12 @@ class FileClipRepository extends InMemoryClipRepository {
   @override
   void clear(String room) {
     super.clear(room);
+    _persist();
+  }
+
+  @override
+  void delete(String room) {
+    super.delete(room);
     _persist();
   }
 }
@@ -275,7 +297,16 @@ void _handleSocket(WebSocket ws) {
   String? room;
 
   void leave() {
-    if (room != null) roomClients[room]?.remove(ws);
+    final r = room;
+    if (r == null) return;
+    final clients = roomClients[r]?..remove(ws);
+    if (clients == null || clients.isEmpty) {
+      roomClients.remove(r); // no live sockets left — drop the empty set
+      // Last device for this pairing code just left: if it holds no clips,
+      // reclaim it. A room that still has clips is kept — its devices are only
+      // offline, not gone, and deleting it would lose their history.
+      if (repository.recent(r).isEmpty) repository.delete(r);
+    }
   }
 
   ws.listen(

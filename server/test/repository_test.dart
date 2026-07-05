@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:clippy_relay/relay.dart';
@@ -85,5 +86,40 @@ void main() {
     final r = FileClipRepository('/dev/null/relay.json');
     r.add('room', clip('a')); // must not throw
     expect(r.recent('room').single['hash'], 'h:a'); // served from memory
+  });
+
+  test('delete removes the room key entirely (not just its clips)', () {
+    final r = InMemoryClipRepository();
+    r.add('roomA', clip('a'));
+    r.add('roomB', clip('b'));
+    r.delete('roomA');
+    expect(r.rooms.containsKey('roomA'), isFalse); // key gone, not just emptied
+    expect(r.recent('roomB').single['hash'], 'h:b'); // other rooms untouched
+  });
+
+  test('startup drops empty rooms left in the persisted file', () async {
+    final dir = await Directory.systemTemp.createTemp('clippy_relay_gc');
+    final path = '${dir.path}/clippy.json';
+    try {
+      // Simulate a file where one room was cleared to empty (its key lingered)
+      // while another still holds clips.
+      FileClipRepository(path)
+        ..add('live', clip('keep'))
+        ..add('dead', clip('gone'))
+        ..clear('dead'); // leaves 'dead' present but empty on disk
+      // Precondition read the raw file (a fresh repo would already sweep it).
+      final onDisk = jsonDecode(File(path).readAsStringSync()) as Map;
+      expect(onDisk.containsKey('dead'), isTrue);
+      expect((onDisk['dead'] as List), isEmpty);
+
+      final restarted = FileClipRepository(path);
+      expect(restarted.rooms.containsKey('dead'), isFalse); // swept on load
+      expect(restarted.recent('live').single['hash'], 'h:keep'); // kept
+      // The sweep rewrote the file, so it's clean too.
+      final rewritten = jsonDecode(File(path).readAsStringSync()) as Map;
+      expect(rewritten.containsKey('dead'), isFalse);
+    } finally {
+      await dir.delete(recursive: true);
+    }
   });
 }

@@ -169,4 +169,38 @@ void main() {
 
     await a.close();
   });
+
+  test('an emptied room with no connected devices is reclaimed on disconnect',
+      () async {
+    final (a, aStream) = await connect(port());
+    a.add(jsonEncode({'type': 'join', 'room': 'temp'}));
+    await aStream.first; // history
+    a.add(jsonEncode(clipMsg('x')));
+    await aStream.firstWhere((m) => m['type'] == 'clip');
+    a.add(jsonEncode({'type': 'clear'})); // room now empty, A still connected
+    await aStream.firstWhere((m) => m['type'] == 'cleared');
+
+    await a.close(); // last device leaves an empty room
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    expect((repository as InMemoryClipRepository).rooms.containsKey('temp'),
+        isFalse, reason: 'empty pairing code should be reclaimed');
+    expect(roomClients.containsKey('temp'), isFalse); // no leaked client set
+  });
+
+  test('a room that still has clips is kept when its last device disconnects',
+      () async {
+    final (a, aStream) = await connect(port());
+    a.add(jsonEncode({'type': 'join', 'room': 'persist'}));
+    await aStream.first; // history
+    a.add(jsonEncode(clipMsg('keep')));
+    await aStream.firstWhere((m) => m['type'] == 'clip');
+
+    await a.close(); // no devices connected now, but they may be offline
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    expect(roomClients.containsKey('persist'), isFalse);
+    expect(repository.recent('persist').map((c) => c['hash']).toList(),
+        ['h:keep'], reason: 'history must survive when devices are only offline');
+  });
 }
