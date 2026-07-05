@@ -178,13 +178,6 @@ class ClipController extends ChangeNotifier
     });
     connected = _store!.isConnected; // catch the initial state
 
-    // Observe app lifecycle on EVERY platform: on resume we force an immediate
-    // socket refresh (see didChangeAppLifecycleState) so a device that was
-    // asleep / backgrounded — where its socket may have gone half-open — shows
-    // current history the instant you return to it, instead of waiting for the
-    // keepalive ping to notice.
-    WidgetsBinding.instance.addObserver(this);
-
     if (isDesktop) {
       clipboardWatcher.addListener(this);
       await clipboardWatcher.start();
@@ -202,8 +195,10 @@ class ClipController extends ChangeNotifier
       // the phone's clipboard without opening Clippy. Android requires a
       // foreground-service notification for this (kept at MIN importance).
       await ForegroundServiceManager.start();
-      // (Android 10+ blocks clipboard reads while backgrounded, so the resume
-      // handler also re-captures outgoing copies — see didChangeAppLifecycleState.)
+      // Android 10+ blocks clipboard reads while backgrounded (for every app,
+      // service or not), so capture outgoing copies the moment Clippy returns
+      // to the foreground instead.
+      WidgetsBinding.instance.addObserver(this);
       // Screenshots never touch the Android clipboard — watch MediaStore and
       // sync new ones directly. Not awaited: the first call pops the
       // photo-access dialog, and startup shouldn't block on the answer.
@@ -240,11 +235,7 @@ class ClipController extends ChangeNotifier
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) return;
-    // Every platform: replace a possibly-half-open socket NOW so returning to a
-    // device shows current history instantly (debounced inside the store).
-    _store?.refreshNow();
-    if (!isDesktop) {
+    if (state == AppLifecycleState.resumed && !isDesktop) {
       ForegroundServiceManager.pingAlive();
       onClipboardChanged();
       unawaited(_drainQueue());
