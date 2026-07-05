@@ -105,8 +105,12 @@ class DesktopTray with TrayListener, WindowListener {
       case 'show':
         await _show();
       case 'quit':
+        // The one real quit. Hard-exit so it bypasses macOS
+        // applicationShouldTerminate (which now cancels Cmd+Q / Dock-Quit to
+        // keep syncing in the menu bar). Nothing to flush — sync state is
+        // server-authoritative and prefs are written on change.
         await trayManager.destroy();
-        await windowManager.destroy();
+        exit(0);
     }
   }
 }
