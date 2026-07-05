@@ -363,29 +363,9 @@ class _BgSyncCardState extends State<_BgSyncCard> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final c = context.ck;
-    final active = _enabled && _overlay;
-    if (active) {
-      return _Card(
-        c,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-            child: Row(
-              children: [
-                Icon(Icons.sync, size: 20, color: c.green),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text('Background sync active',
-                      style: Ct.body(14, color: c.green,
-                          weight: FontWeight.w500)),
-                ),
-                Icon(Icons.check_circle, size: 18, color: c.green),
-              ],
-            ),
-          ),
-        ],
-      );
-    }
+    // Always show both setup rows (accessibility + overlay), each turning green
+    // when granted — rather than collapsing to a single "active" summary — so
+    // each permission's state stays visible.
     return _Card(
       c,
       children: [
