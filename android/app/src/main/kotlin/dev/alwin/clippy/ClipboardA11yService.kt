@@ -192,20 +192,21 @@ class ClipboardA11yService : AccessibilityService() {
             }
             return
         }
-        // SECONDARY trigger (apps whose copy does NOT toast): some apps' Copy is a
-        // real TYPE_VIEW_CLICKED; others COLLAPSE the selection
-        // (TEXT_SELECTION_CHANGED, from == to). A RANGED selection (from != to) is
-        // a drag — skip it. Typing (IME / EditText) is skipped.
-        val isSel = t == AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED
-        val isClick = t == AccessibilityEvent.TYPE_VIEW_CLICKED
-        if (!isSel && !isClick) return
+        // SECONDARY trigger (apps whose copy does NOT toast): a Copy-toolbar tap
+        // arrives as TYPE_VIEW_CLICKED. We deliberately do NOT trigger on
+        // TYPE_VIEW_TEXT_SELECTION_CHANGED: every keystroke while typing fires a
+        // (collapsed) selection change, and in a NON-EditText input (Compose /
+        // WebView / custom field — which the EditText guard below can't catch)
+        // that fired the focus-trick overlay on each character, flickering the
+        // screen. A selection change is never itself a copy; real copies are
+        // covered by the Toast trigger above plus this click path.
+        if (t != AccessibilityEvent.TYPE_VIEW_CLICKED) return
         val pkg = event.packageName?.toString().orEmpty().lowercase()
         val cls = event.className?.toString().orEmpty()
         val fromIme = pkg.contains("inputmethod") || pkg.contains("keyboard") ||
             pkg.contains("honeyboard") || pkg.contains("gboard") ||
             pkg.contains("swiftkey")
         if (fromIme || cls.contains("EditText")) return
-        if (isSel && event.fromIndex != event.toIndex) return
         val now = System.currentTimeMillis()
         val wait = 800 - (now - lastPoll)
         if (wait <= 0) {
