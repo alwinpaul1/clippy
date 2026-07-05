@@ -23,16 +23,26 @@ class UpdateService {
   static const _dismissKey = 'clippy.update.dismissed';
 
   /// Returns the manifest's [UpdateInfo] iff it is strictly newer than the
-  /// running app; null if up to date, offline, or the manifest is unreadable.
+  /// running app; null if up to date. THROWS on a non-200 response, a network
+  /// failure, or an unreadable manifest — so the manual "Check for updates"
+  /// path can tell "up to date" apart from "couldn't reach the relay".
+  Future<UpdateInfo?> checkOrThrow() async {
+    final res = await _client.get(manifestUri);
+    if (res.statusCode != 200) {
+      throw Exception('manifest returned HTTP ${res.statusCode}');
+    }
+    final info = UpdateInfo.fromJson(
+      (jsonDecode(res.body) as Map).cast<String, dynamic>(),
+    );
+    final cur = await _currentVersion();
+    return info.isNewerThan(cur.version, cur.build) ? info : null;
+  }
+
+  /// Silent check (automatic/startup path): the manifest's [UpdateInfo] iff
+  /// newer; null if up to date, offline, or the manifest is unreadable.
   Future<UpdateInfo?> check() async {
     try {
-      final res = await _client.get(manifestUri);
-      if (res.statusCode != 200) return null;
-      final info = UpdateInfo.fromJson(
-        (jsonDecode(res.body) as Map).cast<String, dynamic>(),
-      );
-      final cur = await _currentVersion();
-      return info.isNewerThan(cur.version, cur.build) ? info : null;
+      return await checkOrThrow();
     } catch (_) {
       return null;
     }
@@ -44,13 +54,16 @@ class UpdateService {
     return u.hasScheme ? u : manifestUri.resolve(pathOrUrl);
   }
 
-  Future<void> dismiss(String version) async {
+  /// [key] is a `version+build` identifier (see [UpdateController]) so a
+  /// build-only re-release of the same semver is not permanently suppressed by
+  /// a dismissal of the earlier build.
+  Future<void> dismiss(String key) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_dismissKey, version);
+    await prefs.setString(_dismissKey, key);
   }
 
-  Future<bool> isDismissed(String version) async {
+  Future<bool> isDismissed(String key) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_dismissKey) == version;
+    return prefs.getString(_dismissKey) == key;
   }
 }
