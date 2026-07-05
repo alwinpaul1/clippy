@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../platform/share_channel.dart';
 import 'permission_help_sheet.dart';
@@ -117,6 +118,8 @@ class SettingsPage extends StatelessWidget {
                   _Card(
                     c,
                     children: [
+                      const _VersionRow(),
+                      _Divider(c),
                       _ActionRow(
                         c,
                         icon: Icons.system_update_outlined,
@@ -317,6 +320,44 @@ class _ActionRow extends StatelessWidget {
             ?trailing,
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The running app's version, shown in the About card. Loaded asynchronously
+/// via package_info_plus — the same source the updater compares against.
+class _VersionRow extends StatefulWidget {
+  const _VersionRow();
+  @override
+  State<_VersionRow> createState() => _VersionRowState();
+}
+
+class _VersionRowState extends State<_VersionRow> {
+  String _version = '';
+
+  @override
+  void initState() {
+    super.initState();
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) {
+        setState(() => _version = '${info.version} (${info.buildNumber})');
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ck;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, size: 19, color: c.muted2),
+          const SizedBox(width: 14),
+          Expanded(child: Text('Version', style: Ct.body(15, color: c.ink))),
+          Text(_version, style: Ct.body(14, color: c.muted)),
+        ],
       ),
     );
   }
