@@ -85,6 +85,15 @@ abstract class ShareChannel {
     } catch (_) {}
   }
 
+  /// Clippy's App info page — where the ⋮ → "Allow restricted settings" gate
+  /// lives that Android puts on the Accessibility / display-over-apps toggles
+  /// for sideloaded installs.
+  static Future<void> openAppInfo() async {
+    try {
+      await _channel.invokeMethod<void>('openAppInfo');
+    } catch (_) {}
+  }
+
   /// Android fallback for image clipboard reads: Gallery-style copies put a
   /// content:// URI on the clipboard (no byte representation), which
   /// super_clipboard can't surface — the native side resolves the URI to
