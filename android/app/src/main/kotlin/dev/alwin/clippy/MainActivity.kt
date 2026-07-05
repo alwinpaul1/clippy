@@ -1,6 +1,7 @@
 package dev.alwin.clippy
 
 import android.Manifest
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.database.ContentObserver
@@ -92,10 +93,17 @@ class MainActivity : FlutterActivity() {
         channel!!.setMethodCallHandler { call, result ->
             when (call.method) {
                 "bgSyncStatus" -> {
-                    val id = "$packageName/.ClipboardA11yService"
+                    // Match on ComponentName, not a raw string: enabling the
+                    // service via the system Settings UI stores the FULL form
+                    // (pkg/pkg.Service), while a hand-built "pkg/.Service" is the
+                    // short form — unflattenFromString normalizes both, so the
+                    // status is detected however it was enabled.
+                    val svc = ComponentName(this, ClipboardA11yService::class.java)
                     val enabled = (Settings.Secure.getString(
                         contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-                    ) ?: "").split(':').any { it.equals(id, ignoreCase = true) }
+                    ) ?: "").split(':')
+                        .mapNotNull { ComponentName.unflattenFromString(it) }
+                        .any { it == svc }
                     result.success(
                         mapOf(
                             "enabled" to enabled,
