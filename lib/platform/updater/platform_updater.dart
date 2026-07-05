@@ -30,14 +30,19 @@ Future<void> downloadTo(
   Uri url,
   File dest, {
   void Function(double)? onProgress,
+  http.Client? client,
 }) async {
-  final client = http.Client();
+  final c = client ?? http.Client();
   try {
     final req = http.Request('GET', url);
-    final res = await client.send(req);
+    final res = await c.send(req);
     if (res.statusCode != 200) {
       throw HttpException('HTTP ${res.statusCode}', uri: url);
     }
+    // getTemporaryDirectory() can hand back a path whose directory doesn't
+    // exist yet (e.g. ~/Library/Caches/<bundle-id> on a fresh macOS install),
+    // so create the destination's parent before opening it for writing.
+    dest.parent.createSync(recursive: true);
     final total = res.contentLength ?? 0;
     var received = 0;
     final sink = dest.openWrite();
@@ -48,6 +53,6 @@ Future<void> downloadTo(
     }
     await sink.close();
   } finally {
-    client.close();
+    if (client == null) c.close();
   }
 }
