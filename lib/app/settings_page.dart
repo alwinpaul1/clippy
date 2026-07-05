@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart';
 
 import '../platform/share_channel.dart';
+import 'permission_help_sheet.dart';
 import 'theme.dart';
 import 'theme_controller.dart';
 import 'update_controller.dart';
@@ -377,7 +378,18 @@ class _BgSyncCardState extends State<_BgSyncCard> with WidgetsBindingObserver {
           labelColor: _enabled ? c.green : c.ink,
           trailing:
               _enabled ? null : Icon(Icons.chevron_right, size: 20, color: c.muted),
-          onTap: ShareChannel.openA11ySettings,
+          // Already granted → go straight to Settings (to turn it off). Not yet
+          // granted → walk them past Android's "restricted setting" gate first.
+          onTap: () => _enabled
+              ? ShareChannel.openA11ySettings()
+              : showPermissionHelpSheet(
+                  context,
+                  title: 'Enable background sync',
+                  whatFor: "Clippy reads new copies through Android's "
+                      'Accessibility service so it can sync while the app is '
+                      'closed.',
+                  onOpenSettings: ShareChannel.openA11ySettings,
+                ),
         ),
         _Divider(c),
         _ActionRow(
@@ -388,7 +400,15 @@ class _BgSyncCardState extends State<_BgSyncCard> with WidgetsBindingObserver {
           labelColor: _overlay ? c.green : c.ink,
           trailing:
               _overlay ? null : Icon(Icons.chevron_right, size: 20, color: c.muted),
-          onTap: ShareChannel.requestOverlay,
+          onTap: () => _overlay
+              ? ShareChannel.requestOverlay()
+              : showPermissionHelpSheet(
+                  context,
+                  title: 'Allow display over apps',
+                  whatFor: 'Clippy briefly draws over the screen to read the '
+                      'clipboard the moment you copy — part of background sync.',
+                  onOpenSettings: ShareChannel.requestOverlay,
+                ),
         ),
       ],
     );

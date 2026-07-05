@@ -202,9 +202,11 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                 }
-                // Deep-link to Clippy's app settings so the user can switch from
-                // "Select photos" to "Allow all" (can't be upgraded in-app).
-                "openPhotoSettings" -> {
+                // Deep-link to Clippy's App info page. Used both to switch photo
+                // access from "Select photos" to "Allow all", and to reach the
+                // ⋮ → "Allow restricted settings" gate that Android puts on the
+                // Accessibility / display-over-apps toggles for sideloaded apps.
+                "openPhotoSettings", "openAppInfo" -> {
                     startActivity(
                         Intent(
                             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
