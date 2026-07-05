@@ -28,4 +28,7 @@ Name: "{group}\Clippy"; Filename: "{app}\clippy.exe"
 Name: "{autodesktop}\Clippy"; Filename: "{app}\clippy.exe"
 
 [Run]
-Filename: "{app}\clippy.exe"; Description: "Launch Clippy"; Flags: nowait postinstall skipifsilent
+; No `skipifsilent`: the in-app updater runs this installer with /SILENT, and we
+; WANT it to relaunch Clippy afterwards (matching the macOS self-update). In an
+; interactive install this is the "Launch Clippy" checkbox on the Finished page.
+Filename: "{app}\clippy.exe"; Description: "Launch Clippy"; Flags: nowait postinstall
