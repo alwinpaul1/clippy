@@ -135,15 +135,44 @@ class ClipboardA11yService : AccessibilityService() {
     private var lastPoll = 0L
     private var trailing: Runnable? = null
 
+    // Lowercased "copied to clipboard" toast wording for the locales we can
+    // reasonably expect. Matching keeps the trigger off unrelated system toasts
+    // (e.g. "Screenshot saved") so it doesn't flicker. Other languages fall
+    // through to the selection-based trigger and the app-open read; extend as
+    // needed.
+    private val copyToastWords = listOf(
+        "copied", "kopiert", "copiado", "copié", "copie",
+        "copiato", "gekopieerd", "copiat",
+    )
+
+    private fun isCopyToast(text: List<CharSequence>): Boolean {
+        val joined = text.joinToString(" ").lowercase()
+        return copyToastWords.any { joined.contains(it) }
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // On One UI the bg clipboard listener is dead, so use accessibility
-        // events as the "user just copied" trigger to read via the focus-trick.
-        // Tapping "Copy" in Chrome fires NO click; it COLLAPSES the text
-        // selection (TEXT_SELECTION_CHANGED with from == to) — our copy signal.
-        // Some apps' Copy is a real TYPE_VIEW_CLICKED — keep that too. A RANGED
-        // selection (from != to) is a drag: skip it (reading then only flickers,
-        // nothing's on the clipboard yet). Typing (IME / EditText) is skipped.
+        // On One UI the background clipboard listener is dead, so use
+        // accessibility events as the "user just copied" trigger, then read the
+        // clipboard via the focus-trick overlay.
         val t = event?.eventType ?: return
+        // PRIMARY trigger: copying text posts a system Toast ("Copied.") from
+        // com.android.systemui. It's the ONLY signal a copy from Chrome's address
+        // bar (an EditText) produces — Chrome emits no selection-change or click
+        // we can see there. It also fires only on a real copy, so unlike the
+        // selection-based path below it never flickers on typing or dragging. We
+        // read only the Toast text to confirm it's a copy (never screen content),
+        // then read the clipboard.
+        if (t == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) {
+            if (event.packageName?.toString() == "com.android.systemui" &&
+                isCopyToast(event.text)) {
+                attemptRead()
+            }
+            return
+        }
+        // SECONDARY trigger (apps whose copy does NOT toast): some apps' Copy is a
+        // real TYPE_VIEW_CLICKED; others COLLAPSE the selection
+        // (TEXT_SELECTION_CHANGED, from == to). A RANGED selection (from != to) is
+        // a drag — skip it. Typing (IME / EditText) is skipped.
         val isSel = t == AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED
         val isClick = t == AccessibilityEvent.TYPE_VIEW_CLICKED
         if (!isSel && !isClick) return
