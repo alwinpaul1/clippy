@@ -14,6 +14,7 @@ import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import java.io.File
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -35,11 +36,21 @@ class ClipboardA11yService : AccessibilityService() {
     private var lastText: String? = null
     private var lastImageKey: String? = null
     private var busy = false
-    // Guarantees unique queue filenames: emitImage is reachable from both the
-    // main thread (clipboard capture) and the screenshot-observer worker, so two
+    // Guarantees unique queue filenames: emitImage is reachable from the capture
+    // executor (clipboard capture) and the screenshot-observer worker, so two
     // images produced in the same millisecond would otherwise write the same
     // `<ts>.<ext>` file and one would be lost/corrupted.
     private val emitSeq = AtomicInteger(0)
+
+    // Single background thread that runs every clipboard capture. SERIAL by
+    // design: it moves a large image's read + queue write off the a11y main
+    // thread (so a big copy can't ANR the service) WHILE keeping captures
+    // one-at-a-time, so the lastText/lastImageKey check-then-set dedup guards
+    // stay race-free (touched only on this thread). The focus-trick read is also
+    // dispatched here, with the overlay held focused until it completes so the
+    // cross-app URI grant applies. (Fix for the ANR that 1.0.12's raw
+    // per-trigger threads mis-handled — see the a11y-capture-threading notes.)
+    private val captureExec = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
     private var pending: Runnable? = null
 
@@ -221,17 +232,22 @@ class ClipboardA11yService : AccessibilityService() {
 
     private fun attemptRead() {
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        if (capture(cm)) return
-        focusTrickRead(cm)
+        // Off the a11y main thread (capture may read a multi-MB image), serial.
+        captureExec.execute {
+            if (!capture(cm)) main.post { focusTrickRead(cm) }
+        }
     }
 
     override fun onInterrupt() {}
 
     private fun onClipChanged(cm: ClipboardManager) {
-        // 1) Direct read — does the AS context have clipboard access in bg?
-        if (capture(cm)) return
-        // 2) Fallback: focus-trick overlay (needs SYSTEM_ALERT_WINDOW).
-        focusTrickRead(cm)
+        captureExec.execute {
+            // 1) Direct read — does the AS context have clipboard access in bg?
+            if (capture(cm)) return@execute
+            // 2) Fallback: focus-trick overlay (needs SYSTEM_ALERT_WINDOW), armed
+            //    on the main thread.
+            main.post { focusTrickRead(cm) }
+        }
     }
 
     // Read whatever's on the clipboard and queue it. Image first: a Gallery-style
@@ -239,12 +255,11 @@ class ClipboardA11yService : AccessibilityService() {
     // "content://…" string), so resolve the bytes and NEVER fall through to text
     // for an image clip. Returns true once something was captured.
     //
-    // Runs synchronously on the a11y main thread. Every caller (attemptRead, the
-    // clip listener, the focus-trick focus callback) dispatches on main, so the
-    // capture/dedup path is serialized — the lastText/lastImageKey check-then-set
-    // and the emit filename generation rely on that. (A large image reads inline
-    // here; offloading it must preserve this serialization AND the focus-trick's
-    // read-while-focused grant, which needs on-device verification — not done.)
+    // ALWAYS runs on the single-threaded captureExec — never the main thread and
+    // never concurrently with itself — so the lastText/lastImageKey check-then-set
+    // dedup guards and the emit filename generation are race-free without locks,
+    // and a large image's read+write can't block the a11y main thread. The
+    // focus-trick focus callback also dispatches here (see focusTrickRead).
     private fun capture(cm: ClipboardManager): Boolean {
         val item = try {
             cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)
@@ -316,14 +331,22 @@ class ClipboardA11yService : AccessibilityService() {
             PixelFormat.TRANSLUCENT,
         )
         var done = false
+        var readStarted = false
         fun finish() {
             if (done) return; done = true; busy = false
             try { wm.removeView(view) } catch (_: Exception) {}
         }
         view.viewTreeObserver.addOnWindowFocusChangeListener { hasFocus ->
-            if (!hasFocus) return@addOnWindowFocusChangeListener
-            capture(cm)
-            finish()
+            if (!hasFocus || readStarted) return@addOnWindowFocusChangeListener
+            readStarted = true
+            // Read on the serial capture thread (a large image must not block the
+            // main thread) WHILE this overlay still holds focus, so the cross-app
+            // URI read grant applies. Remove the overlay only AFTER the read
+            // completes — the 2s timeout below still bounds a stuck read.
+            captureExec.execute {
+                capture(cm)
+                main.post { finish() }
+            }
         }
         try {
             wm.addView(view, params)
@@ -374,6 +397,7 @@ class ClipboardA11yService : AccessibilityService() {
             } catch (_: Exception) {}
         }
         shotObserver = null
+        captureExec.shutdown()
         super.onDestroy()
     }
 }
