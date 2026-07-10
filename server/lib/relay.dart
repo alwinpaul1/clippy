@@ -10,11 +10,10 @@ import 'dart:io';
 /// payloads — never the master key, plaintext, or any identity. It is a dumb
 /// encrypted-message router that also keeps the last N clips per room (durably,
 /// see [ClipRepository]) so a reconnecting device catches up.
-// Must stay comfortably ABOVE the clients' unacked-resend bound (30): a
-// client proves delivery by finding its clip's hash in the reconnect history
-// snapshot, so a delivered clip evicted from a smaller history would look
-// "unproven" and be resent — re-stamped as the newest clip on every device.
-const int maxHistory = 60;
+// History depth is a UI concern only (it matches the clients' visible-history
+// capacity): delivery proof is the explicit 'ack' frame sent to the uploader,
+// so nothing correctness-critical depends on this value.
+const int maxHistory = 25;
 // Images sync at original quality with no downscaling, so this must fit a
 // full-screen Retina PNG raw: ~36MB image × ~1.78 (base64 → encrypted →
 // base64) ≈ 64M chars.
@@ -50,7 +49,11 @@ class InMemoryClipRepository implements ClipRepository {
   @override
   void add(String room, Map<String, dynamic> clip) {
     final list = rooms.putIfAbsent(room, () => []);
-    if (list.isNotEmpty && list.last['hash'] == clip['hash']) return;
+    // Same content anywhere in history moves to the top instead of appending a
+    // duplicate entry. This makes a client's resend of an unacked clip (the
+    // ack was lost with the socket) idempotent, and gives a deliberate re-copy
+    // its expected move-to-top.
+    list.removeWhere((c) => c['hash'] == clip['hash']);
     list.add(clip);
     if (list.length > maxHistory) {
       list.removeRange(0, list.length - maxHistory);
@@ -90,8 +93,25 @@ class InMemoryClipRepository implements ClipRepository {
 class FileClipRepository extends InMemoryClipRepository {
   final String path;
 
-  FileClipRepository(this.path) {
+  /// Coalescing window for disk writes. _persist() jsonEncodes EVERY room and
+  /// rewrites the whole file — with image ciphertexts retained, doing that
+  /// synchronously per incoming clip can block the single relay isolate for
+  /// seconds. Debouncing trades a [persistDelay] crash-loss window (already
+  /// tolerated — the class serves from memory when the volume fails) for
+  /// bounded write amplification under bursts.
+  final Duration persistDelay;
+  Timer? _persistTimer;
+
+  FileClipRepository(this.path,
+      {this.persistDelay = const Duration(seconds: 2)}) {
     _load();
+  }
+
+  void _schedulePersist() {
+    _persistTimer ??= Timer(persistDelay, () {
+      _persistTimer = null;
+      _persist();
+    });
   }
 
   void _load() {
@@ -130,26 +150,26 @@ class FileClipRepository extends InMemoryClipRepository {
   @override
   void add(String room, Map<String, dynamic> clip) {
     super.add(room, clip);
-    _persist();
+    _schedulePersist();
   }
 
   @override
   List<String> remove(String room, Set<String> hashes) {
     final removed = super.remove(room, hashes);
-    if (removed.isNotEmpty) _persist();
+    if (removed.isNotEmpty) _schedulePersist();
     return removed;
   }
 
   @override
   void clear(String room) {
     super.clear(room);
-    _persist();
+    _schedulePersist();
   }
 
   @override
   void delete(String room) {
     super.delete(room);
-    _persist();
+    _schedulePersist();
   }
 }
 
@@ -345,6 +365,12 @@ void _handleSocket(WebSocket ws) {
           final ciphertext = clip['ciphertext'];
           if (ciphertext is! String ||
               ciphertext.length > maxCiphertextChars) {
+            // Tell the sender this clip can NEVER succeed — a silent drop
+            // would leave it queued client-side and re-uploaded forever.
+            final h = clip['hash'];
+            if (h is String && ws.readyState == WebSocket.open) {
+              ws.add(jsonEncode({'type': 'reject', 'hash': h}));
+            }
             return;
           }
           // Server stamps the authoritative timestamp; ordering never trusts a
@@ -369,6 +395,12 @@ void _handleSocket(WebSocket ws) {
             if (peer.readyState == WebSocket.open) {
               peer.add(out);
             }
+          }
+          // Explicit delivery proof to the uploader: the client holds every
+          // clip as unacked-and-resendable until this arrives. (The broadcast
+          // echo above doubles as a hint, but the ack is the contract.)
+          if (ws.readyState == WebSocket.open) {
+            ws.add(jsonEncode({'type': 'ack', 'hash': stored['hash']}));
           }
           break;
 

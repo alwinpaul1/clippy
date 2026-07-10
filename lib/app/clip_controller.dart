@@ -260,9 +260,7 @@ class ClipController extends ChangeNotifier
       // Link died (or we were disposed) mid-drain with the files already
       // consumed — put the undelivered remainder back on disk.
       if (_disposed || _store?.isConnected != true) {
-        for (final rest in items.sublist(i)) {
-          await ClipQueue.requeue(rest);
-        }
+        await ClipQueue.requeueAll(items.sublist(i));
         return;
       }
       final item = items[i];

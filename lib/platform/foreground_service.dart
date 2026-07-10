@@ -91,8 +91,12 @@ class _BackgroundSyncHandler extends TaskHandler {
     // watcher fires instantly; this tick is the fallback).
     unawaited(_drainQueue());
     // While the relay is unreachable the queue only grows (drains are gated
-    // on a confirmed link) — keep the disk bounded.
-    unawaited(ClipQueue.enforceBound());
+    // on a confirmed link) — keep the disk bounded. Gated on disconnected so
+    // it never races an active drain and costs nothing in the common
+    // connected state.
+    if (!(_store?.isConnected ?? false)) {
+      unawaited(ClipQueue.enforceBound());
+    }
     if (!_uiAlive) {
       // A clip that arrived while the last heartbeat was stale (UI already
       // dead but _uiTimeout not yet elapsed) was skipped, not lost — apply
@@ -120,9 +124,7 @@ class _BackgroundSyncHandler extends TaskHandler {
       // The link can die mid-drain (the files are already consumed) — put the
       // undelivered remainder back on disk so a process kill can't lose it.
       if (!store.isConnected) {
-        for (final rest in items.sublist(i)) {
-          await ClipQueue.requeue(rest);
-        }
+        await ClipQueue.requeueAll(items.sublist(i));
         return;
       }
       final item = items[i];
