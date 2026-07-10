@@ -20,10 +20,16 @@ void main() {
     r.add('room', clip('b'));
     expect(r.recent('room').map((c) => c['hash']).toList(), ['h:a', 'h:b']);
 
-    for (var i = 0; i < 40; i++) {
+    // Insert past the cap whatever its value, so this test keeps exercising
+    // eviction if maxHistory changes again.
+    for (var i = 0; i < maxHistory + 15; i++) {
       r.add('room', clip('x$i'));
     }
     expect(r.recent('room').length, maxHistory);
+    // Oldest evicted first: the earliest survivor is the (15+2)th insert
+    // ('a' and 'b' plus x0..x14 fell off), and the newest insert is last.
+    expect(r.recent('room').first['hash'], 'h:x15');
+    expect(r.recent('room').last['hash'], 'h:x${maxHistory + 14}');
   });
 
   test('remove drops clips by hash and reports what it removed', () {
