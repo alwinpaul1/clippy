@@ -10,7 +10,11 @@ import 'dart:io';
 /// payloads — never the master key, plaintext, or any identity. It is a dumb
 /// encrypted-message router that also keeps the last N clips per room (durably,
 /// see [ClipRepository]) so a reconnecting device catches up.
-const int maxHistory = 25;
+// Must stay comfortably ABOVE the clients' unacked-resend bound (30): a
+// client proves delivery by finding its clip's hash in the reconnect history
+// snapshot, so a delivered clip evicted from a smaller history would look
+// "unproven" and be resent — re-stamped as the newest clip on every device.
+const int maxHistory = 60;
 // Images sync at original quality with no downscaling, so this must fit a
 // full-screen Retina PNG raw: ~36MB image × ~1.78 (base64 → encrypted →
 // base64) ≈ 64M chars.
