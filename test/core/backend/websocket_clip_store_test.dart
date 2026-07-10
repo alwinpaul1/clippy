@@ -105,6 +105,8 @@ void main() {
 
   test('append sends a clip frame carrying the sealed payload', () async {
     final store = build();
+    transports[0].emit(historyMsg([])); // server confirms the join
+    await store.connected.firstWhere((up) => up);
     transports[0].sent.clear();
     await store.append(const EncryptedClip(
         ciphertext: 'enc:x', iv: 'iv', hash: 'h:x', source: 'me'));
@@ -136,6 +138,54 @@ void main() {
     expect(jsonDecode(transports[1].sent.single)['type'], 'join',
         reason: 'should rejoin the room');
     expect(drops, contains(false), reason: 'should report disconnect');
+    await store.close();
+  });
+
+  // The relay answers every join with a history frame, so a received message
+  // is the only proof the link is really up — a socket can be half-open (or
+  // still handshaking) while looking locally fine.
+  test('isConnected stays false until the server replies to the join',
+      () async {
+    final store = build();
+    expect(store.isConnected, isFalse);
+    transports[0].emit(historyMsg([]));
+    await store.connected.firstWhere((up) => up);
+    expect(store.isConnected, isTrue);
+  });
+
+  test('an append before the server confirms is buffered, then flushed',
+      () async {
+    final store = build();
+    await store.append(const EncryptedClip(
+        ciphertext: 'enc:q', iv: 'iv', hash: 'h:q', source: 'me'));
+    // Not confirmed yet — only the join frame may be on the wire.
+    expect(transports[0].sent.map((m) => jsonDecode(m)['type']),
+        isNot(contains('clip')));
+
+    transports[0].emit(historyMsg([]));
+    await store.connected.firstWhere((up) => up);
+    final types = transports[0].sent.map((m) => jsonDecode(m)['type']);
+    expect(types, contains('clip'), reason: 'buffered append must flush');
+  });
+
+  test('an append during a drop is delivered on the next connection',
+      () async {
+    final store = build();
+    transports[0].emit(historyMsg([]));
+    await store.connected.firstWhere((up) => up);
+
+    transports[0].drop(); // connection dies
+    await store.append(const EncryptedClip(
+        ciphertext: 'enc:lost?', iv: 'iv', hash: 'h:lost?', source: 'me'));
+
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    expect(transports, hasLength(2), reason: 'should have reconnected');
+    transports[1].emit(historyMsg([]));
+    await store.connected.firstWhere((up) => up);
+
+    final types = transports[1].sent.map((m) => jsonDecode(m)['type']).toList();
+    expect(types, contains('clip'),
+        reason: 'the clip appended while offline must arrive, not vanish');
     await store.close();
   });
 }
