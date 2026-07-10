@@ -76,6 +76,61 @@ void main() {
     await a.close();
   });
 
+  test('a stored clip is acked to the sender (delivery proof)', () async {
+    final (a, aStream) = await connect(port());
+    a.add(jsonEncode({'type': 'join', 'room': 'ack-room'}));
+    await aStream.first; // history
+
+    a.add(jsonEncode(clipMsg('proof')));
+    final ack = await aStream.firstWhere((m) => m['type'] == 'ack');
+    expect(ack['hash'], 'h:proof');
+    await a.close();
+  });
+
+  test('an oversized clip is rejected to the sender, not silently dropped',
+      () async {
+    final (a, aStream) = await connect(port());
+    a.add(jsonEncode({'type': 'join', 'room': 'fat-room'}));
+    await aStream.first; // history
+
+    a.add(jsonEncode({
+      'type': 'clip',
+      'clip': {
+        'ciphertext': 'x' * (maxCiphertextChars + 1),
+        'iv': 'iv',
+        'hash': 'h:fat',
+        'source': 'devA',
+      },
+    }));
+    final reject = await aStream.firstWhere((m) => m['type'] == 'reject');
+    expect(reject['hash'], 'h:fat');
+    expect(repository.recent('fat-room'), isEmpty);
+    await a.close();
+  });
+
+  test('re-sending an existing hash moves it to the top, no duplicate entry',
+      () async {
+    final (a, aStream) = await connect(port());
+    a.add(jsonEncode({'type': 'join', 'room': 'dup-room'}));
+    await aStream.first; // history
+
+    a.add(jsonEncode(clipMsg('one')));
+    await aStream.firstWhere((m) => m['type'] == 'ack');
+    a.add(jsonEncode(clipMsg('two')));
+    await aStream.firstWhere(
+        (m) => m['type'] == 'ack' && m['hash'] == 'h:two');
+    // Resend 'one' (a client that lost the ack) — must not duplicate.
+    a.add(jsonEncode(clipMsg('one')));
+    await aStream.firstWhere(
+        (m) => m['type'] == 'ack' && m['hash'] == 'h:one');
+
+    final hashes =
+        repository.recent('dup-room').map((c) => c['hash']).toList();
+    expect(hashes, ['h:two', 'h:one'],
+        reason: 'moved to top, not appended as a duplicate');
+    await a.close();
+  });
+
   test('a device joining later receives room history', () async {
     final (a, _) = await connect(port());
     a.add(jsonEncode({'type': 'join', 'room': 'r'}));
