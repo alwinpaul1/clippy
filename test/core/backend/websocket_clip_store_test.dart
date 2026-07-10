@@ -168,6 +168,140 @@ void main() {
     expect(types, contains('clip'), reason: 'buffered append must flush');
   });
 
+  group('at-least-once hardening (1.0.25)', () {
+    WebSocketClipStore buildWith({
+      DateTime Function()? clock,
+      int maxUnacked = 30,
+      int maxUnackedBytes = 32 << 20,
+      int maxCiphertextChars = 64000000,
+    }) =>
+        WebSocketClipStore(
+          roomToken: 'ROOM',
+          transportFactory: () {
+            final t = FakeTransport();
+            transports.add(t);
+            return t;
+          },
+          clock: clock,
+          maxUnacked: maxUnacked,
+          maxUnackedBytes: maxUnackedBytes,
+          maxCiphertextChars: maxCiphertextChars,
+        );
+
+    EncryptedClip clip(String text) => EncryptedClip(
+        ciphertext: 'enc:$text', iv: 'iv', hash: 'h:$text', source: 'me');
+
+    Future<void> connect(WebSocketClipStore store, FakeTransport t) async {
+      t.emit(historyMsg([]));
+      await store.connected.firstWhere((up) => up);
+    }
+
+    List<String> clipHashesSentOn(FakeTransport t) => [
+          for (final m in t.sent.map(jsonDecode))
+            if (m['type'] == 'clip') m['clip']['hash'] as String,
+        ];
+
+    test('a clip deleted while offline is NOT resent on reconnect', () async {
+      final store = buildWith();
+      await store.append(clip('x')); // offline — tracked, unsent
+      await store.deleteHashes(['h:x']); // user deletes it, still offline
+      await connect(store, transports[0]);
+      expect(clipHashesSentOn(transports[0]), isNot(contains('h:x')),
+          reason: 'deleting a clip must purge it from the resend set');
+    });
+
+    test('clips cleared while offline are NOT resent on reconnect', () async {
+      final store = buildWith();
+      await store.append(clip('a'));
+      await store.append(clip('b'));
+      await store.clearAll(); // still offline
+      await connect(store, transports[0]);
+      expect(clipHashesSentOn(transports[0]), isEmpty,
+          reason: 'clear-all must purge the resend set');
+    });
+
+    test('a malformed first frame does not strand the buffers', () async {
+      final store = buildWith();
+      await store.append(clip('q')); // buffered while unconfirmed
+      transports[0].emit('not-json{{{'); // garbage first frame
+      await Future<void>.delayed(Duration.zero);
+      transports[0].emit(historyMsg([])); // then the real join reply
+      await store.connected.firstWhere((up) => up);
+      expect(clipHashesSentOn(transports[0]), contains('h:q'),
+          reason: 'the flush must still happen on this connection');
+    });
+
+    test('re-copying a clip makes it newest for eviction, not oldest',
+        () async {
+      final store = buildWith(maxUnacked: 3);
+      await store.append(clip('a')); // oldest
+      await store.append(clip('b'));
+      await store.append(clip('c')); // full
+      await store.append(clip('a')); // re-copied — must become newest
+      await store.append(clip('d')); // evicts the true oldest (b), not a
+      await connect(store, transports[0]);
+      final sent = clipHashesSentOn(transports[0]);
+      expect(sent, contains('h:a'),
+          reason: 'the just-re-copied clip must survive eviction');
+      expect(sent, isNot(contains('h:b')),
+          reason: 'the genuinely oldest entry is the one evicted');
+    });
+
+    test('an oversized clip is never sent or tracked (poison pill)', () async {
+      final store = buildWith(maxCiphertextChars: 10);
+      await store.append(clip('this-is-way-past-ten-chars'));
+      await connect(store, transports[0]);
+      expect(clipHashesSentOn(transports[0]), isEmpty,
+          reason: 'the relay would silently drop it — never send or resend');
+    });
+
+    test('a sent-once clip older than the resend window is dropped, '
+        'a never-sent clip survives any age', () async {
+      var now = DateTime.utc(2026, 7, 10, 12, 0, 0);
+      final store = buildWith(clock: () => now);
+      await connect(store, transports[0]);
+      await store.append(clip('sent')); // sent once while connected (no echo)
+      transports[0].drop();
+      await Future<void>.delayed(Duration.zero);
+      await store.append(clip('unsent')); // buffered while down
+
+      now = now.add(const Duration(hours: 8)); // overnight
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      expect(transports, hasLength(2));
+      await connect(store, transports[1]);
+
+      final resent = clipHashesSentOn(transports[1]);
+      expect(resent, contains('h:unsent'),
+          reason: 'never-sent copies must survive offline overnight');
+      expect(resent, isNot(contains('h:sent')),
+          reason: 'a stale sent-once clip must not clobber peers hours later');
+    });
+
+    test('a buffered delete/clear older than the replay window is dropped',
+        () async {
+      var now = DateTime.utc(2026, 7, 10, 12, 0, 0);
+      final store = buildWith(clock: () => now);
+      await store.deleteHashes(['h:old']); // buffered while offline
+      now = now.add(const Duration(hours: 3));
+      await connect(store, transports[0]);
+      final types = transports[0].sent.map((m) => jsonDecode(m)['type']);
+      expect(types, isNot(contains('delete')),
+          reason: 'hours-stale destructive edits must not replay');
+    });
+
+    test('unacked is bounded by total bytes, evicting oldest first', () async {
+      final store = buildWith(maxUnackedBytes: 200);
+      await store.append(clip('one-${'x' * 60}'));
+      await store.append(clip('two-${'y' * 60}'));
+      await store.append(clip('three-${'z' * 60}')); // pushes total past 200
+      await connect(store, transports[0]);
+      final sent = clipHashesSentOn(transports[0]);
+      expect(sent.any((h) => h.startsWith('h:three')), isTrue);
+      expect(sent.any((h) => h.startsWith('h:one')), isFalse,
+          reason: 'oldest entry evicted to hold the byte budget');
+    });
+  });
+
   test('an append during a drop is delivered on the next connection',
       () async {
     final store = build();

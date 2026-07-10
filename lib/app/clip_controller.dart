@@ -255,8 +255,17 @@ class ClipController extends ChangeNotifier
     // a process kill. Hold off until the relay link is confirmed; the
     // connected listener re-drains the instant it comes back.
     if (_store?.isConnected != true) return;
-    for (final item in await ClipQueue.drain()) {
-      if (_disposed) return;
+    final items = await ClipQueue.drain();
+    for (var i = 0; i < items.length; i++) {
+      // Link died (or we were disposed) mid-drain with the files already
+      // consumed — put the undelivered remainder back on disk.
+      if (_disposed || _store?.isConnected != true) {
+        for (final rest in items.sublist(i)) {
+          await ClipQueue.requeue(rest);
+        }
+        return;
+      }
+      final item = items[i];
       if (item.isImage) {
         await _pushLocalImage(item.imageBytes!, mime: item.mime);
       } else {
