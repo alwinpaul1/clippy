@@ -90,6 +90,9 @@ class _BackgroundSyncHandler extends TaskHandler {
     // Drain clips the background AccessibilityService captured (the queue
     // watcher fires instantly; this tick is the fallback).
     unawaited(_drainQueue());
+    // While the relay is unreachable the queue only grows (drains are gated
+    // on a confirmed link) — keep the disk bounded.
+    unawaited(ClipQueue.enforceBound());
     if (!_uiAlive) {
       // A clip that arrived while the last heartbeat was stale (UI already
       // dead but _uiTimeout not yet elapsed) was skipped, not lost — apply
@@ -112,7 +115,17 @@ class _BackgroundSyncHandler extends TaskHandler {
     // a process kill. Leave it there until the relay link is confirmed; the
     // connected listener drains the instant we're back.
     if (!store.isConnected) return;
-    for (final item in await ClipQueue.drain()) {
+    final items = await ClipQueue.drain();
+    for (var i = 0; i < items.length; i++) {
+      // The link can die mid-drain (the files are already consumed) — put the
+      // undelivered remainder back on disk so a process kill can't lose it.
+      if (!store.isConnected) {
+        for (final rest in items.sublist(i)) {
+          await ClipQueue.requeue(rest);
+        }
+        return;
+      }
+      final item = items[i];
       final actions = item.isImage
           ? await engine.onLocalImage(
               base64Encode(item.imageBytes!),
@@ -211,6 +224,13 @@ class _BackgroundSyncHandler extends TaskHandler {
       );
       final store = WebSocketClipStore.connect(Uri.parse(relayUrl), roomToken);
       _store = store;
+      // Subscribe BEFORE any await below: the join reply can land during
+      // those awaits, and a broadcast stream doesn't replay missed events —
+      // the "drain the moment we're back" promise would silently degrade to
+      // the 10s tick.
+      _connWatch = store.connected.listen((up) {
+        if (up) unawaited(_drainQueue());
+      });
       if (kDebugMode) {
         debugPrint('[clippy-bg] receive loop started');
         unawaited(store.history.first.then(
@@ -243,11 +263,9 @@ class _BackgroundSyncHandler extends TaskHandler {
       // as a safety net and the no-accessibility fallback.
       final queueEvents = await ClipQueue.watch();
       _queueWatch = queueEvents?.listen((_) => unawaited(_drainQueue()));
-      // Anything captured while the link was down waits on disk — push it the
-      // moment the relay confirms we're back.
-      _connWatch = store.connected.listen((up) {
-        if (up) unawaited(_drainQueue());
-      });
+      // Catch-up: if the join reply landed during the awaits above, the
+      // connected event already fired — drain now rather than at the tick.
+      if (store.isConnected) unawaited(_drainQueue());
     } finally {
       _starting = false;
     }

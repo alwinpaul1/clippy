@@ -117,6 +117,83 @@ abstract class ClipQueue {
     } catch (_) {}
   }
 
+  static const _extForMime = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+  };
+
+  /// Put a drained item BACK on disk. drain() consumes the file before the
+  /// send happens, so if the relay link dies mid-drain the disk copy — the
+  /// only one that survives a process kill — would be gone. Callers requeue
+  /// the undelivered remainder instead. Images go through the same
+  /// .part+rename staging the native writer uses, so a concurrent drain never
+  /// reads a half-written file.
+  static Future<void> requeue(ClipQueueItem item) async {
+    final dir = await _dir();
+    if (dir == null) return;
+    try {
+      dir.createSync(recursive: true);
+      var ts = DateTime.now().millisecondsSinceEpoch;
+      if (item.isImage) {
+        final ext = _extForMime[item.mime] ?? 'png';
+        var f = File('${dir.path}/$ts.$ext');
+        while (f.existsSync()) {
+          f = File('${dir.path}/${++ts}.$ext');
+        }
+        final part = File('${f.path}.part');
+        await part.writeAsBytes(item.imageBytes!);
+        try {
+          part.renameSync(f.path);
+        } catch (_) {
+          part.deleteSync(); // don't leave an orphan blocking the reaper
+        }
+      } else {
+        var f = File('${dir.path}/$ts.txt');
+        while (f.existsSync()) {
+          f = File('${dir.path}/${++ts}.txt');
+        }
+        await f.writeAsString(item.text!);
+      }
+    } catch (_) {
+      // Best effort — the in-memory unacked buffer still holds the clip.
+    }
+  }
+
+  // The queue only grows while the relay is unreachable (drains are gated on
+  // a confirmed link), and nothing else bounds it — a device that stays
+  // paired-but-unconnected would accumulate captures (multi-MB images
+  // included) without limit.
+  static const _maxQueueFiles = 200;
+  static const _maxQueueBytes = 200 << 20;
+
+  /// Drop the oldest queue files while over the count/byte bound. Cheap for
+  /// the typical near-empty directory; called from the service's slow tick.
+  static Future<void> enforceBound() async {
+    final dir = await _dir();
+    if (dir == null) return;
+    try {
+      if (!dir.existsSync()) return;
+      final files = dir.listSync().whereType<File>().toList()
+        ..sort((a, b) => a.path.compareTo(b.path)); // timestamp names → oldest first
+      var total = 0;
+      for (final f in files) {
+        total += f.statSync().size;
+      }
+      var count = files.length;
+      for (final f in files) {
+        if (count <= _maxQueueFiles && total <= _maxQueueBytes) break;
+        try {
+          final size = f.statSync().size;
+          f.deleteSync();
+          count--;
+          total -= size;
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
   /// Instant sync: fires the moment native code writes a captured clip (inotify
   /// via Directory.watch). This is on filesDir (app-private ext4), where
   /// inotify is reliable — unlike external storage's FUSE mount. Returns null
