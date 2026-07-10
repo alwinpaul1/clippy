@@ -5,14 +5,20 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// One captured clipboard item drained from the queue: text or an image.
+/// [name] is the source file's basename — requeue() writes an undelivered
+/// item back under its ORIGINAL name, preserving capture order (a fresh
+/// timestamp would re-order old content after newer captures) and making the
+/// write idempotent across the two draining isolates.
 class ClipQueueItem {
   final String? text;
   final Uint8List? imageBytes;
   final String? mime;
-  const ClipQueueItem.text(String this.text)
+  final String? name;
+  const ClipQueueItem.text(String this.text, {this.name})
       : imageBytes = null,
         mime = null;
-  const ClipQueueItem.image(Uint8List this.imageBytes, String this.mime)
+  const ClipQueueItem.image(Uint8List this.imageBytes, String this.mime,
+      {this.name})
       : text = null;
   bool get isImage => imageBytes != null;
 }
@@ -88,7 +94,7 @@ abstract class ClipQueue {
     try {
       await f.delete();
     } catch (_) {}
-    return ClipQueueItem.text(t);
+    return ClipQueueItem.text(t, name: f.uri.pathSegments.last);
   }
 
   static Future<ClipQueueItem?> _drainImage(File f, String mime) async {
@@ -105,7 +111,7 @@ abstract class ClipQueue {
     try {
       await f.delete();
     } catch (_) {}
-    return ClipQueueItem.image(bytes, mime);
+    return ClipQueueItem.image(bytes, mime, name: f.uri.pathSegments.last);
   }
 
   /// A file that stays empty (writer killed mid-write) is re-listed on every
@@ -117,47 +123,44 @@ abstract class ClipQueue {
     } catch (_) {}
   }
 
-  static const _extForMime = {
-    'image/png': 'png',
-    'image/jpeg': 'jpg',
-    'image/webp': 'webp',
-    'image/gif': 'gif',
-  };
-
-  /// Put a drained item BACK on disk. drain() consumes the file before the
-  /// send happens, so if the relay link dies mid-drain the disk copy — the
-  /// only one that survives a process kill — would be gone. Callers requeue
-  /// the undelivered remainder instead. Images go through the same
-  /// .part+rename staging the native writer uses, so a concurrent drain never
-  /// reads a half-written file.
+  /// Put a drained item BACK on disk under its ORIGINAL filename. drain()
+  /// consumes the file before the send happens, so if the relay link dies
+  /// mid-drain the disk copy — the only one that survives a process kill —
+  /// would be gone. Both types go through .part+rename staging so a
+  /// concurrent drain (or the inotify watcher this write triggers) never
+  /// reads a half-written file. Reusing the original name preserves capture
+  /// order in the drain's path sort and makes concurrent requeues of the
+  /// same item (both isolates drained the same file) collide harmlessly on
+  /// identical content. Best-effort: items the drain loop never reached have
+  /// NO other copy, so a failed write here is a genuine (rare) loss.
   static Future<void> requeue(ClipQueueItem item) async {
+    final name = item.name;
+    if (name == null || name.contains('/')) return; // only drain-produced items
     final dir = await _dir();
     if (dir == null) return;
     try {
       dir.createSync(recursive: true);
-      var ts = DateTime.now().millisecondsSinceEpoch;
+      final part = File('${dir.path}/$name.part');
       if (item.isImage) {
-        final ext = _extForMime[item.mime] ?? 'png';
-        var f = File('${dir.path}/$ts.$ext');
-        while (f.existsSync()) {
-          f = File('${dir.path}/${++ts}.$ext');
-        }
-        final part = File('${f.path}.part');
         await part.writeAsBytes(item.imageBytes!);
-        try {
-          part.renameSync(f.path);
-        } catch (_) {
-          part.deleteSync(); // don't leave an orphan blocking the reaper
-        }
       } else {
-        var f = File('${dir.path}/$ts.txt');
-        while (f.existsSync()) {
-          f = File('${dir.path}/${++ts}.txt');
-        }
-        await f.writeAsString(item.text!);
+        await part.writeAsString(item.text!);
+      }
+      try {
+        part.renameSync('${dir.path}/$name');
+      } catch (_) {
+        part.deleteSync(); // don't leave an orphan blocking the reaper
       }
     } catch (_) {
-      // Best effort — the in-memory unacked buffer still holds the clip.
+      // Disk full / dir gone — nothing more we can do without the file.
+    }
+  }
+
+  /// Requeue every item, preserving order. Used when a drain must abort
+  /// mid-way (link died, controller disposed) with items already consumed.
+  static Future<void> requeueAll(Iterable<ClipQueueItem> items) async {
+    for (final item in items) {
+      await requeue(item);
     }
   }
 
@@ -168,28 +171,34 @@ abstract class ClipQueue {
   static const _maxQueueFiles = 200;
   static const _maxQueueBytes = 200 << 20;
 
-  /// Drop the oldest queue files while over the count/byte bound. Cheap for
-  /// the typical near-empty directory; called from the service's slow tick.
+  /// Drop the oldest queue files while over the count/byte bound. Only
+  /// meaningful while the relay is unreachable (callers gate on that), so it
+  /// can't race an active drain. `.part` staging files are exempt — they are
+  /// mid-write; the stale-orphan reaper handles the abandoned ones.
   static Future<void> enforceBound() async {
     final dir = await _dir();
     if (dir == null) return;
     try {
       if (!dir.existsSync()) return;
-      final files = dir.listSync().whereType<File>().toList()
-        ..sort((a, b) => a.path.compareTo(b.path)); // timestamp names → oldest first
-      var total = 0;
-      for (final f in files) {
-        total += f.statSync().size;
+      final entries = <(File, int)>[];
+      for (final f in dir.listSync().whereType<File>()) {
+        if (f.path.endsWith('.part')) continue;
+        try {
+          entries.add((f, f.statSync().size));
+        } catch (_) {
+          // Vanished between list and stat (concurrent delete) — skip it.
+        }
       }
-      var count = files.length;
-      for (final f in files) {
+      entries.sort((a, b) => a.$1.path.compareTo(b.$1.path)); // oldest first
+      var count = entries.length;
+      var total = entries.fold(0, (sum, e) => sum + e.$2);
+      for (final (f, size) in entries) {
         if (count <= _maxQueueFiles && total <= _maxQueueBytes) break;
         try {
-          final size = f.statSync().size;
           f.deleteSync();
-          count--;
-          total -= size;
         } catch (_) {}
+        count--;
+        total -= size;
       }
     } catch (_) {}
   }
