@@ -57,6 +57,7 @@ class _BackgroundSyncHandler extends TaskHandler {
   WebSocketClipStore? _store;
   StreamSubscription? _sub;
   StreamSubscription? _queueWatch;
+  StreamSubscription? _connWatch;
   RemoteClip? _skippedWhileUiAlive;
   SyncEngine? _engine;
   bool _starting = false;
@@ -107,6 +108,10 @@ class _BackgroundSyncHandler extends TaskHandler {
     final engine = _engine;
     final store = _store;
     if (engine == null || store == null) return;
+    // Draining consumes the on-disk queue file — the only copy that survives
+    // a process kill. Leave it there until the relay link is confirmed; the
+    // connected listener drains the instant we're back.
+    if (!store.isConnected) return;
     for (final item in await ClipQueue.drain()) {
       final actions = item.isImage
           ? await engine.onLocalImage(
@@ -238,6 +243,11 @@ class _BackgroundSyncHandler extends TaskHandler {
       // as a safety net and the no-accessibility fallback.
       final queueEvents = await ClipQueue.watch();
       _queueWatch = queueEvents?.listen((_) => unawaited(_drainQueue()));
+      // Anything captured while the link was down waits on disk — push it the
+      // moment the relay confirms we're back.
+      _connWatch = store.connected.listen((up) {
+        if (up) unawaited(_drainQueue());
+      });
     } finally {
       _starting = false;
     }
@@ -270,6 +280,8 @@ class _BackgroundSyncHandler extends TaskHandler {
   }
 
   void _stop() {
+    _connWatch?.cancel();
+    _connWatch = null;
     _queueWatch?.cancel();
     _queueWatch = null;
     _sub?.cancel();

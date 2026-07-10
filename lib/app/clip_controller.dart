@@ -174,6 +174,9 @@ class ClipController extends ChangeNotifier
     _connectedSub = _store!.connected.listen((up) {
       connected = up;
       notifyListeners();
+      // Clips captured while the link was down wait on disk — push them the
+      // moment the relay confirms we're back (no-op off Android).
+      if (up) unawaited(_drainQueue());
     });
     connected = _store!.isConnected; // catch the initial state
 
@@ -248,6 +251,10 @@ class ClipController extends ChangeNotifier
   /// away (focus-trick text + the MediaStore screenshot observer). Engine dedup
   /// absorbs repeats.
   Future<void> _drainQueue() async {
+    // Draining consumes the on-disk queue file — the only copy that survives
+    // a process kill. Hold off until the relay link is confirmed; the
+    // connected listener re-drains the instant it comes back.
+    if (_store?.isConnected != true) return;
     for (final item in await ClipQueue.drain()) {
       if (_disposed) return;
       if (item.isImage) {
