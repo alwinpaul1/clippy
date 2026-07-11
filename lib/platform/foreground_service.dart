@@ -91,9 +91,11 @@ class _BackgroundSyncHandler extends TaskHandler {
     // watcher fires instantly; this tick is the fallback).
     unawaited(_drainQueue());
     // While the relay is unreachable the queue only grows (drains are gated
-    // on a confirmed link) — keep the disk bounded. Gated on disconnected so
-    // it never races an active drain and costs nothing in the common
-    // connected state.
+    // on a confirmed link) — keep the disk bounded. This isolate's link being
+    // down says nothing about the UI isolate's independent connection, so
+    // the disconnected gate is only a cost optimization; enforceBound's
+    // drain.lock heartbeat is what actually prevents racing an active drain
+    // in either isolate.
     if (!(_store?.isConnected ?? false)) {
       unawaited(ClipQueue.enforceBound());
     }
