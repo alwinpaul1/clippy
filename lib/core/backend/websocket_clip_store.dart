@@ -227,7 +227,18 @@ class WebSocketClipStore {
     }
   }
 
-  String _nowIso() => DateTime.now().toUtc().toIso8601String();
+  /// Watermark for destructive edits: the newest SERVER timestamp this
+  /// device has seen. Server stamps compared to server stamps — immune to
+  /// device-clock skew, which matters: a device whose clock runs behind the
+  /// relay would otherwise stamp a delete BEFORE the just-stored clip's
+  /// server time and the edit would silently no-op. Everything the user can
+  /// see is at-or-before the newest entry, and anything stored later
+  /// (a deliberate re-copy) is after it — exactly the intended scope. Only a
+  /// cold offline start (no snapshot ever) falls back to the device clock,
+  /// which the relay additionally clamps to server-now.
+  String _watermarkIso() => _history.isEmpty
+      ? DateTime.now().toUtc().toIso8601String()
+      : _history.last.timestamp.toUtc().toIso8601String();
 
   String _encodeClip(Map<String, dynamic> clip, {bool resend = false}) =>
       jsonEncode({'type': 'clip', if (resend) 'resend': true, 'clip': clip});
@@ -274,6 +285,7 @@ class WebSocketClipStore {
   Future<void> deleteHashes(Iterable<String> hashes) async {
     final list = hashes.toList();
     if (list.isEmpty) return;
+    final before = _watermarkIso(); // BEFORE the local removal mutates history
     // The user deleted these — never resend them, even if the server never
     // held them (offline delete) or the frame below is lost.
     list.forEach(_untrackUnacked);
@@ -282,8 +294,7 @@ class WebSocketClipStore {
       _history.removeWhere((c) => doomed.contains(c.hash));
       _emitHistory();
     }
-    _send(jsonEncode(
-        {'type': 'delete', 'hashes': list, 'before': _nowIso()}));
+    _send(jsonEncode({'type': 'delete', 'hashes': list, 'before': before}));
   }
 
   /// Clear the room for all devices. Watermarked with the moment the user
@@ -292,12 +303,13 @@ class WebSocketClipStore {
   /// at-or-before the tap: clips this device never saw included, clips other
   /// devices add afterwards excluded.
   Future<void> clearAll() async {
+    final before = _watermarkIso(); // BEFORE the local clear mutates history
     _untrackAllUnacked(); // cleared clips must never be resent
     if (_history.isNotEmpty) {
       _history.clear(); // the UI said "gone for good" — reflect it right now
       _emitHistory();
     }
-    _send(jsonEncode({'type': 'clear', 'before': _nowIso()}));
+    _send(jsonEncode({'type': 'clear', 'before': before}));
   }
 
   void _untrackUnacked(String hash) {
