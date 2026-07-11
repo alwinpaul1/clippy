@@ -25,12 +25,14 @@ class WebSocketClipStore {
   bool _closed = false;
   int _backoffMs = _minBackoffMs;
 
-  // Outbound delete/clear frames held while the link isn't confirmed
-  // (handshake in flight, socket half-open, between reconnects) and ALWAYS
-  // replayed when it is — the UI confirms deletes to the user immediately
-  // ("Clip deleted" / "gone for good"), so dropping a buffered edit would
-  // silently resurrect content the user was told is gone. Bounded; oldest
-  // dropped first.
+  // Outbound edit frames (deletes; a clear only while connected) held while
+  // the link isn't confirmed (handshake in flight, socket half-open, between
+  // reconnects) and ALWAYS replayed when it is — the UI confirms deletes to
+  // the user immediately ("Clip deleted" / "gone for good"), so dropping a
+  // buffered edit would silently resurrect content the user was told is gone.
+  // Replay at any age is safe because everything buffered here is
+  // hash-scoped: it can only ever touch the exact content the user acted on.
+  // Bounded; oldest dropped first.
   static const _maxPending = 200;
   final List<String> _pending = [];
 
@@ -40,17 +42,37 @@ class WebSocketClipStore {
   // kept here, keyed by content hash, until the relay's explicit 'ack' frame
   // proves delivery ('reject' proves it can never succeed); whatever is still
   // unproven after a reconnect is resent. Resending is idempotent — the relay
-  // moves an existing hash to the top instead of duplicating it — so no age
-  // guessing is needed. Bounded by entry count AND total bytes (an image
-  // frame can be tens of MB); oldest evicted first.
+  // moves an existing hash to the top instead of duplicating it. Bounded by
+  // entry count AND total bytes (an image frame can be tens of MB); oldest
+  // evicted first.
+  //
+  // Age matters for SENT entries only: a clip that went on the wire but was
+  // never acked and is absent from the reconnect snapshot after
+  // [_staleResendAge] was either evicted long ago or deleted by another
+  // device — resending it would re-stamp stale (possibly deliberately
+  // deleted) content as the room's newest clip on every device, so it is
+  // given up instead. A NEVER-sent clip resends at any age: the relay has
+  // never seen it and nobody could have deleted it.
+  static const _staleResendAge = Duration(minutes: 10);
   final int _maxUnacked;
   final int _maxUnackedBytes;
-  final Map<String, String> _unacked = {}; // content hash → clip frame
+  final Map<String, _Unacked> _unacked = {}; // content hash → tracked frame
   int _unackedBytes = 0;
+
+  // Dedicated resend slot for the single newest frame ABOVE the byte budget
+  // (a full-quality screenshot can be ~2× the whole budget). Kept outside
+  // [_unacked] so it can't evict the entire normal backlog chasing the byte
+  // bound, but it still carries the at-least-once guarantee — bounded to one
+  // frame, newest wins.
+  String? _jumboHash;
+  _Unacked? _jumbo;
 
   // Mirror of the relay's ciphertext cap: nothing above it can ever be
   // stored, so don't build or send the frame at all.
   final int _maxCiphertextChars;
+
+  // Injectable so tests can age unacked entries without waiting.
+  final DateTime Function() _clock;
 
   final List<RemoteClip> _history = [];
   final _historyController = StreamController<List<RemoteClip>>.broadcast();
@@ -64,10 +86,12 @@ class WebSocketClipStore {
     int maxUnacked = 30,
     int maxUnackedBytes = 32 << 20,
     int maxCiphertextChars = 64000000,
+    DateTime Function() clock = DateTime.now,
   })  : _transportFactory = transportFactory,
         _maxUnacked = maxUnacked,
         _maxUnackedBytes = maxUnackedBytes,
-        _maxCiphertextChars = maxCiphertextChars {
+        _maxCiphertextChars = maxCiphertextChars,
+        _clock = clock {
     _open();
   }
 
@@ -160,10 +184,14 @@ class WebSocketClipStore {
         case 'clip':
           final clip = _parse(msg['clip']);
           _untrackUnacked(clip.hash); // our own broadcast = server has it
-          if (_history.isEmpty || _history.last.hash != clip.hash) {
-            _history.add(clip);
-            _emitHistory();
-          }
+          // Mirror the relay's dedup: an existing hash anywhere in history
+          // moves to the top (fresh server timestamp), never duplicates —
+          // otherwise a resend/re-copy of a mid-history clip shows twice
+          // until the next snapshot silently rewrites it.
+          _history
+            ..removeWhere((c) => c.hash == clip.hash)
+            ..add(clip);
+          _emitHistory();
           _incomingController.add(clip);
         case 'deleted':
           final hashes =
@@ -223,11 +251,12 @@ class WebSocketClipStore {
     final frame = jsonEncode({'type': 'clip', 'clip': clip.toMap()});
     final t = _transport;
     final sendNow = _connected && t != null;
-    // A frame too large for the resend budget must not be ADMITTED to it:
-    // tracking it would evict the entire never-sent backlog chasing the byte
-    // bound. Best-effort send instead — the relay accepts it; it just carries
-    // no resend guarantee.
+    // A frame too large for the resend budget must not be ADMITTED to it
+    // (tracking it there would evict the entire never-sent backlog chasing
+    // the byte bound) — it takes the dedicated single jumbo slot instead.
     if (frame.length > _maxUnackedBytes) {
+      _jumboHash = clip.hash;
+      _jumbo = _Unacked(frame, sentAt: sendNow ? _clock() : null);
       if (sendNow) t.send(frame);
       return;
     }
@@ -235,7 +264,7 @@ class WebSocketClipStore {
     // plain re-assign keeps its original LinkedHashMap position, making the
     // user's most recent copy the first one evicted under pressure.
     _untrackUnacked(clip.hash);
-    _unacked[clip.hash] = frame;
+    _unacked[clip.hash] = _Unacked(frame, sentAt: sendNow ? _clock() : null);
     _unackedBytes += frame.length;
     while (_unacked.length > 1 &&
         (_unacked.length > _maxUnacked || _unackedBytes > _maxUnackedBytes)) {
@@ -258,17 +287,36 @@ class WebSocketClipStore {
   /// Clear the whole room history for all devices.
   Future<void> clearAll() async {
     _untrackAllUnacked(); // cleared clips must never be resent
-    _send(jsonEncode({'type': 'clear'}));
+    if (_connected && _transport != null) {
+      _send(jsonEncode({'type': 'clear'}));
+      return;
+    }
+    // Offline: scope the clear to the clips this device can SEE, as a
+    // hash-scoped delete. An unscoped 'clear' buffered now and replayed at
+    // reconnect — possibly days later — would also wipe every clip other
+    // devices added in between, content the user never saw or intended to
+    // clear. The tradeoff: clips that reached the relay unseen while this
+    // device was offline survive its offline clear.
+    final hashes = _history.map((c) => c.hash).toList();
+    if (hashes.isNotEmpty) {
+      _send(jsonEncode({'type': 'delete', 'hashes': hashes}));
+    }
   }
 
   void _untrackUnacked(String hash) {
-    final frame = _unacked.remove(hash);
-    if (frame != null) _unackedBytes -= frame.length;
+    final entry = _unacked.remove(hash);
+    if (entry != null) _unackedBytes -= entry.frame.length;
+    if (hash == _jumboHash) {
+      _jumboHash = null;
+      _jumbo = null;
+    }
   }
 
   void _untrackAllUnacked() {
     _unacked.clear();
     _unackedBytes = 0;
+    _jumboHash = null;
+    _jumbo = null;
   }
 
   void _send(String message) {
@@ -292,18 +340,37 @@ class WebSocketClipStore {
   }
 
   /// After a reconnect's snapshot: drop tracked clips the snapshot already
-  /// proves delivered (supplementary to the ack, and the old-relay fallback),
-  /// then resend the rest. Safe at any age: the relay dedups by hash
-  /// (move-to-top), so a resend can never create a duplicate entry.
+  /// proves delivered (supplementary to the ack, and the lost-ack fallback),
+  /// give up on SENT entries past [_staleResendAge] (see the field comment —
+  /// resending those resurrects stale or deleted content), then resend the
+  /// rest. The relay dedups by hash (move-to-top), so a resend can never
+  /// create a duplicate entry.
   void _resendUnacked() {
     final t = _transport;
-    if (t == null || _unacked.isEmpty) return;
+    if (t == null || (_unacked.isEmpty && _jumbo == null)) return;
     final have = _history.map((c) => c.hash).toSet();
+    final now = _clock();
+    bool giveUp(String hash, _Unacked e) =>
+        have.contains(hash) ||
+        (e.sentAt != null && now.difference(e.sentAt!) > _staleResendAge);
     for (final h in _unacked.keys.toList()) {
-      if (have.contains(h)) {
+      final e = _unacked[h]!;
+      if (giveUp(h, e)) {
         _untrackUnacked(h);
       } else {
-        t.send(_unacked[h]!);
+        t.send(e.frame);
+        e.sentAt ??= now; // the stale clock starts at the FIRST wire exposure
+      }
+    }
+    final jh = _jumboHash;
+    final je = _jumbo;
+    if (jh != null && je != null) {
+      if (giveUp(jh, je)) {
+        _jumboHash = null;
+        _jumbo = null;
+      } else {
+        t.send(je.frame);
+        je.sentAt ??= now;
       }
     }
   }
@@ -316,4 +383,12 @@ class WebSocketClipStore {
     await _incomingController.close();
     await _connectedController.close();
   }
+}
+
+/// One tracked-for-resend clip frame. [sentAt] is when it FIRST went on the
+/// wire — null while it has only ever been buffered offline.
+class _Unacked {
+  final String frame;
+  DateTime? sentAt;
+  _Unacked(this.frame, {this.sentAt});
 }

@@ -173,6 +173,7 @@ void main() {
       int maxUnacked = 30,
       int maxUnackedBytes = 32 << 20,
       int maxCiphertextChars = 64000000,
+      DateTime Function()? clock,
     }) =>
         WebSocketClipStore(
           roomToken: 'ROOM',
@@ -184,6 +185,7 @@ void main() {
           maxUnacked: maxUnacked,
           maxUnackedBytes: maxUnackedBytes,
           maxCiphertextChars: maxCiphertextChars,
+          clock: clock ?? DateTime.now,
         );
 
     EncryptedClip clip(String text) => EncryptedClip(
@@ -253,8 +255,8 @@ void main() {
           reason: 'the relay would silently drop it — never send or resend');
     });
 
-    test('every unacked clip is resent on reconnect — sent-once and '
-        'never-sent alike, at any age', () async {
+    test('every unacked clip is resent on reconnect — sent-once (within the '
+        'stale age) and never-sent alike', () async {
       final store = buildWith();
       await connect(store, transports[0]);
       await store.append(clip('sent')); // sent while connected, no ack came
@@ -311,8 +313,8 @@ void main() {
           reason: 'a rejected clip can never succeed — stop re-uploading it');
     });
 
-    test('a frame past the byte budget is sent best-effort, never admitted '
-        'to evict the backlog', () async {
+    test('a frame past the byte budget is tracked in the jumbo slot, never '
+        'admitted to evict the backlog', () async {
       // Small text frames are ~115 chars of JSON; the jumbo's is ~900.
       final store = buildWith(maxUnackedBytes: 400);
       await connect(store, transports[0]);
@@ -327,7 +329,7 @@ void main() {
 
       final t1 = clipHashesSentOn(transports[1]);
       expect(t1.any((h) => h.startsWith('h:jumbo')), isTrue,
-          reason: 'jumbo still sent while connected (best-effort)');
+          reason: 'jumbo still sent while connected');
       expect(t1, containsAll(['h:small-a', 'h:small-b']),
           reason: 'the never-sent backlog must survive the jumbo append');
 
@@ -335,8 +337,103 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 1500));
       await connect(store, transports[2]);
       expect(clipHashesSentOn(transports[2]).any((h) => h.startsWith('h:jumbo')),
-          isFalse,
-          reason: 'jumbo carries no resend guarantee — it was never tracked');
+          isTrue,
+          reason: 'a jumbo is exactly the clip a user misses most — it gets '
+              'the dedicated resend slot instead of no guarantee');
+    });
+
+    test('the jumbo slot holds only the newest oversized frame', () async {
+      final store = buildWith(maxUnackedBytes: 400);
+      await store.append(clip('jumbo-a-${'y' * 400}')); // offline — slotted
+      await store.append(clip('jumbo-b-${'z' * 400}')); // replaces jumbo-a
+      await connect(store, transports[0]);
+      final sent = clipHashesSentOn(transports[0]);
+      expect(sent.any((h) => h.startsWith('h:jumbo-b')), isTrue);
+      expect(sent.any((h) => h.startsWith('h:jumbo-a')), isFalse,
+          reason: 'the slot is bounded to one frame — newest wins');
+    });
+
+    test("the relay's ack releases the jumbo slot", () async {
+      final store = buildWith(maxUnackedBytes: 400);
+      await connect(store, transports[0]);
+      await store.append(clip('jumbo-${'z' * 400}'));
+      transports[0].emit(jsonEncode({'type': 'ack', 'hash': 'h:jumbo-${'z' * 400}'}));
+      await Future<void>.delayed(Duration.zero);
+
+      transports[0].drop();
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await connect(store, transports[1]);
+      expect(clipHashesSentOn(transports[1]), isEmpty,
+          reason: 'an acked jumbo is delivered — nothing left to resend');
+    });
+
+    test('a sent-but-unacked clip past the stale age is NOT resent '
+        '(deleted-elsewhere / long-gone content must not resurrect)',
+        () async {
+      var now = DateTime(2026, 7, 10, 12);
+      final store = buildWith(clock: () => now);
+      await connect(store, transports[0]);
+      await store.append(clip('stale')); // sent; the ack never arrives
+      transports[0].drop();
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+
+      now = now.add(const Duration(minutes: 11));
+      await connect(store, transports[1]);
+      expect(clipHashesSentOn(transports[1]), isEmpty,
+          reason: 'a clip sent 11 minutes ago with no ack is either long '
+              'evicted or deleted by another device — resending it would '
+              're-stamp stale content as the room\'s newest clip');
+    });
+
+    test('a never-sent clip is resent regardless of age', () async {
+      var now = DateTime(2026, 7, 10, 12);
+      final store = buildWith(clock: () => now);
+      await store.append(clip('old-offline')); // link never came up
+      now = now.add(const Duration(days: 3));
+      await connect(store, transports[0]);
+      expect(clipHashesSentOn(transports[0]), contains('h:old-offline'),
+          reason: 'a clip the relay NEVER saw must sync whenever the link '
+              'returns — that is the at-least-once promise');
+    });
+
+    test('an offline clear-all deletes the clips it saw instead of replaying '
+        'a room-wide clear', () async {
+      final store = buildWith();
+      transports[0].emit(historyMsg(['a', 'b']));
+      await store.connected.firstWhere((up) => up);
+      transports[0].drop();
+      await Future<void>.delayed(Duration.zero);
+      await store.clearAll(); // offline — the user sees [a, b] and clears
+
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await connect(store, transports[1]);
+      final frames =
+          transports[1].sent.map((m) => jsonDecode(m) as Map).toList();
+      expect(frames.where((m) => m['type'] == 'clear'), isEmpty,
+          reason: 'an unscoped clear replayed later would also wipe clips '
+              'other devices added AFTER the user cleared');
+      final del = frames.firstWhere((m) => m['type'] == 'delete');
+      expect(del['hashes'], unorderedEquals(['h:a', 'h:b']));
+    });
+
+    test('a connected clear-all still clears the whole room', () async {
+      final store = buildWith();
+      await connect(store, transports[0]);
+      await store.clearAll();
+      expect(transports[0].sent.map((m) => jsonDecode(m)['type']),
+          contains('clear'));
+    });
+
+    test('a rebroadcast of a hash already mid-history moves it to the top '
+        '(mirrors the relay dedup)', () async {
+      final store = buildWith();
+      transports[0].emit(historyMsg(['x', 'y']));
+      await store.connected.firstWhere((up) => up);
+      transports[0].emit(clipMsg('x')); // relay move-to-topped and rebroadcast
+      await Future<void>.delayed(Duration.zero);
+      expect(store.current.map((c) => c.hash).toList(), ['h:y', 'h:x'],
+          reason: 'client history must converge to the relay\'s order with '
+              'no duplicate entry');
     });
 
     test('a malformed history entry leaves the previous snapshot intact',
