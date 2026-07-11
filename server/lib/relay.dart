@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 /// Clippy zero-knowledge relay.
 ///
@@ -10,18 +11,26 @@ import 'dart:io';
 /// payloads — never the master key, plaintext, or any identity. It is a dumb
 /// encrypted-message router that also keeps the last N clips per room (durably,
 /// see [ClipRepository]) so a reconnecting device catches up.
-// History depth is a UI concern only (it matches the clients' visible-history
-// capacity): delivery proof is the explicit 'ack' frame sent to the uploader,
-// so nothing correctness-critical depends on this value.
-const int maxHistory = 25;
+// Must stay comfortably ABOVE the clients' unacked-resend bound (30): a
+// 1.0.25-or-earlier client proves delivery ONLY by finding its clip's hash in
+// the reconnect history snapshot — a delivered clip evicted from it looks
+// undelivered and is resent, re-stamped as the room's newest clip. The relay
+// deploys minutes after a merge while clients update on their own schedule,
+// so this invariant holds until the whole fleet is on the 1.0.26+ ack
+// protocol (and even then the snapshot stays the lost-ack fallback proof).
+const int maxHistory = 60;
 // Images sync at original quality with no downscaling, so this must fit a
 // full-screen Retina PNG raw: ~36MB image × ~1.78 (base64 → encrypted →
-// base64) ≈ 64M chars.
-const int maxCiphertextChars = 64000000;
+// base64) ≈ 64M chars. Not const: tests shrink it so the oversized-clip
+// fixture doesn't materialize hundreds of MB (same reason maxHistory-scaled
+// fixtures exist).
+int maxCiphertextChars = 64000000;
 const int maxRoomTokenChars = 512;
 
-/// Per-room clip history storage. Consecutive duplicate hashes collapse and the
-/// list is capped at [maxHistory].
+/// Per-room clip history storage. A clip whose hash already exists anywhere
+/// in the room's history moves to the top instead of duplicating (this makes
+/// client resends idempotent — the ack protocol depends on it); the list is
+/// capped at [maxHistory].
 abstract class ClipRepository {
   List<Map<String, dynamic>> recent(String room);
   void add(String room, Map<String, dynamic> clip);
@@ -37,6 +46,10 @@ abstract class ClipRepository {
   /// reclaim a pairing code that holds no clips and has no connected devices —
   /// an empty room has no data to lose and is recreated on the next clip.
   void delete(String room);
+
+  /// Make any pending writes durable. No-op for non-persistent stores; the
+  /// server calls this on SIGTERM/SIGINT so a deploy never loses state.
+  Future<void> flush();
 }
 
 class InMemoryClipRepository implements ClipRepository {
@@ -85,6 +98,9 @@ class InMemoryClipRepository implements ClipRepository {
   void delete(String room) {
     rooms.remove(room);
   }
+
+  @override
+  Future<void> flush() async {} // nothing pending — memory is the store
 }
 
 /// Persists history to a JSON file (atomic temp-write + rename) so it survives
@@ -93,14 +109,15 @@ class InMemoryClipRepository implements ClipRepository {
 class FileClipRepository extends InMemoryClipRepository {
   final String path;
 
-  /// Coalescing window for disk writes. _persist() jsonEncodes EVERY room and
-  /// rewrites the whole file — with image ciphertexts retained, doing that
-  /// synchronously per incoming clip can block the single relay isolate for
-  /// seconds. Debouncing trades a [persistDelay] crash-loss window (already
-  /// tolerated — the class serves from memory when the volume fails) for
-  /// bounded write amplification under bursts.
+  /// Coalescing window for ADD-triggered disk writes (clips arrive in
+  /// bursts). Destructive edits skip it — see [remove]/[clear]/[delete] —
+  /// and [flush] force-completes it (the SIGTERM path: Railway kills the
+  /// container on every deploy, and an add inside the window was already
+  /// acked to its sender). Only a hard crash can still lose the window.
   final Duration persistDelay;
   Timer? _persistTimer;
+  Future<void>? _inFlight;
+  bool _dirty = false; // mutated while a write was in flight → write again
 
   FileClipRepository(this.path,
       {this.persistDelay = const Duration(seconds: 2)}) {
@@ -129,13 +146,45 @@ class FileClipRepository extends InMemoryClipRepository {
       // never ran). An empty room has no data, so this loses nothing.
       final before = rooms.length;
       rooms.removeWhere((_, clips) => clips.isEmpty);
-      if (rooms.length != before) _persist();
+      // Synchronous on purpose: nothing is serving traffic yet at load time,
+      // and callers may read the swept file right after construction.
+      if (rooms.length != before) _write(path, rooms);
     } catch (_) {
       // Corrupt/absent file → start empty.
     }
   }
 
-  void _persist() {
+  /// Encode + write happen OFF this isolate: with image ciphertexts retained,
+  /// jsonEncoding every room synchronously can block the single relay isolate
+  /// for seconds, stalling every room's WebSocket frames. [Isolate.run]'s
+  /// message copy shares the (immutable) ciphertext strings, so the spawn is
+  /// cheap and the worker encodes a consistent snapshot while this isolate
+  /// keeps serving. Never runs concurrently with itself: a mutation during a
+  /// write marks [_dirty] and the loop writes once more with the newer state.
+  Future<void> _persist() {
+    final running = _inFlight;
+    if (running != null) {
+      _dirty = true;
+      return running;
+    }
+    return _inFlight = _persistLoop();
+  }
+
+  Future<void> _persistLoop() async {
+    try {
+      do {
+        _dirty = false;
+        final p = path;
+        final snapshot = rooms;
+        await Isolate.run(() => _write(p, snapshot));
+      } while (_dirty);
+    } finally {
+      _inFlight = null;
+    }
+  }
+
+  static void _write(
+      String path, Map<String, List<Map<String, dynamic>>> rooms) {
     try {
       final dir = File(path).parent;
       if (!dir.existsSync()) dir.createSync(recursive: true);
@@ -148,6 +197,13 @@ class FileClipRepository extends InMemoryClipRepository {
   }
 
   @override
+  Future<void> flush() {
+    _persistTimer?.cancel();
+    _persistTimer = null;
+    return _persist();
+  }
+
+  @override
   void add(String room, Map<String, dynamic> clip) {
     super.add(room, clip);
     _schedulePersist();
@@ -156,20 +212,23 @@ class FileClipRepository extends InMemoryClipRepository {
   @override
   List<String> remove(String room, Set<String> hashes) {
     final removed = super.remove(room, hashes);
-    if (removed.isNotEmpty) _schedulePersist();
+    // Destructive edits are rare and the UI already told the user "gone for
+    // good" — skip the coalescing window so a crash or redeploy inside it
+    // can't resurrect the clip in every device's next snapshot.
+    if (removed.isNotEmpty) unawaited(flush());
     return removed;
   }
 
   @override
   void clear(String room) {
     super.clear(room);
-    _schedulePersist();
+    unawaited(flush()); // same resurrection risk as remove()
   }
 
   @override
   void delete(String room) {
     super.delete(room);
-    _schedulePersist();
+    unawaited(flush());
   }
 }
 
@@ -317,6 +376,11 @@ void _broadcast(String room, Map<String, dynamic> msg) {
   }
 }
 
+/// Send [msg] to one socket if it is still open (ack/reject to the uploader).
+void _sendTo(WebSocket ws, Map<String, dynamic> msg) {
+  if (ws.readyState == WebSocket.open) ws.add(jsonEncode(msg));
+}
+
 void _handleSocket(WebSocket ws) {
   String? room;
 
@@ -363,22 +427,26 @@ void _handleSocket(WebSocket ws) {
           final clip = msg['clip'];
           if (clip is! Map) return;
           final ciphertext = clip['ciphertext'];
+          final hash = clip['hash'];
           if (ciphertext is! String ||
               ciphertext.length > maxCiphertextChars) {
             // Tell the sender this clip can NEVER succeed — a silent drop
             // would leave it queued client-side and re-uploaded forever.
-            final h = clip['hash'];
-            if (h is String && ws.readyState == WebSocket.open) {
-              ws.add(jsonEncode({'type': 'reject', 'hash': h}));
+            if (hash is String) {
+              _sendTo(ws, {'type': 'reject', 'hash': hash});
             }
             return;
           }
+          // A hashless clip can never be acked, deduped, or deleted — and a
+          // stored null hash would make the move-to-top removeWhere below
+          // match (null == null) every other hashless clip and purge them.
+          if (hash is! String || hash.isEmpty) return;
           // Server stamps the authoritative timestamp; ordering never trusts a
           // device clock.
           final stored = <String, dynamic>{
             'ciphertext': ciphertext,
             'iv': clip['iv'],
-            'hash': clip['hash'],
+            'hash': hash,
             'source': clip['source'],
             'device': clip['device'],
             'kind': clip['kind'],
@@ -399,9 +467,7 @@ void _handleSocket(WebSocket ws) {
           // Explicit delivery proof to the uploader: the client holds every
           // clip as unacked-and-resendable until this arrives. (The broadcast
           // echo above doubles as a hint, but the ack is the contract.)
-          if (ws.readyState == WebSocket.open) {
-            ws.add(jsonEncode({'type': 'ack', 'hash': stored['hash']}));
-          }
+          _sendTo(ws, {'type': 'ack', 'hash': hash});
           break;
 
         case 'delete':

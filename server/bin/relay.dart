@@ -12,4 +12,15 @@ Future<void> main() async {
   final server = await startServer(port, repo: repo);
   stdout.writeln('clippy-relay listening on :${server.port} '
       '(history: ${dbPath ?? "in-memory"})');
+
+  // Railway SIGTERMs the container on every deploy. Without this flush,
+  // anything inside the persist debounce dies with the process: adds the
+  // sender was already acked for are lost, and deletes/clears the user was
+  // told are "gone for good" resurrect from the stale file.
+  for (final sig in [ProcessSignal.sigterm, ProcessSignal.sigint]) {
+    sig.watch().listen((_) async {
+      await repo.flush();
+      exit(0);
+    });
+  }
 }

@@ -1,7 +1,15 @@
 {
   "notes": {
     "features": [],
-    "improvements": [],
-    "fixes": []
+    "improvements": [
+      "Faster, more resilient history saving on the sync server"
+    ],
+    "fixes": [
+      "Large screenshots now sync reliably after a connection drop",
+      "Deleted clips no longer come back after a server restart",
+      "Clearing history while offline no longer removes clips copied afterwards on other devices",
+      "Old unsent clips are no longer re-applied to every device long after the fact",
+      "Re-copying an earlier clip no longer shows it twice in history"
+    ]
   }
 }

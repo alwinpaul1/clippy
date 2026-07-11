@@ -31,6 +31,11 @@ class ClipQueueItem {
 abstract class ClipQueue {
   static Directory? _cachedDir;
 
+  /// Test hook: overrides the (Android-only) queue directory so the queue
+  /// logic is exercisable in host unit tests.
+  @visibleForTesting
+  static Directory? debugDir;
+
   static const _imageMimes = {
     'png': 'image/png',
     'jpg': 'image/jpeg',
@@ -40,6 +45,7 @@ abstract class ClipQueue {
   };
 
   static Future<Directory?> _dir() async {
+    if (debugDir != null) return debugDir;
     if (kIsWeb || !Platform.isAndroid) return null;
     if (_cachedDir != null) return _cachedDir;
     try {
@@ -56,23 +62,35 @@ abstract class ClipQueue {
     if (dir == null) return const [];
     try {
       if (!dir.existsSync()) return const [];
-      final files = dir.listSync().whereType<File>().toList()
+      final files = dir
+          .listSync()
+          .whereType<File>()
+          .where((f) => !f.path.endsWith(_lockName))
+          .toList()
         ..sort((a, b) => a.path.compareTo(b.path));
+      if (files.isEmpty) return const [];
       final items = <ClipQueueItem>[];
-      for (final f in files) {
-        final ext = f.path.split('.').last.toLowerCase();
-        // Images are staged as `<name>.part` then renamed in, so a `.part`
-        // seen mid-rename is incomplete — the next drain gets it. But a rename
-        // that never completed (writer killed, rename failed) would otherwise
-        // orphan the file forever — reap it once it's clearly stale.
-        if (ext == 'part') {
-          _reapIfStale(f);
-          continue;
+      try {
+        for (final f in files) {
+          // Refreshed per file: a big image drain can outlive one freshness
+          // window, and enforceBound must stand down for the whole drain.
+          _touchLock(dir);
+          final ext = f.path.split('.').last.toLowerCase();
+          // Images are staged as `<name>.part` then renamed in, so a `.part`
+          // seen mid-rename is incomplete — the next drain gets it. But a rename
+          // that never completed (writer killed, rename failed) would otherwise
+          // orphan the file forever — reap it once it's clearly stale.
+          if (ext == 'part') {
+            _reapIfStale(f);
+            continue;
+          }
+          final mime = _imageMimes[ext];
+          final item =
+              mime != null ? await _drainImage(f, mime) : await _drainText(f);
+          if (item != null) items.add(item);
         }
-        final mime = _imageMimes[ext];
-        final item =
-            mime != null ? await _drainImage(f, mime) : await _drainText(f);
-        if (item != null) items.add(item);
+      } finally {
+        _releaseLock(dir);
       }
       return items;
     } catch (_) {
@@ -123,6 +141,27 @@ abstract class ClipQueue {
     } catch (_) {}
   }
 
+  // Cross-isolate mutual exclusion between the queue's two writers-of-record
+  // (either isolate's drain/requeue) and enforceBound's pruning. The two
+  // isolates hold INDEPENDENT relay connections, so "my store is
+  // disconnected" — enforceBound's trigger — proves nothing about the other
+  // isolate: only this on-disk heartbeat does. Refreshed per drained file;
+  // a lock past [_lockFreshness] is a crash leftover and is ignored.
+  static const _lockName = 'drain.lock';
+  static const _lockFreshness = Duration(minutes: 1);
+
+  static void _touchLock(Directory dir) {
+    try {
+      File('${dir.path}/$_lockName').writeAsStringSync('');
+    } catch (_) {}
+  }
+
+  static void _releaseLock(Directory dir) {
+    try {
+      File('${dir.path}/$_lockName').deleteSync();
+    } catch (_) {}
+  }
+
   /// Put a drained item BACK on disk under its ORIGINAL filename. drain()
   /// consumes the file before the send happens, so if the relay link dies
   /// mid-drain the disk copy — the only one that survives a process kill —
@@ -140,6 +179,7 @@ abstract class ClipQueue {
     if (dir == null) return;
     try {
       dir.createSync(recursive: true);
+      _touchLock(dir); // a requeued file must not be pruned as it lands
       final part = File('${dir.path}/$name.part');
       if (item.isImage) {
         await part.writeAsBytes(item.imageBytes!);
@@ -167,22 +207,38 @@ abstract class ClipQueue {
   // The queue only grows while the relay is unreachable (drains are gated on
   // a confirmed link), and nothing else bounds it — a device that stays
   // paired-but-unconnected would accumulate captures (multi-MB images
-  // included) without limit.
-  static const _maxQueueFiles = 200;
-  static const _maxQueueBytes = 200 << 20;
+  // included) without limit. Mutable only so tests can shrink the fixture.
+  @visibleForTesting
+  static int maxQueueFiles = 200;
+  @visibleForTesting
+  static int maxQueueBytes = 200 << 20;
 
-  /// Drop the oldest queue files while over the count/byte bound. Only
-  /// meaningful while the relay is unreachable (callers gate on that), so it
-  /// can't race an active drain. `.part` staging files are exempt — they are
-  /// mid-write; the stale-orphan reaper handles the abandoned ones.
+  /// Drop the oldest queue files while over the count/byte bound. Callers
+  /// gate on their own relay link being down, but the OTHER isolate can be
+  /// connected and mid-drain — the [_lockName] heartbeat is what actually
+  /// prevents pruning files an active drain just requeued or was about to
+  /// deliver. `.part` staging files are exempt from the bound (they are
+  /// mid-write), but stale ones are reaped here too: while offline — the only
+  /// time this runs — drain() never runs, so its reaper can't.
   static Future<void> enforceBound() async {
     final dir = await _dir();
     if (dir == null) return;
     try {
       if (!dir.existsSync()) return;
+      try {
+        final age = DateTime.now()
+            .difference(File('${dir.path}/$_lockName').statSync().modified);
+        if (age < _lockFreshness) return; // live drain — never race it
+      } catch (_) {
+        // No lock — nothing draining.
+      }
       final entries = <(File, int)>[];
       for (final f in dir.listSync().whereType<File>()) {
-        if (f.path.endsWith('.part')) continue;
+        if (f.path.endsWith(_lockName)) continue;
+        if (f.path.endsWith('.part')) {
+          _reapIfStale(f);
+          continue;
+        }
         try {
           entries.add((f, f.statSync().size));
         } catch (_) {
@@ -193,10 +249,19 @@ abstract class ClipQueue {
       var count = entries.length;
       var total = entries.fold(0, (sum, e) => sum + e.$2);
       for (final (f, size) in entries) {
-        if (count <= _maxQueueFiles && total <= _maxQueueBytes) break;
+        if (count <= maxQueueFiles && total <= maxQueueBytes) break;
         try {
           f.deleteSync();
-        } catch (_) {}
+        } catch (_) {
+          // Failed with the file still present: NOT freed — counting it
+          // would end the loop with the disk still over its bound. A file
+          // that vanished concurrently is genuinely gone and still counts.
+          var stillThere = true;
+          try {
+            stillThere = f.existsSync();
+          } catch (_) {}
+          if (stillThere) continue;
+        }
         count--;
         total -= size;
       }

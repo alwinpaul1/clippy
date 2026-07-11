@@ -33,6 +33,7 @@ void main() {
     repository = InMemoryClipRepository();
     roomClients.clear();
     nowIso = () => '2026-07-02T00:00:00.000Z';
+    maxCiphertextChars = 64000000; // production value; tests may shrink it
     server = await startServer(0);
   });
 
@@ -89,6 +90,9 @@ void main() {
 
   test('an oversized clip is rejected to the sender, not silently dropped',
       () async {
+    // Shrink the cap for the fixture: materializing the real 64M-char cap
+    // (plus its jsonEncode/decode copies) costs hundreds of MB per run.
+    maxCiphertextChars = 1000;
     final (a, aStream) = await connect(port());
     a.add(jsonEncode({'type': 'join', 'room': 'fat-room'}));
     await aStream.first; // history
@@ -105,6 +109,23 @@ void main() {
     final reject = await aStream.firstWhere((m) => m['type'] == 'reject');
     expect(reject['hash'], 'h:fat');
     expect(repository.recent('fat-room'), isEmpty);
+    await a.close();
+  });
+
+  test('a clip without a hash is dropped, not stored', () async {
+    final (a, aStream) = await connect(port());
+    a.add(jsonEncode({'type': 'join', 'room': 'nohash'}));
+    await aStream.first; // history
+
+    a.add(jsonEncode({
+      'type': 'clip',
+      'clip': {'ciphertext': 'enc:x', 'iv': 'iv', 'source': 'devA'},
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(repository.recent('nohash'), isEmpty,
+        reason: 'a hashless clip can never be acked, deduped, or deleted — '
+            'and storing it would let null == null purge every other '
+            'hashless clip via the move-to-top removeWhere');
     await a.close();
   });
 
