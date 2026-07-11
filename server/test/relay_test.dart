@@ -32,6 +32,7 @@ void main() {
   setUp(() async {
     repository = InMemoryClipRepository();
     roomClients.clear();
+    roomTombstones.clear();
     nowIso = () => '2026-07-02T00:00:00.000Z';
     maxCiphertextChars = 64000000; // production value; tests may shrink it
     server = await startServer(0);
@@ -126,6 +127,102 @@ void main() {
         reason: 'a hashless clip can never be acked, deduped, or deleted — '
             'and storing it would let null == null purge every other '
             'hashless clip via the move-to-top removeWhere');
+    await a.close();
+  });
+
+  test('a flagged resend of deleted content is rejected, not resurrected',
+      () async {
+    final (a, aStream) = await connect(port());
+    a.add(jsonEncode({'type': 'join', 'room': 'tomb'}));
+    await aStream.first; // history
+
+    a.add(jsonEncode(clipMsg('secret')));
+    await aStream.firstWhere((m) => m['type'] == 'ack');
+    a.add(jsonEncode({'type': 'delete', 'hashes': ['h:secret']}));
+    await aStream.firstWhere((m) => m['type'] == 'deleted');
+
+    // Another device's stale resend arrives (e.g. its ack was lost).
+    final resend = clipMsg('secret')..['resend'] = true;
+    a.add(jsonEncode(resend));
+    final reject = await aStream.firstWhere((m) => m['type'] == 'reject');
+    expect(reject['hash'], 'h:secret');
+    expect(repository.recent('tomb'), isEmpty,
+        reason: 'deleted content must never resurrect from a resend');
+    await a.close();
+  });
+
+  test('a FRESH copy of deleted content revives it and clears the tombstone',
+      () async {
+    final (a, aStream) = await connect(port());
+    a.add(jsonEncode({'type': 'join', 'room': 'revive'}));
+    await aStream.first; // history
+
+    a.add(jsonEncode(clipMsg('again')));
+    await aStream.firstWhere((m) => m['type'] == 'ack');
+    a.add(jsonEncode({'type': 'delete', 'hashes': ['h:again']}));
+    await aStream.firstWhere((m) => m['type'] == 'deleted');
+
+    a.add(jsonEncode(clipMsg('again'))); // no resend flag = new user intent
+    await aStream.firstWhere((m) => m['type'] == 'ack');
+    expect(repository.recent('revive').single['hash'], 'h:again',
+        reason: 'a deliberate re-copy is not a resend — it revives');
+    await a.close();
+  });
+
+  test('a watermarked delete spares a copy stored after the watermark',
+      () async {
+    final (a, aStream) = await connect(port());
+    a.add(jsonEncode({'type': 'join', 'room': 'wm-del'}));
+    await aStream.first; // history
+
+    nowIso = () => '2026-07-02T10:00:00.000Z';
+    a.add(jsonEncode(clipMsg('x')));
+    await aStream.firstWhere((m) => m['type'] == 'ack');
+
+    // A stale offline delete replays with a watermark BEFORE the stored copy.
+    a.add(jsonEncode({
+      'type': 'delete',
+      'hashes': ['h:x'],
+      'before': '2026-07-02T09:00:00.000Z',
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(repository.recent('wm-del').single['hash'], 'h:x',
+        reason: 'the newer copy postdates the user\'s delete — it survives');
+
+    // The same delete watermarked AFTER the copy removes it.
+    a.add(jsonEncode({
+      'type': 'delete',
+      'hashes': ['h:x'],
+      'before': '2026-07-02T11:00:00.000Z',
+    }));
+    await aStream.firstWhere((m) => m['type'] == 'deleted');
+    expect(repository.recent('wm-del'), isEmpty);
+    await a.close();
+  });
+
+  test('a watermarked clear removes only clips at-or-before the watermark '
+      'and broadcasts them as deleted', () async {
+    final (a, aStream) = await connect(port());
+    a.add(jsonEncode({'type': 'join', 'room': 'wm-clear'}));
+    await aStream.first; // history
+
+    nowIso = () => '2026-07-02T10:00:00.000Z';
+    a.add(jsonEncode(clipMsg('old')));
+    await aStream.firstWhere((m) => m['type'] == 'ack');
+    nowIso = () => '2026-07-02T12:00:00.000Z';
+    a.add(jsonEncode(clipMsg('newer')));
+    await aStream.firstWhere(
+        (m) => m['type'] == 'ack' && m['hash'] == 'h:newer');
+
+    a.add(jsonEncode({
+      'type': 'clear',
+      'before': '2026-07-02T11:00:00.000Z', // between the two clips
+    }));
+    final deleted = await aStream.firstWhere((m) => m['type'] == 'deleted');
+    expect(deleted['hashes'], ['h:old'],
+        reason: 'a late-replayed clear must not wipe clips added after the '
+            'user acted');
+    expect(repository.recent('wm-clear').single['hash'], 'h:newer');
     await a.close();
   });
 

@@ -1,15 +1,17 @@
 {
+  "version": "1.0.28",
   "notes": {
     "features": [],
     "improvements": [
-      "Faster, more resilient history saving on the sync server"
+      "The Clippy mascot now comes alive on the empty screen",
+      "Smoother, safer server updates with no sync interruption"
     ],
     "fixes": [
-      "Large screenshots now sync reliably after a connection drop",
-      "Deleted clips no longer come back after a server restart",
-      "Clearing history while offline no longer removes clips copied afterwards on other devices",
-      "Old unsent clips are no longer re-applied to every device long after the fact",
-      "Re-copying an earlier clip no longer shows it twice in history"
+      "Clips copied during long offline stretches always sync when you're back",
+      "Deleting a clip on one device can no longer bring back a copy someone re-copied later",
+      "Clear all now works even right after opening the app offline",
+      "Old screenshots no longer jump to the top of history after a reconnect",
+      "History shows the same clips on every device after bulk deletes"
     ]
   }
 }
