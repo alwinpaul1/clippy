@@ -62,35 +62,24 @@ abstract class ClipQueue {
     if (dir == null) return const [];
     try {
       if (!dir.existsSync()) return const [];
-      final files = dir
-          .listSync()
-          .whereType<File>()
-          .where((f) => !f.path.endsWith(_lockName))
-          .toList()
+      final files = dir.listSync().whereType<File>().toList()
         ..sort((a, b) => a.path.compareTo(b.path));
       if (files.isEmpty) return const [];
       final items = <ClipQueueItem>[];
-      try {
-        for (final f in files) {
-          // Refreshed per file: a big image drain can outlive one freshness
-          // window, and enforceBound must stand down for the whole drain.
-          _touchLock(dir);
-          final ext = f.path.split('.').last.toLowerCase();
-          // Images are staged as `<name>.part` then renamed in, so a `.part`
-          // seen mid-rename is incomplete — the next drain gets it. But a rename
-          // that never completed (writer killed, rename failed) would otherwise
-          // orphan the file forever — reap it once it's clearly stale.
-          if (ext == 'part') {
-            _reapIfStale(f);
-            continue;
-          }
-          final mime = _imageMimes[ext];
-          final item =
-              mime != null ? await _drainImage(f, mime) : await _drainText(f);
-          if (item != null) items.add(item);
+      for (final f in files) {
+        final ext = f.path.split('.').last.toLowerCase();
+        // Images are staged as `<name>.part` then renamed in, so a `.part`
+        // seen mid-rename is incomplete — the next drain gets it. But a rename
+        // that never completed (writer killed, rename failed) would otherwise
+        // orphan the file forever — reap it once it's clearly stale.
+        if (ext == 'part') {
+          _reapIfStale(f);
+          continue;
         }
-      } finally {
-        _releaseLock(dir);
+        final mime = _imageMimes[ext];
+        final item =
+            mime != null ? await _drainImage(f, mime) : await _drainText(f);
+        if (item != null) items.add(item);
       }
       return items;
     } catch (_) {
@@ -132,33 +121,22 @@ abstract class ClipQueue {
     return ClipQueueItem.image(bytes, mime, name: f.uri.pathSegments.last);
   }
 
+  /// Whether [f]'s last modification is older than [age]. Treats a
+  /// stat failure (file vanished under a concurrent delete) as "not older" so
+  /// callers simply skip it.
+  static bool _olderThan(File f, Duration age) {
+    try {
+      return DateTime.now().difference(f.statSync().modified) > age;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// A file that stays empty (writer killed mid-write) is re-listed on every
   /// drain forever — reap it after a grace window.
   static void _reapIfStale(File f) {
     try {
-      final age = DateTime.now().difference(f.statSync().modified);
-      if (age > const Duration(seconds: 30)) f.deleteSync();
-    } catch (_) {}
-  }
-
-  // Cross-isolate mutual exclusion between the queue's two writers-of-record
-  // (either isolate's drain/requeue) and enforceBound's pruning. The two
-  // isolates hold INDEPENDENT relay connections, so "my store is
-  // disconnected" — enforceBound's trigger — proves nothing about the other
-  // isolate: only this on-disk heartbeat does. Refreshed per drained file;
-  // a lock past [_lockFreshness] is a crash leftover and is ignored.
-  static const _lockName = 'drain.lock';
-  static const _lockFreshness = Duration(minutes: 1);
-
-  static void _touchLock(Directory dir) {
-    try {
-      File('${dir.path}/$_lockName').writeAsStringSync('');
-    } catch (_) {}
-  }
-
-  static void _releaseLock(Directory dir) {
-    try {
-      File('${dir.path}/$_lockName').deleteSync();
+      if (_olderThan(f, const Duration(seconds: 30))) f.deleteSync();
     } catch (_) {}
   }
 
@@ -179,7 +157,6 @@ abstract class ClipQueue {
     if (dir == null) return;
     try {
       dir.createSync(recursive: true);
-      _touchLock(dir); // a requeued file must not be pruned as it lands
       final part = File('${dir.path}/$name.part');
       if (item.isImage) {
         await part.writeAsBytes(item.imageBytes!);
@@ -213,42 +190,47 @@ abstract class ClipQueue {
   @visibleForTesting
   static int maxQueueBytes = 200 << 20;
 
-  /// Drop the oldest queue files while over the count/byte bound. Callers
-  /// gate on their own relay link being down, but the OTHER isolate can be
-  /// connected and mid-drain — the [_lockName] heartbeat is what actually
-  /// prevents pruning files an active drain just requeued or was about to
-  /// deliver. `.part` staging files are exempt from the bound (they are
-  /// mid-write), but stale ones are reaped here too: while offline — the only
-  /// time this runs — drain() never runs, so its reaper can't.
+  /// How long a queue file must sit untouched before the bound may prune it.
+  /// This — a per-file property, not shared lock state — is the cross-isolate
+  /// safety: anything a drain just requeued (or a writer just staged) carries
+  /// a fresh mtime and is structurally unprunable, with no heartbeat for a
+  /// concurrent drain to delete out from under the other isolate. An OLD
+  /// over-bound file can still be pruned while the other isolate's drain is
+  /// mid-flight — but pruning it is exactly the bound's stated policy.
+  static const _pruneMinAge = Duration(minutes: 1);
+
+  /// Drop the oldest queue files while over the count/byte bound. `.part`
+  /// staging files are exempt from the bound (they are mid-write), but stale
+  /// ones are reaped here too: while offline — the only time this runs —
+  /// drain() never runs, so its reaper can't.
   static Future<void> enforceBound() async {
     final dir = await _dir();
     if (dir == null) return;
     try {
       if (!dir.existsSync()) return;
-      try {
-        final age = DateTime.now()
-            .difference(File('${dir.path}/$_lockName').statSync().modified);
-        if (age < _lockFreshness) return; // live drain — never race it
-      } catch (_) {
-        // No lock — nothing draining.
-      }
-      final entries = <(File, int)>[];
+      // The bound is judged against EVERYTHING on disk (that's the real
+      // usage), but only files past the age gate are eligible for deletion —
+      // fresh writes protect themselves by mtime.
+      var count = 0;
+      var total = 0;
+      final prunable = <(File, int)>[];
       for (final f in dir.listSync().whereType<File>()) {
-        if (f.path.endsWith(_lockName)) continue;
         if (f.path.endsWith('.part')) {
           _reapIfStale(f);
           continue;
         }
+        int size;
         try {
-          entries.add((f, f.statSync().size));
+          size = f.statSync().size;
         } catch (_) {
-          // Vanished between list and stat (concurrent delete) — skip it.
+          continue; // vanished between list and stat (concurrent delete)
         }
+        count++;
+        total += size;
+        if (_olderThan(f, _pruneMinAge)) prunable.add((f, size));
       }
-      entries.sort((a, b) => a.$1.path.compareTo(b.$1.path)); // oldest first
-      var count = entries.length;
-      var total = entries.fold(0, (sum, e) => sum + e.$2);
-      for (final (f, size) in entries) {
+      prunable.sort((a, b) => a.$1.path.compareTo(b.$1.path)); // oldest first
+      for (final (f, size) in prunable) {
         if (count <= maxQueueFiles && total <= maxQueueBytes) break;
         try {
           f.deleteSync();

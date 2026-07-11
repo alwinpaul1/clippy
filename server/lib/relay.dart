@@ -11,14 +11,15 @@ import 'dart:isolate';
 /// payloads — never the master key, plaintext, or any identity. It is a dumb
 /// encrypted-message router that also keeps the last N clips per room (durably,
 /// see [ClipRepository]) so a reconnecting device catches up.
-// Must stay comfortably ABOVE the clients' unacked-resend bound (30): a
-// 1.0.25-or-earlier client proves delivery ONLY by finding its clip's hash in
-// the reconnect history snapshot — a delivered clip evicted from it looks
-// undelivered and is resent, re-stamped as the room's newest clip. The relay
-// deploys minutes after a merge while clients update on their own schedule,
-// so this invariant holds until the whole fleet is on the 1.0.26+ ack
-// protocol (and even then the snapshot stays the lost-ack fallback proof).
-const int maxHistory = 60;
+// MUST equal the clients' visible-history capacity (HistoryStore capacity in
+// lib/core/history/history_store.dart): a deeper server history means clips
+// that are invisible in every UI yet resurface after a delete-all-visible.
+// Depth is a UI concern only — delivery proof is the explicit 'ack' frame,
+// resends are idempotent (move-to-top), and resends of deleted content are
+// answered with 'reject' via tombstones, so nothing correctness-critical
+// rides on this value. (The 1.0.25-era snapshot-as-proof clients that once
+// required 60 here are gone — the fleet is entirely on the ack protocol.)
+const int maxHistory = 25;
 // Images sync at original quality with no downscaling, so this must fit a
 // full-screen Retina PNG raw: ~36MB image × ~1.78 (base64 → encrypted →
 // base64) ≈ 64M chars. Not const: tests shrink it so the oversized-clip
@@ -125,6 +126,14 @@ class FileClipRepository extends InMemoryClipRepository {
   }
 
   void _schedulePersist() {
+    // A mutation landing WHILE a write is in flight must mark the snapshot
+    // dirty, not just arm the timer: flush()/SIGTERM kills the timer, and
+    // without _dirty the in-flight loop would exit believing it wrote
+    // everything — losing a clip the sender was already acked for.
+    if (_inFlight != null) {
+      _dirty = true;
+      return;
+    }
     _persistTimer ??= Timer(persistDelay, () {
       _persistTimer = null;
       _persist();
@@ -176,7 +185,16 @@ class FileClipRepository extends InMemoryClipRepository {
         _dirty = false;
         final p = path;
         final snapshot = rooms;
-        await Isolate.run(() => _write(p, snapshot));
+        try {
+          await Isolate.run(() => _write(p, snapshot));
+        } catch (_) {
+          // Worker spawn failed (resource pressure). _write itself never
+          // throws, so this is the ONLY failure path — degrade to a blocking
+          // main-isolate write rather than letting the rejection escape:
+          // callers use unawaited(flush()) and an unhandled error here would
+          // take down the whole relay (and skip the SIGTERM exit).
+          _write(p, snapshot);
+        }
       } while (_dirty);
     } finally {
       _inFlight = null;
@@ -234,6 +252,29 @@ class FileClipRepository extends InMemoryClipRepository {
 
 /// Live WebSocket connections per room (not persisted).
 final Map<String, Set<WebSocket>> roomClients = {};
+
+/// Recently deleted content hashes per room (hash → deletedAt ISO), so a
+/// client RESEND of a clip that another device deleted while the sender was
+/// offline is answered with 'reject' (sender stops resending; nothing
+/// resurrects) — while a FRESH copy of the same content (no resend flag) is a
+/// new user intent that revives it and clears the tombstone. Time cannot make
+/// this distinction; the flag can. In-memory and bounded: a relay restart
+/// forgets tombstones, so the resurrection residual is only resend + deletion
+/// + redeploy coinciding within one offline window.
+final Map<String, Map<String, String>> roomTombstones = {};
+const int _maxTombstonesPerRoom = 200;
+
+void _tombstone(String room, Iterable<String> hashes) {
+  final tomb = roomTombstones.putIfAbsent(room, () => {});
+  final now = nowIso();
+  for (final h in hashes) {
+    tomb.remove(h); // re-insert as newest
+    tomb[h] = now;
+  }
+  while (tomb.length > _maxTombstonesPerRoom) {
+    tomb.remove(tomb.keys.first);
+  }
+}
 
 /// The active history store. Tests reset this to a fresh in-memory instance.
 ClipRepository repository = InMemoryClipRepository();
@@ -381,6 +422,28 @@ void _sendTo(WebSocket ws, Map<String, dynamic> msg) {
   if (ws.readyState == WebSocket.open) ws.add(jsonEncode(msg));
 }
 
+/// Parse an optional client 'before' watermark, clamped to server-now: a
+/// destructive edit applies only to content at-or-before the moment the user
+/// acted, however late the frame replays — clips added afterwards survive.
+/// Clamping caps a forward-skewed device clock at "everything current".
+/// Null (absent/unparseable) means the caller should use legacy semantics.
+DateTime? _watermark(dynamic before) {
+  if (before is! String) return null;
+  final t = DateTime.tryParse(before);
+  if (t == null) return null;
+  final now = DateTime.parse(nowIso());
+  return t.isAfter(now) ? now : t;
+}
+
+/// Hashes in [room]'s history whose server timestamp is at-or-before [cutoff].
+Set<String> _hashesBefore(String room, DateTime cutoff) => {
+      for (final c in repository.recent(room))
+        if (c['hash'] is String &&
+            c['timestamp'] is String &&
+            !DateTime.parse(c['timestamp'] as String).isAfter(cutoff))
+          c['hash'] as String,
+    };
+
 void _handleSocket(WebSocket ws) {
   String? room;
 
@@ -393,7 +456,10 @@ void _handleSocket(WebSocket ws) {
       // Last device for this pairing code just left: if it holds no clips,
       // reclaim it. A room that still has clips is kept — its devices are only
       // offline, not gone, and deleting it would lose their history.
-      if (repository.recent(r).isEmpty) repository.delete(r);
+      if (repository.recent(r).isEmpty) {
+        repository.delete(r);
+        roomTombstones.remove(r); // a reclaimed code starts with a clean slate
+      }
     }
   }
 
@@ -418,7 +484,7 @@ void _handleSocket(WebSocket ws) {
           }
           room = token;
           roomClients.putIfAbsent(token, () => {}).add(ws);
-          ws.add(jsonEncode({'type': 'history', 'clips': repository.recent(token)}));
+          _sendTo(ws, {'type': 'history', 'clips': repository.recent(token)});
           break;
 
         case 'clip':
@@ -441,6 +507,16 @@ void _handleSocket(WebSocket ws) {
           // stored null hash would make the move-to-top removeWhere below
           // match (null == null) every other hashless clip and purge them.
           if (hash is! String || hash.isEmpty) return;
+          // A RESEND of content another device deleted while the sender was
+          // offline must not resurrect it: answer 'reject' so the sender
+          // stops retrying. A fresh copy (no resend flag) is new user intent
+          // — it revives the content and clears the tombstone below.
+          if (msg['resend'] == true &&
+              (roomTombstones[r]?.containsKey(hash) ?? false)) {
+            _sendTo(ws, {'type': 'reject', 'hash': hash});
+            return;
+          }
+          roomTombstones[r]?.remove(hash);
           // Server stamps the authoritative timestamp; ordering never trusts a
           // device clock.
           final stored = <String, dynamic>{
@@ -458,12 +534,7 @@ void _handleSocket(WebSocket ws) {
           // sees uniform server-stamped clips. A device ignores its own clips
           // for the clipboard-apply decision (SyncEngine source check) but still
           // shows them in history.
-          final out = jsonEncode({'type': 'clip', 'clip': stored});
-          for (final peer in roomClients[r] ?? const <WebSocket>{}) {
-            if (peer.readyState == WebSocket.open) {
-              peer.add(out);
-            }
-          }
+          _broadcast(r, {'type': 'clip', 'clip': stored});
           // Explicit delivery proof to the uploader: the client holds every
           // clip as unacked-and-resendable until this arrives. (The broadcast
           // echo above doubles as a hint, but the ack is the contract.)
@@ -475,16 +546,42 @@ void _handleSocket(WebSocket ws) {
           if (r == null) return;
           final raw = msg['hashes'];
           if (raw is! List) return;
-          final hashes = raw.whereType<String>().toSet();
+          var hashes = raw.whereType<String>().toSet();
           if (hashes.isEmpty) return;
+          // Watermark: a delete replayed long after the user acted must not
+          // kill a NEWER copy of the same content (a hash names content, not
+          // an instance — another device may have deliberately re-copied it
+          // since). Scope the delete to clips stamped at-or-before the action.
+          final delCutoff = _watermark(msg['before']);
+          if (delCutoff != null) {
+            hashes = hashes.intersection(_hashesBefore(r, delCutoff));
+            if (hashes.isEmpty) return;
+          }
           final removed = repository.remove(r, hashes);
           if (removed.isEmpty) return;
+          _tombstone(r, removed); // resends of these get 'reject', not revival
           _broadcast(r, {'type': 'deleted', 'hashes': removed});
           break;
 
         case 'clear':
           final r = room;
           if (r == null) return;
+          // Watermarked clear ("everything at-or-before the moment the user
+          // acted"): applies correctly however late the frame replays — clips
+          // other devices added AFTER the user's intent survive, clips the
+          // user never saw but that predate the intent are still cleared.
+          final clearCutoff = _watermark(msg['before']);
+          if (clearCutoff != null) {
+            final doomed = _hashesBefore(r, clearCutoff);
+            final removed = repository.remove(r, doomed);
+            if (removed.isEmpty) return;
+            _tombstone(r, removed);
+            _broadcast(r, {'type': 'deleted', 'hashes': removed});
+            return;
+          }
+          // Legacy unscoped clear (pre-1.0.28 clients).
+          _tombstone(
+              r, repository.recent(r).map((c) => c['hash']).whereType<String>());
           repository.clear(r);
           _broadcast(r, {'type': 'cleared'});
           break;

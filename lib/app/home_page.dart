@@ -1102,7 +1102,9 @@ class _EmptyState extends StatelessWidget {
           children: [
             Opacity(
               opacity: 0.4,
-              child: ClippyMark(
+              // Alive like the header mark (gentle bob + blink): an empty
+              // room shouldn't feel dead — Clippy is waiting, not broken.
+              child: AnimatedClippyMark(
                 height: 58,
                 clipHex: c.hex(c.muted2),
                 eyeHex: c.hex(c.muted2),

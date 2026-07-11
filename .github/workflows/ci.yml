@@ -171,9 +171,17 @@ jobs:
           SEMVER=${VER%%+*}; BUILD=${VER##*+}
           python3 - "$SEMVER" "$BUILD" <<'PY'
           import json, sys
-          notes = json.load(open('release.json'))['notes']
+          rel = json.load(open('release.json'))
+          # Guard: the changelog must have been written FOR this version.
+          # Without this, bumping pubspec while forgetting release.json ships
+          # the previous release's notes under the new version number.
+          if rel.get('version') != sys.argv[1]:
+              sys.exit(f"release.json version {rel.get('version')!r} != "
+                       f"pubspec {sys.argv[1]!r} — update release.json's "
+                       "version and notes as part of every release.")
           json.dump({
-              'version': sys.argv[1], 'build': int(sys.argv[2]), 'notes': notes,
+              'version': sys.argv[1], 'build': int(sys.argv[2]),
+              'notes': rel['notes'],
               'android': '/download/Clippy-Android.apk',
               'macos':   '/download/Clippy-macOS.zip',
               'windows': '/download/Clippy-Setup.exe',
