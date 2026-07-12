@@ -62,6 +62,10 @@ class ClipController extends ChangeNotifier
   // JPEG re-reads as PNG), so a raw-byte / content-hash compare misses the echo.
   String? _handledText;
   String? _handledImageFp;
+  SharedPreferences? _prefs;
+  // The echo fingerprint must outlive the process: the CLIPBOARD does. See the
+  // incoming-image path for why lastAppliedHash cannot stand in for it.
+  static const _imageFpKey = 'clippy.lastAppliedImageFp';
   bool _incomingImagePending = false;
 
   List<HistoryItem> history = const [];
@@ -96,6 +100,11 @@ class ClipController extends ChangeNotifier
     // cache key is room-scoped so a re-pair can never surface another room's
     // clips.
     final prefs = await SharedPreferences.getInstance();
+    _prefs = prefs;
+    // Restore the echo guard for whatever image is (still) on this device's
+    // clipboard, so a relaunch does not re-upload a picture Clippy itself put
+    // there — attributed to this device, as if the user had copied it.
+    _handledImageFp = prefs.getString(_imageFpKey);
     final cacheKey = 'clippy.clips.${roomToken.hashCode.toRadixString(16)}';
     final cached = prefs.getString(cacheKey);
     if (cached != null) {
@@ -160,8 +169,14 @@ class ClipController extends ChangeNotifier
             _incomingImagePending = true;
             // Register the picture up front so the watcher's re-encoded
             // read-back is recognised as our own echo however much later it
-            // fires (macOS App Nap can delay it well past the time window).
-            _handledImageFp = await ImageClipboard.fingerprint(jpeg);
+            // fires (macOS App Nap can delay it well past the time window) —
+            // and PERSIST it, because the clipboard outlives the process. The
+            // platform hands our own write back re-encoded (a JPEG we applied
+            // re-reads as PNG), so lastAppliedHash cannot catch it; without the
+            // fingerprint surviving a restart, the app relaunches, re-reads the
+            // image IT put on the clipboard, and re-uploads it as a clip this
+            // device supposedly copied.
+            await _setHandledImageFp(await ImageClipboard.fingerprint(jpeg));
             await ImageClipboard.write(jpeg);
           } catch (_) {
             // Corrupt payload — skip.
@@ -324,13 +339,13 @@ class ClipController extends ChangeNotifier
       _incomingImagePending = false;
       if (fp != null && fp == _handledImageFp) return;
       if (expectingEcho && fp == null) return;
-      _handledImageFp = fp;
+      await _setHandledImageFp(fp);
       await _pushLocalImage(png, mime: clipMime);
       return;
     }
     // Clipboard no longer holds an image — the image guard is stale.
     _incomingImagePending = false;
-    _handledImageFp = null;
+    await _setHandledImageFp(null);
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text;
     if (text == null || text.isEmpty || text == _handledText) return;
@@ -359,6 +374,18 @@ class ClipController extends ChangeNotifier
   /// re-encodes the image, so a content HASH won't catch it. Use the same
   /// format-agnostic fingerprint the watcher path uses: identity, not timing.
   /// Dropping a true echo loses nothing — that image is already in the room.
+  /// Set the echo fingerprint and persist it (null clears it).
+  Future<void> _setHandledImageFp(String? fp) async {
+    _handledImageFp = fp;
+    final prefs = _prefs;
+    if (prefs == null) return;
+    if (fp == null) {
+      await prefs.remove(_imageFpKey);
+    } else {
+      await prefs.setString(_imageFpKey, fp);
+    }
+  }
+
   Future<void> _pushLocalImage(Uint8List png,
       {String? mime, bool fromQueue = false}) async {
     if (_disposed) return;
