@@ -57,7 +57,6 @@ class QueueDrainer {
     final seen = <String>{};
     var deliveredTotal = 0;
     var hadFailure = false;
-    var blamed = false;
     var i = 0;
     var items = const <ClipQueueItem>[];
     try {
@@ -92,12 +91,26 @@ class QueueDrainer {
             // Straight back to disk: a clip is never the sole property of a
             // process that might be killed.
             await ClipQueue.requeue(item);
-            if (name != null) failedAt.putIfAbsent(name, () => deliveredInBatch);
+            if (name != null) {
+              if (items.length == 1) {
+                // ALONE in its batch — and it always will be, because drain()
+                // gives an over-budget file a batch of its own. Same-batch
+                // evidence can therefore never exist for it, so it could never
+                // be blamed, never parked, and would re-read its 30MB from
+                // flash on every drain forever. For a solo clip only, a
+                // delivery LATER IN THE RUN is admissible: the clip is the one
+                // thing that distinguishes its own failure (it is too big), and
+                // a genuinely broken engine delivers nothing at all.
+                _solo.add(_Solo(name, deliveredTotal));
+              } else {
+                failedAt.putIfAbsent(name, () => deliveredInBatch);
+              }
+            }
             hadFailure = true;
           }
           if (name != null) seen.add(name); // handled — never revisit this run
         }
-        if (await _judgeBatch(failedAt, deliveredInBatch)) blamed = true;
+        await _judgeBatch(failedAt, deliveredInBatch);
 
         // Termination guard: a batch that handled nothing new would be re-read
         // forever. Every item above enters `seen`, so this cannot happen — but
@@ -107,15 +120,25 @@ class QueueDrainer {
     } finally {
       beat.cancel();
       if (i < items.length) await ClipQueue.requeueAll(items.sublist(i));
-      if (blamed) {
-        // The engine works; those clips are simply bad. Their requeue re-fires
-        // the queue watcher, so a brief hold stops that becoming a spin — but
-        // there is nothing to escalate away from, and escalating would make
-        // every GOOD clip wait minutes because one clip is unprocessable.
+      // Solo failures can only be judged now, when the run's full delivery
+      // count is known.
+      for (final s in _solo) {
+        if (deliveredTotal <= s.deliveredBefore) continue; // engine never worked
+        if (ClipQueue.noteItemFailure(s.name)) await ClipQueue.parkFile(s.name);
+      }
+      _solo.clear();
+
+      if (hadFailure && deliveredTotal > 0) {
+        // The engine PROVED itself this run, whatever we could or could not
+        // pin on the clips that failed. A brief hold stops the requeue's
+        // inotify event becoming a spin — but escalating would make every GOOD
+        // clip wait up to four minutes because of a jam we cannot even convict,
+        // and (since a run with failures never clears the backoff) it would
+        // never heal.
         ClipQueue.noteDrainFailure(escalate: false);
       } else if (hadFailure) {
-        // Failures, but never any evidence against a clip: the engine is down.
-        // Back off properly. This is the case that must never blame anyone.
+        // Failures and NOTHING delivered anywhere: the engine is down. Back off
+        // properly. This is the case that must never blame anyone.
         ClipQueue.noteDrainFailure();
       } else if (deliveredTotal > 0) {
         // A clean, productive run. Only this clears the backoff — an empty
@@ -127,22 +150,32 @@ class QueueDrainer {
     }
   }
 
+  final List<_Solo> _solo = [];
+
   /// Judge ONE batch. A clip is answerable only if another clip synced AFTER it
   /// failed, IN THIS BATCH — the only evidence that the engine was working at
   /// the moment this clip was not. An engine that dies part-way (a disk filling
   /// up) delivers first and throws after, convicting nobody; an engine that
   /// recovers later in the run convicts nobody either, because its recovery
   /// lands in a different batch.
-  Future<bool> _judgeBatch(
+  Future<void> _judgeBatch(
       Map<String, int> failedAt, int deliveredInBatch) async {
-    var blamed = false;
     for (final entry in failedAt.entries) {
       if (deliveredInBatch <= entry.value) continue; // nothing synced after it
-      blamed = true;
       if (ClipQueue.noteItemFailure(entry.key)) {
         await ClipQueue.parkFile(entry.key); // atomic rename; never deleted
       }
     }
-    return blamed;
   }
+}
+
+/// A clip that failed while ALONE in its batch — the only shape for which
+/// same-batch evidence is impossible by construction (drain() gives an
+/// over-budget file a batch to itself). [deliveredBefore] is the run's delivery
+/// count at the moment it failed; anything delivered after that proves the
+/// engine was working.
+class _Solo {
+  const _Solo(this.name, this.deliveredBefore);
+  final String name;
+  final int deliveredBefore;
 }

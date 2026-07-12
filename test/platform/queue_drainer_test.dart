@@ -349,6 +349,55 @@ void main() {
             'every handled name is remembered, delivered or failed');
   });
 
+  /// A clip too big for the batch byte-budget is ALWAYS returned alone in its
+  /// batch, so same-batch evidence against it can never exist. Without the solo
+  /// rule it could never be blamed, never parked — and would re-read its bulk
+  /// from flash on every drain, forever.
+  test('an OVERSIZED clip, always alone in its batch, is still parked', () async {
+    ClipQueue.maxDrainBytes = 100; // tiny, so the big clip gets a batch to itself
+    addTearDown(() => ClipQueue.maxDrainBytes = 24 << 20);
+    put('001.txt', 'x' * 500); // over budget -> always solo
+
+    for (var run = 0; run < 3; run++) {
+      put('90$run.txt', 'good'); // syncs in a LATER batch — the engine works
+      ClipQueue.expireCooldownForTests();
+      await drainer((item) async {
+        if (item.text!.length > 100) throw StateError('too big to encode');
+      }).run();
+    }
+
+    expect(File('${tmp.path}/001.txt.dead').existsSync(), isTrue,
+        reason: 'it is alone in its batch by construction — a delivery later in '
+            'the RUN is the only evidence it can ever have, and a broken engine '
+            'would have delivered nothing at all');
+  });
+
+  /// The backoff must key off "did the engine deliver anything", not "did we
+  /// manage to convict someone". A jam we cannot convict is still a jam behind
+  /// which perfectly good clips are syncing — escalating punishes THEM, and a
+  /// run with failures never clears the backoff, so it would never heal.
+  test('a jam we cannot convict does not escalate the backoff while good clips '
+      'are syncing', () async {
+    ClipQueue.maxDrainFiles = 3;
+    addTearDown(() => ClipQueue.maxDrainFiles = 30);
+    for (var i = 1; i <= 3; i++) {
+      put('00$i.txt', 'bad'); // fills a whole batch: never same-batch evidence
+    }
+
+    for (var run = 0; run < 6; run++) {
+      put('90$run.txt', 'good'); // delivers in a LATER batch, every run
+      ClipQueue.expireCooldownForTests();
+      await drainer((item) async {
+        if (item.text == 'bad') throw StateError('unprocessable');
+      }).run();
+    }
+
+    expect(ClipQueue.drainFailures, 0,
+        reason: 'the engine delivered on every single run — pinning the cooldown '
+            'at 4 minutes would make every good clip wait for a jam that is not '
+            'even the engine\'s fault');
+  });
+
   test('a clip that threw is rescued when the link drops immediately after',
       () async {
     put('001.txt', 'a');
