@@ -26,6 +26,27 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test # includes the in-process relay integration tests
+      - name: Android FGS type must be specialUse (never dataSync)
+        # The type is declared twice — manifest + startService — and a drift
+        # only fails at RUNTIME, silently: startForeground throws, the service
+        # dies, and the app still shows "Synced" because the UI holds its own
+        # connection. dataSync additionally carries Android 15+'s 6h/24h cap,
+        # which killed background sync for a day at a time (1.0.29).
+        run: |
+          set -e
+          M=android/app/src/main/AndroidManifest.xml
+          D=lib/platform/foreground_service.dart
+          # Match DECLARATIONS only — the comments in both files legitimately
+          # explain why dataSync is banned, so a bare word-grep would fail here.
+          grep -q 'android:foregroundServiceType="specialUse"' "$M" \
+            || { echo "::error::$M must declare foregroundServiceType=\"specialUse\""; exit 1; }
+          grep -q 'serviceTypes: const \[ForegroundServiceTypes.specialUse\]' "$D" \
+            || { echo "::error::$D must start the service with ForegroundServiceTypes.specialUse"; exit 1; }
+          ! grep -q 'android:foregroundServiceType="[^"]*dataSync' "$M" \
+            || { echo "::error::$M declares dataSync — capped at 6h/24h by Android 15+, which kills background sync"; exit 1; }
+          ! grep -q 'ForegroundServiceTypes\.dataSync' "$D" \
+            || { echo "::error::$D starts the service as dataSync — capped at 6h/24h by Android 15+"; exit 1; }
+          echo "FGS type guard OK: specialUse declared in manifest + Dart, dataSync used nowhere."
 
   relay:
     name: Relay — analyze & test
