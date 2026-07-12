@@ -48,10 +48,24 @@ class UpdateService {
     }
   }
 
-  /// Resolve an artifact path (absolute or relative to the manifest host).
+  /// Resolve an artifact path against the manifest's OWN origin. A relative
+  /// path (what CI emits: `/download/...`) resolves against the manifest host.
+  /// An absolute URL is accepted only if it names that same origin — a manifest
+  /// must never be able to redirect the download to another host. Combined with
+  /// the mandatory hash check in the updater, that keeps a tampered manifest
+  /// from pointing clients at an attacker-controlled binary.
   Uri artifactUri(String pathOrUrl) {
     final u = Uri.parse(pathOrUrl);
-    return u.hasScheme ? u : manifestUri.resolve(pathOrUrl);
+    if (!u.hasScheme) return manifestUri.resolve(pathOrUrl);
+    // Same ORIGIN: scheme, host, AND port. Pinning only host would let a
+    // tampered manifest redirect to another port on the same machine — a
+    // service an attacker with a foothold there could control.
+    final sameOrigin = u.scheme == manifestUri.scheme &&
+        u.host == manifestUri.host &&
+        u.port == manifestUri.port;
+    if (sameOrigin) return u;
+    throw Exception('update artifact origin ${u.scheme}://${u.host}:${u.port} '
+        'is not the manifest origin — refusing');
   }
 
   /// [key] is a `version+build` identifier (see [UpdateController]) so a

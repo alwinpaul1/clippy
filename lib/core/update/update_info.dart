@@ -25,6 +25,11 @@ class UpdateInfo {
   final String? androidUrl;
   final String? macosUrl;
   final String? windowsUrl;
+  // Expected SHA-256 (hex) of each artifact, from the CI-generated manifest.
+  // The updater refuses to install without a match — see downloadTo.
+  final String? androidSha256;
+  final String? macosSha256;
+  final String? windowsSha256;
 
   const UpdateInfo({
     required this.version,
@@ -35,12 +40,16 @@ class UpdateInfo {
     this.androidUrl,
     this.macosUrl,
     this.windowsUrl,
+    this.androidSha256,
+    this.macosSha256,
+    this.windowsSha256,
   });
 
   factory UpdateInfo.fromJson(Map<String, dynamic> j) {
     final notes = (j['notes'] as Map?)?.cast<String, dynamic>() ?? const {};
     List<String> list(String k) =>
         ((notes[k] as List?) ?? const []).map((e) => e.toString()).toList();
+    final sha = (j['sha256'] as Map?)?.cast<String, dynamic>() ?? const {};
     return UpdateInfo(
       version: j['version'] as String,
       build: (j['build'] as num?)?.toInt() ?? 0,
@@ -50,6 +59,9 @@ class UpdateInfo {
       androidUrl: j['android'] as String?,
       macosUrl: j['macos'] as String?,
       windowsUrl: j['windows'] as String?,
+      androidSha256: sha['android'] as String?,
+      macosSha256: sha['macos'] as String?,
+      windowsSha256: sha['windows'] as String?,
     );
   }
 

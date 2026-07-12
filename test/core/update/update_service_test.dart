@@ -72,4 +72,37 @@ void main() {
     expect(await s.isDismissed('1.0.1+2'), isTrue);
     expect(await s.isDismissed('1.0.1+3'), isFalse); // build-only bump not hidden
   });
+
+  group('artifactUri host pinning', () {
+    final svc = UpdateService(
+      manifestUri: Uri.parse('https://relay.clippy.app/version.json'),
+      currentVersion: () async => (version: '1.0.0', build: 1),
+    );
+
+    test('a relative path resolves against the manifest origin', () {
+      expect(svc.artifactUri('/download/Clippy-Android.apk').toString(),
+          'https://relay.clippy.app/download/Clippy-Android.apk');
+    });
+
+    test('an absolute URL on the manifest host is accepted', () {
+      expect(
+          svc.artifactUri('https://relay.clippy.app/download/x.apk').host,
+          'relay.clippy.app');
+    });
+
+    test('an absolute URL on ANOTHER host is REFUSED', () {
+      // A tampered manifest must not be able to point the installer at an
+      // attacker-controlled binary.
+      expect(() => svc.artifactUri('https://evil.example/x.apk'),
+          throwsA(isA<Exception>()));
+    });
+
+    test('same host but a DIFFERENT PORT is REFUSED', () {
+      expect(
+          () => svc.artifactUri('https://relay.clippy.app:8443/download/x.apk'),
+          throwsA(isA<Exception>()),
+          reason: 'a foothold on another port of the same host is exactly what '
+              'the origin pin defends against');
+    });
+  });
 }

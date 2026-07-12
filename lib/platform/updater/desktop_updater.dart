@@ -11,22 +11,24 @@ import 'platform_updater.dart';
 ///    replaces the install and restarts the app.
 class DesktopUpdater implements PlatformUpdater {
   @override
-  Future<void> update(Uri artifactUrl, {void Function(double)? onProgress}) async {
+  Future<void> update(Uri artifactUrl,
+      {required String sha256, void Function(double)? onProgress}) async {
     final tmp = await getTemporaryDirectory();
     if (Platform.isMacOS) {
-      await _updateMac(artifactUrl, tmp, onProgress);
+      await _updateMac(artifactUrl, sha256, tmp, onProgress);
     } else if (Platform.isWindows) {
-      await _updateWindows(artifactUrl, tmp, onProgress);
+      await _updateWindows(artifactUrl, sha256, tmp, onProgress);
     }
   }
 
   Future<void> _updateMac(
     Uri url,
+    String sha256,
     Directory tmp,
     void Function(double)? onProgress,
   ) async {
     final zip = File('${tmp.path}/Clippy-update.zip');
-    await downloadTo(url, zip, onProgress: onProgress);
+    await downloadTo(url, zip, expectedSha256: sha256, onProgress: onProgress);
 
     final extractDir = Directory('${tmp.path}/clippy-update')
       ..createSync(recursive: true);
@@ -58,11 +60,12 @@ open "$installedApp"
 
   Future<void> _updateWindows(
     Uri url,
+    String sha256,
     Directory tmp,
     void Function(double)? onProgress,
   ) async {
     final setup = File('${tmp.path}\\Clippy-Setup.exe');
-    await downloadTo(url, setup, onProgress: onProgress);
+    await downloadTo(url, setup, expectedSha256: sha256, onProgress: onProgress);
     // Inno Setup: silent install, close the running app. The installer's [Run]
     // entry relaunches Clippy when it finishes (its skipifsilent flag was
     // removed so silent updates reopen the app — Restart Manager can't, as a
