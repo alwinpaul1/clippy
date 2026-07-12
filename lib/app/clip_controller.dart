@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/models/remote_clip.dart';
 import '../platform/clip_queue.dart';
+import '../platform/queue_drainer.dart';
 
 import '../core/backend/websocket_clip_store.dart';
 import '../core/history/history_item.dart';
@@ -258,11 +259,11 @@ class ClipController extends ChangeNotifier
       ForegroundServiceManager.startHealthWatch();
       onClipboardChanged();
       unawaited(_drainQueue());
-      // The service's tick is the only other thing that bounds the queue, so a
-      // dead service means nothing was pruning it while captures kept landing.
-      // Gated on the link being down for the same reason the service gates it:
-      // never prune files the drain above is about to deliver.
-      if (_store?.isConnected != true) unawaited(ClipQueue.enforceBound());
+      // Bound the disk unconditionally: a dead service means nothing pruned
+      // while captures kept landing, and a CONNECTED-but-failing engine stops
+      // the drain too. ClipQueue's drain heartbeat and per-file age gate are
+      // what stop this from eating a live drain — not a connection check.
+      unawaited(ClipQueue.enforceBound());
       // Re-check photo access: the user may have just returned from granting
       // full access via the "Fix" banner, which should now clear it.
       unawaited(_startScreenshotSync());
@@ -272,83 +273,26 @@ class ClipController extends ChangeNotifier
   /// Push text AND images the background native code captured while the UI was
   /// away (focus-trick text + the MediaStore screenshot observer). Engine dedup
   /// absorbs repeats.
-  bool _draining = false;
-
-  Future<void> _drainQueue() async {
-    // Draining consumes the on-disk queue file — the only copy that survives
-    // a process kill. Hold off until the relay link is confirmed; the
-    // connected listener re-drains the instant it comes back.
-    if (_store?.isConnected != true) return;
-    // Resume, reconnect and the queue watcher can all fire a drain at once;
-    // overlapping passes would read and upload the same file twice before
-    // either deleted it.
-    if (_draining || ClipQueue.inCooldown) return;
-    _draining = true;
-    var i = 0;
-    var items = const <ClipQueueItem>[];
-    // Hold the "a drain is live" heartbeat for the WHOLE drain, not just at
-    // item boundaries: one oversized image can upload for minutes over a slow
-    // link, and a stale beat lets the other isolate prune the tail underneath.
-    final beat = Timer.periodic(
-        const Duration(seconds: 20), (_) => unawaited(ClipQueue.beat()));
-    try {
-      await ClipQueue.beat();
-      // drain() returns a bounded BATCH (the backlog after a dead service can
-      // be huge), so keep going until the disk is dry.
-      while (!_disposed && _store?.isConnected == true) {
-        i = 0;
-        items = await ClipQueue.drain();
-        if (items.isEmpty) break;
-        for (; i < items.length; i++) {
-          // Link died (or we were disposed) mid-drain with the files already
-          // consumed — the finally below puts the remainder back on disk.
-          if (_disposed || _store?.isConnected != true) return;
-          final item = items[i];
-          try {
-            if (item.isImage) {
-              // fromQueue: a queued capture is NOT the clipboard echo of an
-              // image we just applied — it was captured by native code, maybe
-              // hours ago. The time window must not gate it (drain() already
-              // deleted its file, so suppressing it destroys the clip); the
-              // fingerprint check inside catches a true echo instead.
-              await _pushLocalImage(item.imageBytes!,
-                  mime: item.mime, fromQueue: true);
-            } else {
-              await _pushLocal(item.text!);
-            }
-            ClipQueue.clearFailures(item.name);
-          } catch (_) {
-            // A failure here is far more likely GLOBAL (the engine's prefs
-            // write failed, the crypto box is unusable, we're out of memory)
-            // than specific to this clip — and everything else in the backlog
-            // would fail the same way. So: put THIS item back, stop draining,
-            // and back off. Never burn through the queue proving that a broken
-            // engine is still broken.
-            //
-            // Only a clip that fails on separate drains, minutes apart, is
-            // treated as poison — and then it is quarantined, not deleted.
-            if (ClipQueue.isPoison(item.name)) {
-              await ClipQueue.quarantine(item);
-            } else {
-              await ClipQueue.requeue(item);
-              i++; // it's back on disk — the finally must not requeue it twice
-              ClipQueue.noteDrainFailure();
-              return;
-            }
-          }
-        }
+  late final QueueDrainer _drainer = QueueDrainer(
+    canContinue: () => !_disposed && _store?.isConnected == true,
+    process: (item) async {
+      if (item.isImage) {
+        // fromQueue: a queued capture is NOT the clipboard echo of an image we
+        // just applied — it was captured by native code, maybe hours ago. The
+        // time window must not gate it (drain() already deleted its file, so
+        // suppressing it destroys the clip); the fingerprint check inside
+        // catches a true echo instead.
+        await _pushLocalImage(item.imageBytes!, mime: item.mime, fromQueue: true);
+      } else {
+        await _pushLocal(item.text!);
       }
-      ClipQueue.noteDrainSuccess();
-    } finally {
-      beat.cancel();
-      // ANY early exit — dead link, disposal, or a throw from the engine/store
-      // — leaves the remaining items holding the ONLY copy of clips whose disk
-      // files drain() already deleted.
-      if (i < items.length) await ClipQueue.requeueAll(items.sublist(i));
-      _draining = false;
-    }
-  }
+    },
+  );
 
+  /// Push text AND images the background native code captured while the UI was
+  /// away. The failure policy (requeue, back off, quarantine) lives in
+  /// [QueueDrainer] — both isolates must behave identically.
+  Future<void> _drainQueue() => _drainer.run();
 
   @override
   void onClipboardChanged() async {

@@ -15,6 +15,7 @@ import '../core/state/prefs_state_store.dart';
 import '../core/sync/sync_action.dart';
 import '../core/sync/sync_engine.dart';
 import 'clip_queue.dart';
+import 'queue_drainer.dart';
 import 'device_name.dart';
 import 'image_clipboard.dart';
 import 'secure_key_store.dart';
@@ -90,19 +91,15 @@ class _BackgroundSyncHandler extends TaskHandler {
     // Drain clips the background AccessibilityService captured (the queue
     // watcher fires instantly; this tick is the fallback).
     unawaited(_drainQueue());
-    // While the relay is unreachable the queue only grows (drains are gated
-    // on a confirmed link) — keep the disk bounded. This isolate's link being
-    // down says nothing about the UI isolate's independent connection, so the
-    // disconnected gate is only a cost optimization. Two things actually keep
-    // enforceBound from eating an active drain: the per-file age gate (a file
-    // younger than a minute is never prunable, so a fresh capture or requeue
-    // protects itself by its own mtime) and ClipQueue's drain heartbeat (a
-    // drain live in EITHER isolate stands the pruner down, which matters
-    // because pruning is oldest-first — exactly the batches a drain is working
-    // through).
-    if (!(_store?.isConnected ?? false)) {
-      unawaited(ClipQueue.enforceBound());
-    }
+    // Keep the disk bounded — UNCONDITIONALLY. Gating this on "my link is
+    // down" was a real bug: the queue also stops draining while CONNECTED if
+    // the engine is failing (prefs write, crypto, memory — the drain backs off
+    // and waits), and in exactly that state captures keep landing with nothing
+    // pruning them, so the 200-file bound became dead code precisely when it
+    // was needed. It is safe to always call: an active drain in EITHER isolate
+    // holds ClipQueue's heartbeat, which stands the pruner down, and the
+    // per-file age gate makes a fresh capture or requeue unprunable anyway.
+    unawaited(ClipQueue.enforceBound());
     if (!_uiAlive) {
       // A clip that arrived while the last heartbeat was stale (UI already
       // dead but _uiTimeout not yet elapsed) was skipped, not lost — apply
@@ -117,84 +114,36 @@ class _BackgroundSyncHandler extends TaskHandler {
   }
 
 
-  bool _draining = false;
-
-  Future<void> _drainQueue() async {
-    final engine = _engine;
-    final store = _store;
-    if (engine == null || store == null) return;
-    // Draining consumes the on-disk queue file — the only copy that survives
-    // a process kill. Leave it there until the relay link is confirmed; the
-    // connected listener drains the instant we're back.
-    if (!store.isConnected) return;
-    // The inotify watcher fires per file and the connected listener fires on
-    // every reconnect, so drains can overlap — two passes would list, read and
-    // upload the SAME file before either deletes it (duplicate clips, and the
-    // older one lands last as the room's newest).
-    if (_draining || ClipQueue.inCooldown) return;
-    _draining = true;
-    var i = 0;
-    var items = const <ClipQueueItem>[];
-    // Hold the heartbeat for the WHOLE drain (see clip_controller): one big
-    // image can upload for longer than the beat's freshness window.
-    final beat = Timer.periodic(
-        const Duration(seconds: 20), (_) => unawaited(ClipQueue.beat()));
-    try {
-      await ClipQueue.beat();
-      // drain() returns a bounded BATCH (a long-dead service can leave an
-      // enormous backlog), so keep going until the disk is dry.
-      while (store.isConnected) {
-        i = 0;
-        items = await ClipQueue.drain();
-        if (items.isEmpty) break;
-        for (; i < items.length; i++) {
-          // The link can die mid-drain (the files are already consumed) — the
-          // finally below puts the undelivered remainder back on disk.
-          if (!store.isConnected) return;
-          final item = items[i];
-          try {
-            final actions = item.isImage
-                ? await engine.onLocalImage(
-                    base64Encode(item.imageBytes!),
-                    mime: item.mime ?? 'image/png',
-                  )
-                : await engine.onLocalClip(
-                    ClipEvent(
-                      text: item.text!,
-                      byteSize: utf8.encode(item.text!).length,
-                    ),
-                  );
-            for (final a in actions) {
-              if (a is UploadClip) {
-                await store.append(a.clip.copyWith(device: _deviceName));
-              }
-            }
-            ClipQueue.clearFailures(item.name);
-          } catch (_) {
-            // Almost certainly a GLOBAL fault (prefs write, crypto, memory) —
-            // the rest of the backlog would die the same way. Put this item
-            // back, stop, back off. Only a clip that fails across SEPARATE
-            // drains is poison, and then it is quarantined, not deleted.
-            if (ClipQueue.isPoison(item.name)) {
-              await ClipQueue.quarantine(item);
-            } else {
-              await ClipQueue.requeue(item);
-              i++; // back on disk — the finally must not requeue it twice
-              ClipQueue.noteDrainFailure();
-              return;
-            }
-          }
+  late final QueueDrainer _drainer = QueueDrainer(
+    canContinue: () => _store?.isConnected ?? false,
+    process: (item) async {
+      final engine = _engine!;
+      final store = _store!;
+      final actions = item.isImage
+          ? await engine.onLocalImage(
+              base64Encode(item.imageBytes!),
+              mime: item.mime ?? 'image/png',
+            )
+          : await engine.onLocalClip(
+              ClipEvent(
+                text: item.text!,
+                byteSize: utf8.encode(item.text!).length,
+              ),
+            );
+      for (final a in actions) {
+        if (a is UploadClip) {
+          await store.append(a.clip.copyWith(device: _deviceName));
         }
       }
-      ClipQueue.noteDrainSuccess();
-    } finally {
-      beat.cancel();
-      // ANY early exit — a dead link, or a throw from the engine/store (an
-      // encode failure, a closing socket) — leaves the remaining items holding
-      // the only copy of clips whose disk files drain() already deleted.
-      if (i < items.length) await ClipQueue.requeueAll(items.sublist(i));
-      _draining = false;
-    }
+    },
+  );
+
+  /// Drain the queue the background AccessibilityService writes to. The failure
+  /// policy lives in [QueueDrainer] — see there for why a failure aborts rather
+  /// than burning through the batch.
+  Future<void> _drainQueue() async {
+    if (_engine == null || _store == null) return;
+    await _drainer.run();
   }
 
   Future<void> _scanScreenshots() async {
@@ -502,7 +451,11 @@ class ForegroundServiceManager {
       final prefs = await SharedPreferences.getInstance();
       final stale =
           (prefs.getInt(_typesVersionKey) ?? 1) != _serviceTypesVersion;
-      if (await FlutterForegroundTask.isRunningService) {
+      // Timeout everywhere we await the native side: a wedged channel would
+      // otherwise leave _starting (and the health watch's _polling) stuck true
+      // for the life of the process, silently killing both.
+      if (await FlutterForegroundTask.isRunningService
+          .timeout(const Duration(seconds: 10))) {
         if (!stale) {
           _publishAlive(true);
           return true;
@@ -670,6 +623,10 @@ class ForegroundServiceManager {
         // 1, 2, 4, 8, 16, 30 polls between attempts (~10 min at a 20s poll).
         _reviveSkips = (1 << (_reviveFailures - 1).clamp(0, 5)).clamp(1, 30);
       }
+    } on TimeoutException {
+      // A slow channel (GC pause, cold plugin, loaded device) says NOTHING
+      // about the service. Reporting "dead" here would put a red banner over a
+      // perfectly healthy service; leave the last known state and re-poll.
     } catch (_) {
       if (gen == _healthGen) backgroundSyncAlive.value = false;
     } finally {
