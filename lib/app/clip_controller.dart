@@ -239,8 +239,17 @@ class ClipController extends ChangeNotifier
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && !isDesktop) {
       ForegroundServiceManager.pingAlive();
+      // The service may have died while we were away (OEM battery manager, a
+      // platform restriction, an app update) — revive it, and let the UI say
+      // so if it stays down.
+      unawaited(ForegroundServiceManager.ensureRunning());
       onClipboardChanged();
       unawaited(_drainQueue());
+      // The service's tick is the only other thing that bounds the queue, so a
+      // dead service means nothing was pruning it while captures kept landing.
+      // Gated on the link being down for the same reason the service gates it:
+      // never prune files the drain above is about to deliver.
+      if (_store?.isConnected != true) unawaited(ClipQueue.enforceBound());
       // Re-check photo access: the user may have just returned from granting
       // full access via the "Fix" banner, which should now clear it.
       unawaited(_startScreenshotSync());
