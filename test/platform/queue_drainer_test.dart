@@ -544,6 +544,61 @@ void main() {
     expect(onDisk(), isEmpty);
   });
 
+  /// The guard has to be set BEFORE the first await. Under a cooldown the entry
+  /// path awaits hasUntriedWork(), and the watcher and the 10s service tick both
+  /// call run() — so an await before the flag lets both in.
+  test('two drains starting at once under a COOLDOWN cannot overlap', () async {
+    put('001.txt', 'bad');
+    await drainer((item) async => throw StateError('engine down')).run();
+    expect(ClipQueue.inCooldown, isTrue, reason: 'we are now holding');
+
+    put('900.txt', 'fresh'); // untried, so both entrants get past the hold
+    var uploads = 0;
+    final d = drainer((item) async {
+      uploads++;
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+    });
+
+    await Future.wait([d.run(), d.run()]); // watcher + tick, same instant
+
+    expect(uploads, 1,
+        reason: 'both passes would list and upload the same file before either '
+            'deleted it — and they would share the solo list, judging and '
+            "clearing each other's entries");
+  });
+
+  /// store.append() throws when the socket is half-open — and canContinue()
+  /// reads that same socket. The clip never got a fair attempt, so it must not
+  /// be recorded as one: a "tried" clip is skipped under a cooldown it never
+  /// earned, and it is one strike closer to being parked if it ever does fail
+  /// for its own reasons.
+  ///
+  /// (Note: it cannot be CONVICTED by this — the batch rule already refuses to
+  /// blame a clip with nothing delivered after it, and once the socket is dead
+  /// nothing delivers. The harm is the false "tried" mark, not a strike.)
+  test('a clip is not even marked TRIED when the LINK dies on it', () async {
+    put('001.txt', 'good');
+    put('002.txt', 'innocent');
+    var up = true;
+
+    await drainer(
+      (item) async {
+        if (item.text == 'innocent') {
+          up = false; // the socket died: the send throws AND the link is gone
+          throw StateError('socket closed');
+        }
+      },
+      canContinue: () => up,
+    ).run();
+
+    expect(ClipQueue.triedNames, isNot(contains('002.txt')),
+        reason: 'the link died — the clip never got a fair attempt, and must '
+            'not be deferred behind a hold it never earned');
+    expect(onDisk(), contains('002.txt'), reason: 'and it is still queued');
+    expect(ClipQueue.inCooldown, isFalse,
+        reason: 'nor may a dead link look like a broken engine and set a hold');
+  });
+
   test('a clip that threw is rescued when the link drops immediately after',
       () async {
     put('001.txt', 'a');

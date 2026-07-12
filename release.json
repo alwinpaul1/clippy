@@ -4,13 +4,15 @@
     "features": [],
     "improvements": [
       "Clippy now notices the moment background sync stops — even while you're looking at the app — and brings it back on its own",
-      "A big backlog of clips now syncs in batches instead of all at once, so a long offline stretch can't overwhelm the app"
+      "A big backlog of clips now syncs in batches, so a long offline stretch can't overwhelm the app"
     ],
     "fixes": [
+      "Images no longer reappear as new clips \"copied\" on a device that never copied them",
       "Fixed a long copy sometimes syncing cut off halfway",
-      "Fixed screenshots and copies being lost when they were captured just as another clip arrived",
+      "Screenshots and copies are no longer lost when captured just as another clip arrives",
+      "Clips are no longer lost when the connection drops mid-sync",
       "Clips no longer sync twice when two syncs start at the same moment",
-      "A screenshot that failed to read once is now retried instead of skipped for good"
+      "A screenshot that failed to read once is retried instead of skipped for good"
     ]
   }
 }

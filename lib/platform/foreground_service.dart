@@ -90,16 +90,16 @@ class _BackgroundSyncHandler extends TaskHandler {
     unawaited(_ensureRunning()); // reconnect safety net
     // Drain clips the background AccessibilityService captured (the queue
     // watcher fires instantly; this tick is the fallback).
-    unawaited(_drainQueue());
     // Keep the disk bounded — UNCONDITIONALLY. Gating this on "my link is
     // down" was a real bug: the queue also stops draining while CONNECTED if
     // the engine is failing (prefs write, crypto, memory — the drain backs off
     // and waits), and in exactly that state captures keep landing with nothing
     // pruning them, so the 200-file bound became dead code precisely when it
-    // was needed. It is safe to always call: an active drain in EITHER isolate
-    // holds ClipQueue's heartbeat, which stands the pruner down, and the
-    // per-file age gate makes a fresh capture or requeue unprunable anyway.
-    unawaited(ClipQueue.enforceBound());
+    // was needed. But run it AFTER our own drain, never beside it: fired side
+    // by side, the pruner can win the race, see no drain heartbeat yet, and
+    // delete OLDEST-FIRST — exactly the batch the drain was about to take. (The
+    // OTHER isolate's drain is what the heartbeat protects against.)
+    unawaited(_drainQueue().whenComplete(ClipQueue.enforceBound));
     if (!_uiAlive) {
       // A clip that arrived while the last heartbeat was stale (UI already
       // dead but _uiTimeout not yet elapsed) was skipped, not lost — apply

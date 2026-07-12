@@ -181,7 +181,13 @@ abstract class ClipQueue {
   /// Remember that [name] failed, whether or not there was evidence to blame it.
   static void noteAttemptFailed(String? name) {
     if (name == null) return;
-    if (_tried.length > 500) _tried.remove(_tried.first);
+    // The cap MUST exceed the queue's own file bound ([maxQueueFiles]). Evicting
+    // a name makes that clip look UNTRIED again, which makes hasUntriedWork()
+    // true, which bypasses the cooldown — so with a backlog bigger than the cap
+    // the hold would never apply and the requeue->inotify->drain spin returns.
+    // enforceBound keeps the queue at ~200 files, so this is never reached in
+    // practice; it is a memory backstop, not a working limit.
+    if (_tried.length > 5000) _tried.remove(_tried.first);
     _tried.add(name);
   }
 
@@ -251,8 +257,15 @@ abstract class ClipQueue {
   /// A file at or above this size gets a drain batch to ITSELF (the cap below
   /// stops the batch before adding a second file). QueueDrainer reads this: a
   /// clip that is structurally always alone can never have same-batch evidence,
-  /// so it needs a different standard of proof. Mutable for tests.
-  static int maxDrainBytes = 24 << 20;
+  /// so it needs a different standard of proof.
+  ///
+  /// Readable anywhere; writable only by tests. Promoting it to a plain mutable
+  /// static would let any future production line silently re-batch the queue for
+  /// the life of the process, with the analyzer saying nothing.
+  static int get maxDrainBytes => _maxDrainBytes;
+  @visibleForTesting
+  static set maxDrainBytes(int v) => _maxDrainBytes = v;
+  static int _maxDrainBytes = 24 << 20;
   @visibleForTesting
   static int maxDrainFiles = 30;
 
@@ -293,7 +306,7 @@ abstract class ClipQueue {
         // only crash-proof copy) for the next pass. Never cap at zero items —
         // one clip larger than the budget must still make progress.
         if (items.isNotEmpty &&
-            (items.length >= maxDrainFiles || bytes >= maxDrainBytes)) {
+            (items.length >= maxDrainFiles || bytes >= _maxDrainBytes)) {
           break;
         }
         final mime = _imageMimes[ext];

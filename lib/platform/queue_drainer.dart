@@ -39,17 +39,27 @@ class QueueDrainer {
 
   Future<void> run() async {
     // Overlapping drains would read and upload the same file twice before
-    // either deleted it; a cooldown means the engine looked broken a moment ago
-    // and hammering the queue would just fail the same way.
+    // either deleted it. The flag MUST be set before the first await: the
+    // watcher and the service's 10s tick both call this, and an await here let
+    // both pass the check and drain concurrently — the exact double-upload this
+    // guard exists to prevent.
     if (_draining || !canContinue()) return;
-    // A cooldown holds us off a broken engine, or off a jam we keep re-reading.
-    // It must NEVER make the user's next copy wait behind that — but nor may a
-    // fresh copy become a licence to drag the whole known-bad backlog back
-    // through a sick disk. So under a hold we run, but ONLY over clips we have
-    // never failed on.
-    final holding = ClipQueue.inCooldown;
-    if (holding && !await ClipQueue.hasUntriedWork()) return;
     _draining = true;
+    try {
+      // A cooldown holds us off a broken engine, or off a jam we keep
+      // re-reading. It must NEVER make the user's next copy wait behind that —
+      // but nor may a fresh copy become a licence to drag the whole known-bad
+      // backlog back through a sick disk. So under a hold we run, but ONLY over
+      // clips we have never failed on.
+      final holding = ClipQueue.inCooldown;
+      if (holding && !await ClipQueue.hasUntriedWork()) return;
+      await _drain(holding);
+    } finally {
+      _draining = false;
+    }
+  }
+
+  Future<void> _drain(bool holding) async {
     // Hold the "a drain is live" heartbeat for the WHOLE run: one oversized
     // image can upload for minutes, and a stale beat lets the other isolate's
     // enforceBound prune the tail we are working through (it prunes
@@ -64,6 +74,11 @@ class QueueDrainer {
     // Under a hold, every clip we have already failed on is off-limits: they are
     // precisely what the hold is holding off.
     final seen = holding ? {...ClipQueue.triedNames} : <String>{};
+    // Over-budget clips that failed. They are structurally alone in their batch,
+    // so same-batch evidence cannot exist for them; they are judged at the end
+    // of the run instead. A LOCAL, never a field: as a field, two overlapping
+    // runs would judge and clear each other's entries.
+    final solo = <_Solo>[];
     var deliveredTotal = 0;
     var hadFailure = false;
     // Event order, so the ENGINE can be judged by the same rule as the clips:
@@ -106,10 +121,20 @@ class QueueDrainer {
             deliveredTotal++;
             lastDelivery = events++;
           } catch (_) {
-            lastFailure = events++;
             // Straight back to disk: a clip is never the sole property of a
             // process that might be killed.
             await ClipQueue.requeue(item);
+            // Did the LINK die? store.append() throws when the socket is
+            // half-open, and canContinue() reads that same socket. The clip is
+            // innocent — it never got a fair attempt. Blaming it here would
+            // strike it out and, after three badly-timed disconnects (a flaky
+            // link is the condition this app exists for), PARK a perfectly good
+            // clip. Abort instead: no strike, no "tried" mark, no backoff.
+            if (!canContinue()) {
+              i++; // already back on disk — the finally must not requeue it too
+              return;
+            }
+            lastFailure = events++;
             ClipQueue.noteAttemptFailed(name); // tried — so the hold applies
             if (name != null) {
               // Solo BECAUSE IT IS OVERSIZED — not merely because the queue
@@ -126,7 +151,7 @@ class QueueDrainer {
                 // is genuinely broken delivers nothing at all. Without this it
                 // could never be parked and would re-read its bulk from flash
                 // on every drain, forever.
-                _solo.add(_Solo(name, deliveredTotal));
+                solo.add(_Solo(name, deliveredTotal));
               } else {
                 failedAt.putIfAbsent(name, () => deliveredInBatch);
               }
@@ -147,11 +172,10 @@ class QueueDrainer {
       if (i < items.length) await ClipQueue.requeueAll(items.sublist(i));
       // Solo failures can only be judged now, when the run's full delivery
       // count is known.
-      for (final s in _solo) {
+      for (final s in solo) {
         if (deliveredTotal <= s.deliveredBefore) continue; // engine never worked
         if (ClipQueue.noteItemFailure(s.name)) await ClipQueue.parkFile(s.name);
       }
-      _solo.clear();
 
       if (hadFailure && lastDelivery > lastFailure) {
         // A clip synced AFTER the last failure: the engine is working NOW, and
@@ -179,11 +203,8 @@ class QueueDrainer {
         // isolate may be mid-batch, with its files already deleted).
         ClipQueue.noteDrainSuccess();
       }
-      _draining = false;
     }
   }
-
-  final List<_Solo> _solo = [];
 
   /// Judge ONE batch. A clip is answerable only if another clip synced AFTER it
   /// failed, IN THIS BATCH — the only evidence that the engine was working at

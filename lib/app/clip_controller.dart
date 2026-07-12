@@ -273,12 +273,12 @@ class ClipController extends ChangeNotifier
       unawaited(ForegroundServiceManager.ensureRunning());
       ForegroundServiceManager.startHealthWatch();
       onClipboardChanged();
-      unawaited(_drainQueue());
-      // Bound the disk unconditionally: a dead service means nothing pruned
+      // Bound the disk unconditionally — a dead service means nothing pruned
       // while captures kept landing, and a CONNECTED-but-failing engine stops
-      // the drain too. ClipQueue's drain heartbeat and per-file age gate are
-      // what stop this from eating a live drain — not a connection check.
-      unawaited(ClipQueue.enforceBound());
+      // the drain too. But AFTER the drain, never racing it: fired side by side
+      // (both unawaited), enforceBound can win, see no drain heartbeat yet, and
+      // prune OLDEST-FIRST — exactly the batch the drain was about to deliver.
+      unawaited(_drainQueue().whenComplete(ClipQueue.enforceBound));
       // Re-check photo access: the user may have just returned from granting
       // full access via the "Fix" banner, which should now clear it.
       unawaited(_startScreenshotSync());
