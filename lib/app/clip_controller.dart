@@ -196,7 +196,10 @@ class ClipController extends ChangeNotifier
       // Keep receiving in the background so copies from other devices land on
       // the phone's clipboard without opening Clippy. Android requires a
       // foreground-service notification for this (kept at MIN importance).
-      await ForegroundServiceManager.start();
+      // The only place that may open the battery-exemption dialog: a
+      // poll-driven revive must never do it, or a phone whose OEM keeps
+      // refusing the service would throw the dialog up on every retry.
+      await ForegroundServiceManager.start(askBatteryExemption: true);
       // The service can be killed while the app sits open (OEM battery
       // manager) — poll its liveness so the header stops claiming "Synced"
       // the moment it dies, not at the next resume.
@@ -295,15 +298,25 @@ class ClipController extends ChangeNotifier
           // consumed — the finally below puts the remainder back on disk.
           if (_disposed || _store?.isConnected != true) return;
           final item = items[i];
-          if (item.isImage) {
-            // fromQueue: a queued capture is NOT the clipboard echo of an image
-            // we just applied — it was captured by native code, possibly hours
-            // ago. Suppressing it would drop the clip for good: drain() has
-            // already deleted its file.
-            await _pushLocalImage(item.imageBytes!,
-                mime: item.mime, fromQueue: true);
-          } else {
-            await _pushLocal(item.text!);
+          try {
+            if (item.isImage) {
+              // fromQueue: a queued capture is NOT the clipboard echo of an
+              // image we just applied — it was captured by native code, maybe
+              // hours ago. The time window must not gate it (drain() already
+              // deleted its file, so suppressing it destroys the clip); the
+              // fingerprint check inside catches a true echo instead.
+              await _pushLocalImage(item.imageBytes!,
+                  mime: item.mime, fromQueue: true);
+            } else {
+              await _pushLocal(item.text!);
+            }
+            ClipQueue.clearFailures(item.name);
+          } catch (_) {
+            // This ONE item failed. Requeueing it unconditionally would spin:
+            // the requeue's rename re-fires the queue watcher, which drains it
+            // again, which throws again. Retry it a couple of times, then drop
+            // it and carry on with the rest of the batch.
+            if (!ClipQueue.isPoison(item.name)) await ClipQueue.requeue(item);
           }
         }
       }

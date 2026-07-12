@@ -36,6 +36,7 @@ void main() {
     batteryExempt = true;
     pollsAfterStop = 0;
     SharedPreferences.setMockInitialValues({});
+    ForegroundServiceManager.resetForTests(); // no static bleed between tests
     ForegroundServiceManager.debugIsAndroid = true;
     // Seed the OPPOSITE of the healthy answer: seeding `true` made every
     // isTrue assertion below pass even with the production publishing deleted.
@@ -73,7 +74,7 @@ void main() {
   });
 
   tearDown(() {
-    ForegroundServiceManager.stopHealthWatch();
+    ForegroundServiceManager.resetForTests();
     ForegroundServiceManager.debugIsAndroid = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);

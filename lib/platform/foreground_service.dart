@@ -144,21 +144,30 @@ class _BackgroundSyncHandler extends TaskHandler {
           // finally below puts the undelivered remainder back on disk.
           if (!store.isConnected) return;
           final item = items[i];
-          final actions = item.isImage
-              ? await engine.onLocalImage(
-                  base64Encode(item.imageBytes!),
-                  mime: item.mime ?? 'image/png',
-                )
-              : await engine.onLocalClip(
-                  ClipEvent(
-                    text: item.text!,
-                    byteSize: utf8.encode(item.text!).length,
-                  ),
-                );
-          for (final a in actions) {
-            if (a is UploadClip) {
-              await store.append(a.clip.copyWith(device: _deviceName));
+          try {
+            final actions = item.isImage
+                ? await engine.onLocalImage(
+                    base64Encode(item.imageBytes!),
+                    mime: item.mime ?? 'image/png',
+                  )
+                : await engine.onLocalClip(
+                    ClipEvent(
+                      text: item.text!,
+                      byteSize: utf8.encode(item.text!).length,
+                    ),
+                  );
+            for (final a in actions) {
+              if (a is UploadClip) {
+                await store.append(a.clip.copyWith(device: _deviceName));
+              }
             }
+            ClipQueue.clearFailures(item.name);
+          } catch (_) {
+            // One bad item must not poison the batch — and requeueing it
+            // unconditionally would spin (the requeue re-fires the watcher,
+            // which drains it again, which throws again). Retry a couple of
+            // times, then drop it.
+            if (!ClipQueue.isPoison(item.name)) await ClipQueue.requeue(item);
           }
         }
       }
@@ -353,6 +362,18 @@ class ForegroundServiceManager {
   @visibleForTesting
   static bool? debugIsAndroid;
 
+  /// Clear the static machine between tests. Without this, one test's in-flight
+  /// poll or backoff counter silently disables the next one — a suite that
+  /// lies is worse than no suite.
+  @visibleForTesting
+  static void resetForTests() {
+    stopHealthWatch();
+    _polling = false;
+    _starting = false;
+    _reviveFailures = 0;
+    _reviveSkips = 0;
+  }
+
   static bool get _isAndroid =>
       debugIsAndroid ?? (!kIsWeb && Platform.isAndroid);
 
@@ -447,7 +468,12 @@ class ForegroundServiceManager {
   /// `isRunningService` afterwards would answer "yes" about the very service we
   /// were trying to replace: we would record the migration as done and strand
   /// the phone on the stale type forever.
-  static Future<void> start() async {
+  /// [askBatteryExemption] opens a SYSTEM DIALOG when the app isn't exempt, so
+  /// only the app-launch path passes it. A poll-driven revive must never fire
+  /// it: on a phone whose OEM keeps refusing the service, every retry would
+  /// throw the dialog back in the user's face, and dismissing it resumes the
+  /// app, which polls, which retries, which opens it again — inescapable.
+  static Future<void> start({bool askBatteryExemption = false}) async {
     if (!_isAndroid) return;
     if (_starting) return; // re-entrancy: init and a resume can race
     _starting = true;
@@ -489,7 +515,7 @@ class ForegroundServiceManager {
       // failed start must be retried next launch, not remembered as done.
       if (ok) await prefs.setInt(_typesVersionKey, _serviceTypesVersion);
       _publishAlive(ok);
-      unawaited(_askBatteryExemption());
+      if (askBatteryExemption) unawaited(_askBatteryExemption());
     } catch (_) {
       // Prefs/channel calls still throw — report, never break app init.
       _publishAlive(false);
@@ -556,8 +582,12 @@ class ForegroundServiceManager {
   /// leave the header claiming "Synced" until the next lifecycle transition,
   /// which is the same lie this whole change exists to stop telling.
   ///
-  /// Reports only. Reviving is [ensureRunning]'s job on resume, so a service
-  /// the system is actively refusing can't be fought in a restart loop here.
+  /// Also REPAIRS: a death found here is revived on the spot (the user is
+  /// looking at the app, so "reopen Clippy" is not an instruction they can
+  /// follow). Retries back off exponentially — a system that is flatly refusing
+  /// the service must not be fought once per poll forever — and the revive
+  /// never asks for the battery exemption, whose system dialog would otherwise
+  /// reappear on every attempt.
   static void startHealthWatch() {
     if (!_isAndroid || _healthTimer != null) return;
     // Check immediately: re-arming (every focus regain — a pulled-down
@@ -599,7 +629,10 @@ class ForegroundServiceManager {
         _reviveSkips--;
         return;
       }
-      _polling = false; // start() awaits the plugin; don't self-block
+      // _polling stays TRUE across this await: start() never polls, and
+      // releasing the guard here would let the next tick start a second poll
+      // whose finally then clears the flag out from under this one — the very
+      // stacking the guard exists to prevent.
       await start();
       if (backgroundSyncAlive.value) {
         _reviveFailures = 0;

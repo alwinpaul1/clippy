@@ -57,6 +57,30 @@ abstract class ClipQueue {
     }
   }
 
+  /// A clip that throws every time it is processed (a corrupt payload, an image
+  /// too large to encode) would otherwise be requeued forever — and because the
+  /// requeue's rename re-fires the inotify watcher, the next drain starts
+  /// immediately, spinning as fast as the disk allows. Give up on it after a
+  /// few attempts: one lost clip beats a permanently pinned CPU.
+  static const maxItemFailures = 3;
+  static final Map<String, int> _failures = {};
+
+  /// True if [name] has failed too many times to be worth requeueing again.
+  static bool isPoison(String? name) {
+    if (name == null) return false;
+    final n = (_failures[name] ?? 0) + 1;
+    _failures[name] = n;
+    if (n >= maxItemFailures) {
+      _failures.remove(name);
+      return true;
+    }
+    return false;
+  }
+
+  static void clearFailures(String? name) {
+    if (name != null) _failures.remove(name);
+  }
+
   /// How much a single drain may hold in memory at once. The queue's own bound
   /// is 200MB of DISK, and every drained item is materialized as bytes in a
   /// list — an hours-long backlog (the service died; captures kept landing)
@@ -73,9 +97,14 @@ abstract class ClipQueue {
     if (dir == null) return const [];
     try {
       if (!dir.existsSync()) return const [];
-      final files = dir.listSync().whereType<File>().toList()
+      final files = dir
+          .listSync()
+          .whereType<File>()
+          .where((f) => !f.path.endsWith(_beatName))
+          .toList()
         ..sort((a, b) => a.path.compareTo(b.path));
       if (files.isEmpty) return const [];
+      _beat(dir); // tell the other isolate's enforceBound to stand down
       final items = <ClipQueueItem>[];
       var bytes = 0;
       for (final f in files) {
@@ -141,6 +170,40 @@ abstract class ClipQueue {
       await f.delete();
     } catch (_) {}
     return ClipQueueItem.image(bytes, mime, name: f.uri.pathSegments.last);
+  }
+
+  // A drain now leaves its un-taken tail on disk between batches (that is the
+  // point of the batch cap) — and enforceBound prunes OLDEST-first, i.e.
+  // exactly the files the drain is about to deliver, from an isolate whose own
+  // link may be down. This heartbeat says "a drain is live in SOME isolate".
+  //
+  // It is only ever refreshed, NEVER deleted — that is what killed the old
+  // drain.lock: whichever drain finished first deleted the lock out from under
+  // the other one. Staleness expires it instead.
+  static const _beatName = 'drain.beat';
+  static const _beatFresh = Duration(minutes: 1);
+  static DateTime? _lastBeat;
+
+  static void _beat(Directory dir) {
+    final now = DateTime.now();
+    final last = _lastBeat;
+    // Throttled: a 200-file drain must not mean 200 flash writes.
+    if (last != null && now.difference(last) < const Duration(seconds: 5)) {
+      return;
+    }
+    _lastBeat = now;
+    try {
+      File('${dir.path}/$_beatName').writeAsStringSync('');
+    } catch (_) {}
+  }
+
+  static bool _drainLive(Directory dir) {
+    try {
+      final beat = File('${dir.path}/$_beatName');
+      return DateTime.now().difference(beat.statSync().modified) < _beatFresh;
+    } catch (_) {
+      return false; // no heartbeat — nothing is draining
+    }
   }
 
   /// Whether [f]'s last modification is older than [age]. Treats a
@@ -230,6 +293,11 @@ abstract class ClipQueue {
     if (dir == null) return;
     try {
       if (!dir.existsSync()) return;
+      // A drain is live SOMEWHERE (this isolate's link being down says nothing
+      // about the other's). Since the batch cap leaves its tail on disk between
+      // batches, and we prune oldest-first, pruning now would delete precisely
+      // the clips it is about to deliver.
+      if (_drainLive(dir)) return;
       // The bound is judged against EVERYTHING on disk (that's the real
       // usage), but only files past the age gate are eligible for deletion —
       // fresh writes protect themselves by mtime.
@@ -237,6 +305,7 @@ abstract class ClipQueue {
       var total = 0;
       final prunable = <(File, int)>[];
       for (final f in dir.listSync().whereType<File>()) {
+        if (f.path.endsWith(_beatName)) continue; // not a clip
         if (f.path.endsWith('.part')) {
           _reapIfStale(f);
           continue;
