@@ -42,10 +42,13 @@ class QueueDrainer {
     // either deleted it; a cooldown means the engine looked broken a moment ago
     // and hammering the queue would just fail the same way.
     if (_draining || !canContinue()) return;
-    // A cooldown holds us off a broken engine or a jam we keep re-reading — but
-    // it must NEVER make the user's next copy wait behind it. A clip we have
-    // never failed on has not been backed off from.
-    if (ClipQueue.inCooldown && !await ClipQueue.hasUntriedWork()) return;
+    // A cooldown holds us off a broken engine, or off a jam we keep re-reading.
+    // It must NEVER make the user's next copy wait behind that — but nor may a
+    // fresh copy become a licence to drag the whole known-bad backlog back
+    // through a sick disk. So under a hold we run, but ONLY over clips we have
+    // never failed on.
+    final holding = ClipQueue.inCooldown;
+    if (holding && !await ClipQueue.hasUntriedWork()) return;
     _draining = true;
     // Hold the "a drain is live" heartbeat for the WHOLE run: one oversized
     // image can upload for minutes, and a stale beat lets the other isolate's
@@ -58,7 +61,9 @@ class QueueDrainer {
     // drain()'s delete ever fails (read-only mount, a hostile OEM FS) the file
     // comes back, and without this the same clip would be re-delivered on every
     // iteration forever. This set is what makes the loop finite.
-    final seen = <String>{};
+    // Under a hold, every clip we have already failed on is off-limits: they are
+    // precisely what the hold is holding off.
+    final seen = holding ? {...ClipQueue.triedNames} : <String>{};
     var deliveredTotal = 0;
     var hadFailure = false;
     // Event order, so the ENGINE can be judged by the same rule as the clips:

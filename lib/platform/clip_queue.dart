@@ -90,12 +90,29 @@ abstract class ClipQueue {
     return until != null && DateTime.now().isBefore(until);
   }
 
+  /// Every clip we have failed on. A drain running under a cooldown must skip
+  /// these: the hold exists to stop us re-reading and re-writing a backlog we
+  /// already know fails, and one fresh copy must not drag all 200 of them back
+  /// through the disk first.
+  static Set<String> get triedNames => Set.unmodifiable(_tried);
+
   /// Is there a clip on disk we have NEVER failed on?
   ///
   /// The cooldown exists to stop us hammering a broken engine (or re-reading a
   /// jam) — it must never make the user's NEXT copy wait behind it. A clip with
   /// no strike history has never been tried, so the hold does not apply to it.
+  static DateTime? _untriedAt;
+  static bool _untriedCache = false;
+
   static Future<bool> hasUntriedWork() async {
+    // A failed drain requeues every clip, and each write fires the inotify
+    // watcher — hundreds of run() entries within milliseconds, each of which
+    // would otherwise list the whole directory. One listing per burst is enough.
+    final last = _untriedAt;
+    if (last != null &&
+        DateTime.now().difference(last) < const Duration(seconds: 1)) {
+      return _untriedCache;
+    }
     final dir = await _dir();
     if (dir == null) return false;
     try {
@@ -106,10 +123,14 @@ abstract class ClipQueue {
             name.endsWith('.dead')) {
           continue;
         }
-        if (!_tried.contains(name)) return true;
+        if (!_tried.contains(name)) {
+          _untriedAt = DateTime.now();
+          return _untriedCache = true;
+        }
       }
     } catch (_) {}
-    return false;
+    _untriedAt = DateTime.now();
+    return _untriedCache = false;
   }
 
   /// A drain failed: hold off before touching the queue again.
@@ -191,6 +212,8 @@ abstract class ClipQueue {
   static void resetForTests() {
     _failures.clear();
     _tried.clear();
+    _untriedAt = null;
+    _untriedCache = false;
     _cooldownUntil = null;
     _drainFailures = 0;
     _lastBeat = null;
@@ -288,7 +311,13 @@ abstract class ClipQueue {
     try {
       t = await f.readAsString();
     } catch (_) {
-      return null; // mid-write race — the next drain gets it
+      // Could be a mid-write race — but a file still unreadable minutes later
+      // is corrupt (bad UTF-8, flaky flash) and can NEVER become a clip. Mark
+      // it tried, or it forever looks like "untried work" and turns the
+      // cooldown into a no-op; reap it once it is clearly not mid-write.
+      noteAttemptFailed(f.uri.pathSegments.last);
+      _reapIfStale(f);
+      return null;
     }
     if (t.isEmpty) {
       _reapIfStale(f);
@@ -305,6 +334,8 @@ abstract class ClipQueue {
     try {
       bytes = await f.readAsBytes();
     } catch (_) {
+      noteAttemptFailed(f.uri.pathSegments.last); // see _drainText
+      _reapIfStale(f);
       return null;
     }
     if (bytes.isEmpty) {

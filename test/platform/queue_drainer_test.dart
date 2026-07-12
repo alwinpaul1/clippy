@@ -453,6 +453,51 @@ void main() {
             'dying, and must be backed off from, not politely held for 15s');
   });
 
+  /// The bypass must not become a licence to re-read the whole known-bad
+  /// backlog. Requeue writes are best-effort against a possibly-full disk;
+  /// dragging 200 failures back through it every time the user copies something
+  /// is worse than the hammering the backoff exists to stop.
+  test('a cooldown run touches ONLY untried clips, never the known-bad backlog',
+      () async {
+    for (var i = 1; i <= 5; i++) {
+      put('00$i.txt', 'bad');
+    }
+    await drainer((item) async => throw StateError('engine down')).run();
+    expect(ClipQueue.inCooldown, isTrue);
+
+    put('900.txt', 'the user just copied this');
+    final attempted = <String>[];
+
+    await drainer((item) async {
+      attempted.add(item.name!);
+      if (item.text == 'bad') throw StateError('engine down');
+    }).run();
+
+    expect(attempted, ['900.txt'],
+        reason: 'the five known-bad clips must NOT be re-read and re-written — '
+            'that is exactly what the hold is holding off');
+  });
+
+  /// A file that can never be turned into a clip (corrupt bytes, flaky flash) is
+  /// never "tried" in the ordinary sense — and if that makes it look like
+  /// untried work forever, the cooldown becomes a permanent no-op and the
+  /// requeue->inotify->drain spin comes straight back.
+  test('an UNREADABLE file does not turn the cooldown into a no-op', () async {
+    put('001.txt', 'bad');
+    await drainer((item) async => throw StateError('engine down')).run();
+    expect(ClipQueue.inCooldown, isTrue);
+
+    // A corrupt file: invalid UTF-8, so drain() can never materialize it.
+    File('${tmp.path}/002.txt').writeAsBytesSync([0xC3, 0x28, 0x41]);
+    var attempts = 0;
+
+    await drainer((item) async => attempts++).run();
+
+    expect(attempts, 0,
+        reason: 'a file that cannot even be read is not "untried work" — '
+            'treating it as such makes every cooldown a no-op, forever');
+  });
+
   test('a clip that threw is rescued when the link drops immediately after',
       () async {
     put('001.txt', 'a');
