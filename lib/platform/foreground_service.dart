@@ -93,10 +93,13 @@ class _BackgroundSyncHandler extends TaskHandler {
     // While the relay is unreachable the queue only grows (drains are gated
     // on a confirmed link) — keep the disk bounded. This isolate's link being
     // down says nothing about the UI isolate's independent connection, so the
-    // disconnected gate is only a cost optimization; what actually keeps
-    // enforceBound from racing an active drain in either isolate is its
-    // per-file age gate — a file younger than a minute is never prunable, so
-    // a fresh capture or requeue protects itself by its own mtime.
+    // disconnected gate is only a cost optimization. Two things actually keep
+    // enforceBound from eating an active drain: the per-file age gate (a file
+    // younger than a minute is never prunable, so a fresh capture or requeue
+    // protects itself by its own mtime) and ClipQueue's drain heartbeat (a
+    // drain live in EITHER isolate stands the pruner down, which matters
+    // because pruning is oldest-first — exactly the batches a drain is working
+    // through).
     if (!(_store?.isConnected ?? false)) {
       unawaited(ClipQueue.enforceBound());
     }
@@ -144,6 +147,8 @@ class _BackgroundSyncHandler extends TaskHandler {
           // finally below puts the undelivered remainder back on disk.
           if (!store.isConnected) return;
           final item = items[i];
+          // Keep the heartbeat fresh through the uploads (see clip_controller).
+          await ClipQueue.beat();
           try {
             final actions = item.isImage
                 ? await engine.onLocalImage(

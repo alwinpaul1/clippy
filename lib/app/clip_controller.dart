@@ -298,6 +298,10 @@ class ClipController extends ChangeNotifier
           // consumed — the finally below puts the remainder back on disk.
           if (_disposed || _store?.isConnected != true) return;
           final item = items[i];
+          // Keep the "drain is live" heartbeat fresh THROUGH the uploads: a
+          // batch of images can outlast its freshness window, and a stale beat
+          // lets the other isolate prune the tail we're still working through.
+          await ClipQueue.beat();
           try {
             if (item.isImage) {
               // fromQueue: a queued capture is NOT the clipboard echo of an

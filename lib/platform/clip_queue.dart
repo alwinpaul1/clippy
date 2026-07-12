@@ -68,6 +68,10 @@ abstract class ClipQueue {
   /// True if [name] has failed too many times to be worth requeueing again.
   static bool isPoison(String? name) {
     if (name == null) return false;
+    // An item that fails once and is then pruned/never seen again would leave
+    // its counter behind forever. Bounded: the map only ever holds items
+    // currently failing, and this is a hard backstop.
+    if (_failures.length > 200) _failures.clear();
     final n = (_failures[name] ?? 0) + 1;
     _failures[name] = n;
     if (n >= maxItemFailures) {
@@ -183,6 +187,17 @@ abstract class ClipQueue {
   static const _beatName = 'drain.beat';
   static const _beatFresh = Duration(minutes: 1);
   static DateTime? _lastBeat;
+
+  /// Refresh the "a drain is live" heartbeat. Callers must keep calling this
+  /// WHILE they upload — a batch of large images can take minutes, far longer
+  /// than [_beatFresh], and a heartbeat that goes stale mid-drain lets the other
+  /// isolate prune the very tail we are working through. Self-throttled, so
+  /// calling it per item costs nothing.
+  static Future<void> beat() async {
+    final dir = await _dir();
+    if (dir == null) return;
+    _beat(dir);
+  }
 
   static void _beat(Directory dir) {
     final now = DateTime.now();
