@@ -57,21 +57,52 @@ abstract class ClipQueue {
     }
   }
 
-  /// A clip that throws every time it is processed (a corrupt payload, an image
-  /// too large to encode) would otherwise be requeued forever — and because the
-  /// requeue's rename re-fires the inotify watcher, the next drain starts
-  /// immediately, spinning as fast as the disk allows. Give up on it after a
-  /// few attempts: one lost clip beats a permanently pinned CPU.
+  // Processing a clip can fail two very different ways, and treating them the
+  // same is how you delete a user's backlog:
+  //
+  //  * GLOBAL/transient — the engine's prefs write fails (disk full: exactly
+  //    what a 200MB queue causes), the crypto box is unusable, the isolate is
+  //    out of memory. EVERY item fails, not one. The only safe response is to
+  //    put the clip back, stop draining, and try again LATER.
+  //  * PER-ITEM — one payload is genuinely unprocessable.
+  //
+  // They are indistinguishable at the throw site, so time is the discriminator:
+  // an item is only suspected of being poison once it has failed on separate
+  // drains, minutes apart — never three times in one loop, milliseconds apart.
+  // And a suspected-poison clip is QUARANTINED, never deleted: it goes to
+  // `<name>.dead` where it stops blocking the queue but still exists.
   static const maxItemFailures = 3;
   static final Map<String, int> _failures = {};
 
-  /// True if [name] has failed too many times to be worth requeueing again.
+  /// After a failed drain, hold off before touching the queue again. Without
+  /// this the requeue's rename re-fires the inotify watcher, which re-drains
+  /// instantly, which fails again — a hot loop pinning the CPU.
+  static DateTime? _cooldownUntil;
+  static int _drainFailures = 0;
+
+  static bool get inCooldown {
+    final until = _cooldownUntil;
+    return until != null && DateTime.now().isBefore(until);
+  }
+
+  /// A drain failed: back off, exponentially, so a persistent fault (no disk,
+  /// no crypto) costs us one attempt a minute instead of a spinning core.
+  static void noteDrainFailure() {
+    _drainFailures++;
+    final secs = (15 * (1 << (_drainFailures - 1).clamp(0, 4))).clamp(15, 240);
+    _cooldownUntil = DateTime.now().add(Duration(seconds: secs));
+  }
+
+  static void noteDrainSuccess() {
+    _drainFailures = 0;
+    _cooldownUntil = null;
+  }
+
+  /// Count a failure for [name] and report whether it has now failed on enough
+  /// SEPARATE drains to be treated as poison (the caller quarantines it).
   static bool isPoison(String? name) {
     if (name == null) return false;
-    // An item that fails once and is then pruned/never seen again would leave
-    // its counter behind forever. Bounded: the map only ever holds items
-    // currently failing, and this is a hard backstop.
-    if (_failures.length > 200) _failures.clear();
+    if (_failures.length > 200) _failures.clear(); // hard backstop
     final n = (_failures[name] ?? 0) + 1;
     _failures[name] = n;
     if (n >= maxItemFailures) {
@@ -83,6 +114,29 @@ abstract class ClipQueue {
 
   static void clearFailures(String? name) {
     if (name != null) _failures.remove(name);
+  }
+
+  /// Park an unprocessable clip instead of destroying it: drain() already
+  /// deleted its file, so writing it back under `.dead` is the difference
+  /// between "we could not sync this" and "we silently threw it away".
+  /// Reaped after a day by [enforceBound].
+  static Future<void> quarantine(ClipQueueItem item) async {
+    final name = item.name;
+    if (name == null || name.contains('/')) return;
+    final dir = await _dir();
+    if (dir == null) return;
+    try {
+      dir.createSync(recursive: true);
+      final f = File('${dir.path}/$name.dead');
+      if (item.isImage) {
+        await f.writeAsBytes(item.imageBytes!);
+      } else {
+        await f.writeAsString(item.text!);
+      }
+      debugPrint('ClipQueue: quarantined unprocessable clip $name');
+    } catch (_) {
+      // Nothing more we can do — but we tried not to lose it.
+    }
   }
 
   /// How much a single drain may hold in memory at once. The queue's own bound
@@ -121,6 +175,9 @@ abstract class ClipQueue {
           _reapIfStale(f);
           continue;
         }
+        // A quarantined clip is parked, not queued — never re-read it (it would
+        // come back as garbage "text" and fail forever).
+        if (ext == 'dead') continue;
         // Batch cap: stop BEFORE consuming the file, so it stays on disk (the
         // only crash-proof copy) for the next pass. Never cap at zero items —
         // one clip larger than the budget must still make progress.
@@ -323,6 +380,14 @@ abstract class ClipQueue {
         if (f.path.endsWith(_beatName)) continue; // not a clip
         if (f.path.endsWith('.part')) {
           _reapIfStale(f);
+          continue;
+        }
+        // Quarantined clips are exempt from the bound (they aren't queued work)
+        // but must not accumulate forever.
+        if (f.path.endsWith('.dead')) {
+          try {
+            if (_olderThan(f, const Duration(days: 1))) f.deleteSync();
+          } catch (_) {}
           continue;
         }
         int size;

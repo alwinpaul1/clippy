@@ -131,11 +131,16 @@ class _BackgroundSyncHandler extends TaskHandler {
     // every reconnect, so drains can overlap — two passes would list, read and
     // upload the SAME file before either deletes it (duplicate clips, and the
     // older one lands last as the room's newest).
-    if (_draining) return;
+    if (_draining || ClipQueue.inCooldown) return;
     _draining = true;
     var i = 0;
     var items = const <ClipQueueItem>[];
+    // Hold the heartbeat for the WHOLE drain (see clip_controller): one big
+    // image can upload for longer than the beat's freshness window.
+    final beat = Timer.periodic(
+        const Duration(seconds: 20), (_) => unawaited(ClipQueue.beat()));
     try {
+      await ClipQueue.beat();
       // drain() returns a bounded BATCH (a long-dead service can leave an
       // enormous backlog), so keep going until the disk is dry.
       while (store.isConnected) {
@@ -147,8 +152,6 @@ class _BackgroundSyncHandler extends TaskHandler {
           // finally below puts the undelivered remainder back on disk.
           if (!store.isConnected) return;
           final item = items[i];
-          // Keep the heartbeat fresh through the uploads (see clip_controller).
-          await ClipQueue.beat();
           try {
             final actions = item.isImage
                 ? await engine.onLocalImage(
@@ -168,15 +171,24 @@ class _BackgroundSyncHandler extends TaskHandler {
             }
             ClipQueue.clearFailures(item.name);
           } catch (_) {
-            // One bad item must not poison the batch — and requeueing it
-            // unconditionally would spin (the requeue re-fires the watcher,
-            // which drains it again, which throws again). Retry a couple of
-            // times, then drop it.
-            if (!ClipQueue.isPoison(item.name)) await ClipQueue.requeue(item);
+            // Almost certainly a GLOBAL fault (prefs write, crypto, memory) —
+            // the rest of the backlog would die the same way. Put this item
+            // back, stop, back off. Only a clip that fails across SEPARATE
+            // drains is poison, and then it is quarantined, not deleted.
+            if (ClipQueue.isPoison(item.name)) {
+              await ClipQueue.quarantine(item);
+            } else {
+              await ClipQueue.requeue(item);
+              i++; // back on disk — the finally must not requeue it twice
+              ClipQueue.noteDrainFailure();
+              return;
+            }
           }
         }
       }
+      ClipQueue.noteDrainSuccess();
     } finally {
+      beat.cancel();
       // ANY early exit — a dead link, or a throw from the engine/store (an
       // encode failure, a closing socket) — leaves the remaining items holding
       // the only copy of clips whose disk files drain() already deleted.
@@ -478,9 +490,13 @@ class ForegroundServiceManager {
   /// it: on a phone whose OEM keeps refusing the service, every retry would
   /// throw the dialog back in the user's face, and dismissing it resumes the
   /// app, which polls, which retries, which opens it again — inescapable.
-  static Future<void> start({bool askBatteryExemption = false}) async {
-    if (!_isAndroid) return;
-    if (_starting) return; // re-entrancy: init and a resume can race
+  /// Returns true if the service is up, false if the attempt failed, and NULL
+  /// if no attempt was made because one was already in flight — the caller must
+  /// not score that as a failure (the resume path fires ensureRunning() and the
+  /// health poll back to back, so it happens on every resume).
+  static Future<bool?> start({bool askBatteryExemption = false}) async {
+    if (!_isAndroid) return null;
+    if (_starting) return null; // re-entrancy: init and a resume can race
     _starting = true;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -489,7 +505,7 @@ class ForegroundServiceManager {
       if (await FlutterForegroundTask.isRunningService) {
         if (!stale) {
           _publishAlive(true);
-          return;
+          return true;
         }
         // Running under the old persisted type — stop it so the start below
         // rewrites the options with the current one.
@@ -499,7 +515,7 @@ class ForegroundServiceManager {
           // unwritten so the next launch retries, and don't vouch for health
           // we don't have.
           _publishAlive(false);
-          return;
+          return false;
         }
       }
       final started = await FlutterForegroundTask.startService(
@@ -521,9 +537,11 @@ class ForegroundServiceManager {
       if (ok) await prefs.setInt(_typesVersionKey, _serviceTypesVersion);
       _publishAlive(ok);
       if (askBatteryExemption) unawaited(_askBatteryExemption());
+      return ok;
     } catch (_) {
       // Prefs/channel calls still throw — report, never break app init.
       _publishAlive(false);
+      return false;
     } finally {
       _starting = false;
     }
@@ -615,13 +633,17 @@ class ForegroundServiceManager {
     _polling = true;
     final gen = _healthGen;
     try {
-      final alive = await FlutterForegroundTask.isRunningService;
+      // Timeout: a native side that never answers would otherwise leave
+      // _polling stuck true and silently kill the watch for the whole process.
+      final alive = await FlutterForegroundTask.isRunningService
+          .timeout(const Duration(seconds: 10));
       // Anything published while this call was in flight (a start(), a stop,
       // a cancelled watch) is NEWER than this reading — never overwrite it.
       if (gen != _healthGen) return;
       backgroundSyncAlive.value = alive;
       if (alive) {
         _reviveFailures = 0;
+        _reviveSkips = 0; // a recovery must not leave a stale backoff budget
         return;
       }
       // Don't just report the death — repair it. The user is LOOKING at the
@@ -638,14 +660,15 @@ class ForegroundServiceManager {
       // releasing the guard here would let the next tick start a second poll
       // whose finally then clears the flag out from under this one — the very
       // stacking the guard exists to prevent.
-      await start();
-      if (backgroundSyncAlive.value) {
+      final outcome = await start();
+      if (outcome == null) return; // a start was already in flight — not a failure
+      if (outcome) {
         _reviveFailures = 0;
         _reviveSkips = 0;
       } else {
         _reviveFailures++;
-        // 1, 2, 4, 8… polls between attempts, capped (~10 min at a 20s poll).
-        _reviveSkips = (1 << _reviveFailures.clamp(0, 5)).clamp(1, 30);
+        // 1, 2, 4, 8, 16, 30 polls between attempts (~10 min at a 20s poll).
+        _reviveSkips = (1 << (_reviveFailures - 1).clamp(0, 5)).clamp(1, 30);
       }
     } catch (_) {
       if (gen == _healthGen) backgroundSyncAlive.value = false;

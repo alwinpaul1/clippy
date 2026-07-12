@@ -282,11 +282,17 @@ class ClipController extends ChangeNotifier
     // Resume, reconnect and the queue watcher can all fire a drain at once;
     // overlapping passes would read and upload the same file twice before
     // either deleted it.
-    if (_draining) return;
+    if (_draining || ClipQueue.inCooldown) return;
     _draining = true;
     var i = 0;
     var items = const <ClipQueueItem>[];
+    // Hold the "a drain is live" heartbeat for the WHOLE drain, not just at
+    // item boundaries: one oversized image can upload for minutes over a slow
+    // link, and a stale beat lets the other isolate prune the tail underneath.
+    final beat = Timer.periodic(
+        const Duration(seconds: 20), (_) => unawaited(ClipQueue.beat()));
     try {
+      await ClipQueue.beat();
       // drain() returns a bounded BATCH (the backlog after a dead service can
       // be huge), so keep going until the disk is dry.
       while (!_disposed && _store?.isConnected == true) {
@@ -298,10 +304,6 @@ class ClipController extends ChangeNotifier
           // consumed — the finally below puts the remainder back on disk.
           if (_disposed || _store?.isConnected != true) return;
           final item = items[i];
-          // Keep the "drain is live" heartbeat fresh THROUGH the uploads: a
-          // batch of images can outlast its freshness window, and a stale beat
-          // lets the other isolate prune the tail we're still working through.
-          await ClipQueue.beat();
           try {
             if (item.isImage) {
               // fromQueue: a queued capture is NOT the clipboard echo of an
@@ -316,15 +318,29 @@ class ClipController extends ChangeNotifier
             }
             ClipQueue.clearFailures(item.name);
           } catch (_) {
-            // This ONE item failed. Requeueing it unconditionally would spin:
-            // the requeue's rename re-fires the queue watcher, which drains it
-            // again, which throws again. Retry it a couple of times, then drop
-            // it and carry on with the rest of the batch.
-            if (!ClipQueue.isPoison(item.name)) await ClipQueue.requeue(item);
+            // A failure here is far more likely GLOBAL (the engine's prefs
+            // write failed, the crypto box is unusable, we're out of memory)
+            // than specific to this clip — and everything else in the backlog
+            // would fail the same way. So: put THIS item back, stop draining,
+            // and back off. Never burn through the queue proving that a broken
+            // engine is still broken.
+            //
+            // Only a clip that fails on separate drains, minutes apart, is
+            // treated as poison — and then it is quarantined, not deleted.
+            if (ClipQueue.isPoison(item.name)) {
+              await ClipQueue.quarantine(item);
+            } else {
+              await ClipQueue.requeue(item);
+              i++; // it's back on disk — the finally must not requeue it twice
+              ClipQueue.noteDrainFailure();
+              return;
+            }
           }
         }
       }
+      ClipQueue.noteDrainSuccess();
     } finally {
+      beat.cancel();
       // ANY early exit — dead link, disposal, or a throw from the engine/store
       // — leaves the remaining items holding the ONLY copy of clips whose disk
       // files drain() already deleted.

@@ -11,6 +11,7 @@ void main() {
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('clippy-queue-test');
     ClipQueue.debugDir = tmp;
+    ClipQueue.noteDrainSuccess(); // no cooldown/backoff bleed between tests
   });
 
   tearDown(() {
@@ -136,21 +137,59 @@ void main() {
             'the only way it can expire');
   });
 
-  test('a poison item is dropped after repeated failures, not requeued forever',
+  test('a repeatedly-failing clip is counted, and a success resets the count',
       () {
-    // Requeueing an item that always throws re-fires the inotify watcher, which
-    // drains it again, which throws again — a hot loop pinning the CPU.
     expect(ClipQueue.isPoison('poison.txt'), isFalse, reason: 'retry once');
     expect(ClipQueue.isPoison('poison.txt'), isFalse, reason: 'and again');
     expect(ClipQueue.isPoison('poison.txt'), isTrue,
-        reason: 'a clip that can never be processed must be given up on — one '
-            'lost clip beats a permanently spinning drain');
+        reason: 'only after failing on SEPARATE drains is a clip poison');
 
-    // A success clears the count, so a transient failure never accumulates.
     expect(ClipQueue.isPoison('flaky.txt'), isFalse);
     ClipQueue.clearFailures('flaky.txt');
     expect(ClipQueue.isPoison('flaky.txt'), isFalse,
-        reason: 'the counter must reset on success');
+        reason: 'a transient failure must never accumulate toward poison');
+  });
+
+  test('a failed drain backs off, so a GLOBAL fault cannot burn through the '
+      'backlog in one loop', () async {
+    ClipQueue.noteDrainSuccess();
+    expect(ClipQueue.inCooldown, isFalse);
+
+    ClipQueue.noteDrainFailure();
+
+    expect(ClipQueue.inCooldown, isTrue,
+        reason: 'the engine failing (prefs write, crypto, OOM) means EVERY '
+            'item would fail — the drain must stop and wait, not prove it 200 '
+            'more times and delete the queue');
+    ClipQueue.noteDrainSuccess();
+    expect(ClipQueue.inCooldown, isFalse, reason: 'a success clears the hold');
+  });
+
+  test('a quarantined clip is PARKED on disk, never destroyed, and is not '
+      're-drained', () async {
+    await ClipQueue.quarantine(
+        const ClipQueueItem.text('unprocessable', name: '001.txt'));
+
+    expect(File('${tmp.path}/001.txt.dead').existsSync(), isTrue,
+        reason: 'drain() already deleted the original — dropping it here is '
+            'the difference between "could not sync" and "silently destroyed"');
+    expect(await ClipQueue.drain(), isEmpty,
+        reason: 'a parked clip must not be re-read (it would come back as '
+            'garbage text and fail forever)');
+  });
+
+  test('quarantined clips are reaped after a day, not hoarded', () async {
+    await ClipQueue.quarantine(
+        const ClipQueueItem.text('old', name: '002.txt'));
+    File('${tmp.path}/002.txt.dead').setLastModifiedSync(
+        DateTime.now().subtract(const Duration(days: 2)));
+    await ClipQueue.quarantine(
+        const ClipQueueItem.text('recent', name: '003.txt'));
+
+    await ClipQueue.enforceBound();
+
+    expect(File('${tmp.path}/002.txt.dead').existsSync(), isFalse);
+    expect(File('${tmp.path}/003.txt.dead').existsSync(), isTrue);
   });
 
   test('a failed delete is not counted as freed space', () async {
