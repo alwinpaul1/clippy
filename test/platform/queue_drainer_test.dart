@@ -82,16 +82,40 @@ void main() {
             'requeue re-fires the inotify watcher)');
   });
 
-  test('a cooldown blocks the next drain (this is what breaks the hot loop)',
-      () async {
-    put('001.txt', 'a');
-    ClipQueue.noteDrainFailure();
+  test('a cooldown blocks RETRYING a clip we already failed on (this is what '
+      'breaks the hot loop)', () async {
+    put('001.txt', 'bad');
+    // Fail it once, which requeues it and sets the hold.
+    await drainer((item) async => throw StateError('nope')).run();
+    expect(ClipQueue.inCooldown, isTrue);
     var attempts = 0;
 
     await drainer((item) async => attempts++).run();
 
-    expect(attempts, 0);
+    expect(attempts, 0,
+        reason: 'the requeue re-fires the inotify watcher — without the hold '
+            'that is a spin');
     expect(onDisk(), ['001.txt']);
+  });
+
+  test('a cooldown NEVER blocks a clip we have not tried — the user\'s next '
+      'copy must not wait behind a jam', () async {
+    put('001.txt', 'bad');
+    await drainer((item) async => throw StateError('nope')).run();
+    expect(ClipQueue.inCooldown, isTrue);
+
+    put('900.txt', 'the user just copied this');
+    final synced = <String>[];
+
+    await drainer((item) async {
+      if (item.text == 'bad') throw StateError('nope');
+      synced.add(item.name!);
+    }).run();
+
+    expect(synced, ['900.txt'],
+        reason: 'a hold on a known-bad clip must never make a FRESH clip wait — '
+            'that is up to four minutes of latency for something that has never '
+            'failed once');
   });
 
   test('a failure AFTER a success is set aside — it STAYS ON DISK for a later '
@@ -236,6 +260,12 @@ void main() {
         onDisk().where((n) => n.startsWith('0') && n.endsWith('.txt')).length;
     final parked = onDisk().where((n) => n.endsWith('.dead')).length;
     expect(stillQueued + parked, 61, reason: 'not one clip may be destroyed');
+    // Conservation alone is vacuous — it holds even if the policy quarantined
+    // all 61 (which enforceBound reaps a day later). Bound the convictions: only
+    // a clip with genuine SAME-BATCH evidence may be parked, which here is the
+    // handful sharing the final batch with a good clip.
+    expect(parked, lessThan(5),
+        reason: 'a jam must be stepped over, not convicted wholesale');
   });
 
   test('losing the link mid-drain puts the undelivered remainder back', () async {
@@ -396,6 +426,31 @@ void main() {
         reason: 'the engine delivered on every single run — pinning the cooldown '
             'at 4 minutes would make every good clip wait for a jam that is not '
             'even the engine\'s fault');
+  });
+
+  /// The regression that slipped past twenty tests: a DYING engine delivers
+  /// first and throws after (the disk fills up mid-run). "Something was
+  /// delivered" cannot see that — it reads as healthy, takes a flat 15s hold,
+  /// and then re-reads and re-WRITES the entire backlog against a full disk
+  /// every 20 seconds. Requeue writes are best-effort; hammering them during a
+  /// disk-full fault is how a rare loss stops being rare.
+  test('a DYING engine escalates the backoff — evidence must come AFTER the '
+      'failure, for the engine exactly as for the clips', () async {
+    for (var i = 1; i <= 8; i++) {
+      put('00$i.txt', 'clip-$i');
+    }
+
+    for (var run = 0; run < 3; run++) {
+      ClipQueue.expireCooldownForTests();
+      var slack = 1; // the first write fits; the disk is full after that
+      await drainer((item) async {
+        if (slack-- <= 0) throw StateError('disk full');
+      }).run();
+    }
+
+    expect(ClipQueue.drainFailures, greaterThan(1),
+        reason: 'the LAST thing that happened was a failure — the engine is '
+            'dying, and must be backed off from, not politely held for 15s');
   });
 
   test('a clip that threw is rescued when the link drops immediately after',

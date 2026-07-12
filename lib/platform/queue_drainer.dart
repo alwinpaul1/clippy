@@ -41,7 +41,11 @@ class QueueDrainer {
     // Overlapping drains would read and upload the same file twice before
     // either deleted it; a cooldown means the engine looked broken a moment ago
     // and hammering the queue would just fail the same way.
-    if (_draining || ClipQueue.inCooldown || !canContinue()) return;
+    if (_draining || !canContinue()) return;
+    // A cooldown holds us off a broken engine or a jam we keep re-reading — but
+    // it must NEVER make the user's next copy wait behind it. A clip we have
+    // never failed on has not been backed off from.
+    if (ClipQueue.inCooldown && !await ClipQueue.hasUntriedWork()) return;
     _draining = true;
     // Hold the "a drain is live" heartbeat for the WHOLE run: one oversized
     // image can upload for minutes, and a stale beat lets the other isolate's
@@ -57,6 +61,14 @@ class QueueDrainer {
     final seen = <String>{};
     var deliveredTotal = 0;
     var hadFailure = false;
+    // Event order, so the ENGINE can be judged by the same rule as the clips:
+    // evidence must come AFTER the failure. A dying engine (a disk filling up)
+    // delivers first and throws after — "something was delivered" cannot see
+    // that, and would hold off for a flat 15s while re-reading and re-writing
+    // the whole backlog against a full disk every 20 seconds.
+    var events = 0;
+    var lastDelivery = -1;
+    var lastFailure = -1;
     var i = 0;
     var items = const <ClipQueueItem>[];
     try {
@@ -87,20 +99,28 @@ class QueueDrainer {
             ClipQueue.clearFailures(name);
             deliveredInBatch++;
             deliveredTotal++;
+            lastDelivery = events++;
           } catch (_) {
+            lastFailure = events++;
             // Straight back to disk: a clip is never the sole property of a
             // process that might be killed.
             await ClipQueue.requeue(item);
+            ClipQueue.noteAttemptFailed(name); // tried — so the hold applies
             if (name != null) {
-              if (items.length == 1) {
-                // ALONE in its batch — and it always will be, because drain()
-                // gives an over-budget file a batch of its own. Same-batch
-                // evidence can therefore never exist for it, so it could never
-                // be blamed, never parked, and would re-read its 30MB from
-                // flash on every drain forever. For a solo clip only, a
-                // delivery LATER IN THE RUN is admissible: the clip is the one
-                // thing that distinguishes its own failure (it is too big), and
-                // a genuinely broken engine delivers nothing at all.
+              // Solo BECAUSE IT IS OVERSIZED — not merely because the queue
+              // happened to hold one file. drain() gives an over-budget file a
+              // batch of its own, so same-batch evidence can never exist for it;
+              // for anything else, a batch of one is an accident of timing and
+              // must not lower the standard of proof.
+              final bytes =
+                  item.imageBytes?.length ?? item.text?.length ?? 0;
+              if (bytes >= ClipQueue.maxDrainBytes) {
+                // For an over-budget clip ONLY, a delivery later in the run is
+                // admissible evidence: it is the one thing that distinguishes
+                // its own failure (it is too big to encode), and an engine that
+                // is genuinely broken delivers nothing at all. Without this it
+                // could never be parked and would re-read its bulk from flash
+                // on every drain, forever.
                 _solo.add(_Solo(name, deliveredTotal));
               } else {
                 failedAt.putIfAbsent(name, () => deliveredInBatch);
@@ -128,17 +148,17 @@ class QueueDrainer {
       }
       _solo.clear();
 
-      if (hadFailure && deliveredTotal > 0) {
-        // The engine PROVED itself this run, whatever we could or could not
-        // pin on the clips that failed. A brief hold stops the requeue's
-        // inotify event becoming a spin — but escalating would make every GOOD
-        // clip wait up to four minutes because of a jam we cannot even convict,
-        // and (since a run with failures never clears the backoff) it would
-        // never heal.
+      if (hadFailure && lastDelivery > lastFailure) {
+        // A clip synced AFTER the last failure: the engine is working NOW, and
+        // what failed is the queue's problem, not its. A brief hold stops the
+        // requeue's inotify event becoming a spin — but escalating would make
+        // good clips wait minutes for a jam that is not the engine's fault.
         ClipQueue.noteDrainFailure(escalate: false);
       } else if (hadFailure) {
-        // Failures and NOTHING delivered anywhere: the engine is down. Back off
-        // properly. This is the case that must never blame anyone.
+        // The last thing that happened was a FAILURE — the engine is down, or
+        // dying (it delivered, then the disk filled). Back off properly:
+        // re-reading and re-writing the whole backlog every 20s against a full
+        // disk is how a "rare" requeue-write loss stops being rare.
         ClipQueue.noteDrainFailure();
       } else if (deliveredTotal > 0) {
         // A clean, productive run. Only this clears the backoff — an empty

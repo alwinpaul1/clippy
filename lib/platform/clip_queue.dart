@@ -73,6 +73,11 @@ abstract class ClipQueue {
   // `<name>.dead` where it stops blocking the queue but still exists.
   static const maxItemFailures = 3;
   static final Map<String, int> _failures = {};
+  // Every clip we have EVER failed on, blamed or not. Strikes only accrue with
+  // evidence, so _failures alone cannot answer "have we tried this clip?" — and
+  // that question is what decides whether a cooldown applies. Without it, a clip
+  // we cannot convict looks untried, skips its own hold, and spins.
+  static final Set<String> _tried = {};
 
   /// After a failed drain, hold off before touching the queue again. Without
   /// this the requeue's rename re-fires the inotify watcher, which re-drains
@@ -83,6 +88,28 @@ abstract class ClipQueue {
   static bool get inCooldown {
     final until = _cooldownUntil;
     return until != null && DateTime.now().isBefore(until);
+  }
+
+  /// Is there a clip on disk we have NEVER failed on?
+  ///
+  /// The cooldown exists to stop us hammering a broken engine (or re-reading a
+  /// jam) — it must never make the user's NEXT copy wait behind it. A clip with
+  /// no strike history has never been tried, so the hold does not apply to it.
+  static Future<bool> hasUntriedWork() async {
+    final dir = await _dir();
+    if (dir == null) return false;
+    try {
+      for (final f in dir.listSync().whereType<File>()) {
+        final name = f.uri.pathSegments.last;
+        if (name == _beatName ||
+            name.endsWith('.part') ||
+            name.endsWith('.dead')) {
+          continue;
+        }
+        if (!_tried.contains(name)) return true;
+      }
+    } catch (_) {}
+    return false;
   }
 
   /// A drain failed: hold off before touching the queue again.
@@ -126,6 +153,13 @@ abstract class ClipQueue {
   /// something else was delivered — so the failure really is this clip's. A
   /// failure with nothing delivered is indistinguishable from a broken engine
   /// and must never be counted: that is how a backlog gets destroyed.
+  /// Remember that [name] failed, whether or not there was evidence to blame it.
+  static void noteAttemptFailed(String? name) {
+    if (name == null) return;
+    if (_tried.length > 500) _tried.remove(_tried.first);
+    _tried.add(name);
+  }
+
   static bool noteItemFailure(String? name) {
     if (name == null) return false;
     // Evict the OLDEST entries rather than wiping the map: a clear would reset
@@ -144,7 +178,9 @@ abstract class ClipQueue {
   }
 
   static void clearFailures(String? name) {
-    if (name != null) _failures.remove(name);
+    if (name == null) return;
+    _failures.remove(name);
+    _tried.remove(name); // it worked — it is not a known-bad clip any more
   }
 
   /// Clear the static machine between tests. Strike counters and cooldowns are
@@ -154,6 +190,7 @@ abstract class ClipQueue {
   @visibleForTesting
   static void resetForTests() {
     _failures.clear();
+    _tried.clear();
     _cooldownUntil = null;
     _drainFailures = 0;
     _lastBeat = null;
@@ -184,7 +221,10 @@ abstract class ClipQueue {
   /// would otherwise be read in one go and OOM the app at the worst possible
   /// moment: launch. Whatever doesn't fit stays on disk, oldest-first, and the
   /// next drain takes the next batch.
-  @visibleForTesting
+  /// A file at or above this size gets a drain batch to ITSELF (the cap below
+  /// stops the batch before adding a second file). QueueDrainer reads this: a
+  /// clip that is structurally always alone can never have same-batch evidence,
+  /// so it needs a different standard of proof. Mutable for tests.
   static int maxDrainBytes = 24 << 20;
   @visibleForTesting
   static int maxDrainFiles = 30;
