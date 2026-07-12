@@ -49,86 +49,100 @@ class QueueDrainer {
     // oldest-first — exactly the next batches).
     final beat = Timer.periodic(
         const Duration(seconds: 20), (_) => unawaited(ClipQueue.beat()));
-    // Failed this run: stepped over, but still on disk.
-    final skip = <String>{};
-    // For each failure, how many clips had been delivered when it failed — it
-    // is only answerable if MORE were delivered afterwards.
-    final failedAt = <String, int>{};
-    var delivered = 0;
+    // EVERY clip this run has already handled — delivered or failed. Failures
+    // stay on disk and must be stepped over; a success is normally gone, but if
+    // drain()'s delete ever fails (read-only mount, a hostile OEM FS) the file
+    // comes back, and without this the same clip would be re-delivered on every
+    // iteration forever. This set is what makes the loop finite.
+    final seen = <String>{};
+    var deliveredTotal = 0;
+    var hadFailure = false;
+    var blamed = false;
     var i = 0;
     var items = const <ClipQueueItem>[];
     try {
       await ClipQueue.beat();
       // drain() returns a bounded BATCH (a long-dead service leaves a huge
       // backlog, and reading it all at once would OOM the app at launch), so
-      // keep going until nothing is left that this run hasn't already tried.
+      // keep going until nothing is left that this run has not already tried.
       while (canContinue()) {
         i = 0;
-        final deliveredBefore = delivered;
-        final skippedBefore = skip.length;
-        items = await ClipQueue.drain(skip: skip);
+        items = const [];
+        final seenBefore = seen.length;
+        items = await ClipQueue.drain(skip: seen);
         if (items.isEmpty) break;
+
+        // Judgement is scoped to THIS BATCH, whose clips were attempted
+        // back-to-back. A run-global counter cannot tell "this clip is bad"
+        // from "the engine was briefly broken and then recovered": with a
+        // global counter, one delivery in a LATER batch — after a transient
+        // fault heals — convicts every clip that failed before it.
+        var deliveredInBatch = 0;
+        final failedAt = <String, int>{};
         for (; i < items.length; i++) {
           if (!canContinue()) return; // finally puts items[i..] back
           final item = items[i];
+          final name = item.name;
           try {
             await process(item);
-            ClipQueue.clearFailures(item.name);
-            delivered++;
+            ClipQueue.clearFailures(name);
+            deliveredInBatch++;
+            deliveredTotal++;
           } catch (_) {
             // Straight back to disk: a clip is never the sole property of a
-            // process that might be killed. Then step over it for this run.
+            // process that might be killed.
             await ClipQueue.requeue(item);
-            final name = item.name;
-            if (name != null) {
-              skip.add(name);
-              failedAt.putIfAbsent(name, () => delivered);
-            }
+            if (name != null) failedAt.putIfAbsent(name, () => deliveredInBatch);
+            hadFailure = true;
           }
+          if (name != null) seen.add(name); // handled — never revisit this run
         }
-        // Termination guard. The skip list is what makes the loop finite: every
-        // failure is stepped over, so drain() eventually returns nothing. If a
-        // batch ever manages to neither deliver nor skip anything, we would
-        // re-read it forever — stop instead of spinning the CPU.
-        if (delivered == deliveredBefore && skip.length == skippedBefore) break;
+        if (await _judgeBatch(failedAt, deliveredInBatch)) blamed = true;
+
+        // Termination guard: a batch that handled nothing new would be re-read
+        // forever. Every item above enters `seen`, so this cannot happen — but
+        // a spinning core is not a failure mode worth resting on an argument.
+        if (seen.length == seenBefore) break;
       }
     } finally {
       beat.cancel();
       if (i < items.length) await ClipQueue.requeueAll(items.sublist(i));
-      await _judge(failedAt, delivered);
+      if (blamed) {
+        // The engine works; those clips are simply bad. Their requeue re-fires
+        // the queue watcher, so a brief hold stops that becoming a spin — but
+        // there is nothing to escalate away from, and escalating would make
+        // every GOOD clip wait minutes because one clip is unprocessable.
+        ClipQueue.noteDrainFailure(escalate: false);
+      } else if (hadFailure) {
+        // Failures, but never any evidence against a clip: the engine is down.
+        // Back off properly. This is the case that must never blame anyone.
+        ClipQueue.noteDrainFailure();
+      } else if (deliveredTotal > 0) {
+        // A clean, productive run. Only this clears the backoff — an empty
+        // directory is not evidence (the other isolate may be mid-batch, with
+        // its files already deleted).
+        ClipQueue.noteDrainSuccess();
+      }
       _draining = false;
     }
   }
 
-  /// Decide what the run's failures MEANT, once it is over.
-  Future<void> _judge(Map<String, int> failedAt, int delivered) async {
-    if (failedAt.isEmpty) {
-      // Only a run that actually delivered something is evidence the engine
-      // works — an empty directory is not (the other isolate may be mid-batch,
-      // its files already deleted).
-      if (delivered > 0) ClipQueue.noteDrainSuccess();
-      return;
-    }
+  /// Judge ONE batch. A clip is answerable only if another clip synced AFTER it
+  /// failed, IN THIS BATCH — the only evidence that the engine was working at
+  /// the moment this clip was not. An engine that dies part-way (a disk filling
+  /// up) delivers first and throws after, convicting nobody; an engine that
+  /// recovers later in the run convicts nobody either, because its recovery
+  /// lands in a different batch.
+  Future<bool> _judgeBatch(
+      Map<String, int> failedAt, int deliveredInBatch) async {
     var blamed = false;
     for (final entry in failedAt.entries) {
-      // Answerable only if a clip synced AFTER this one failed. If the engine
-      // died and never came back, nothing did — and nobody is blamed.
-      if (delivered <= entry.value) continue;
+      if (deliveredInBatch <= entry.value) continue; // nothing synced after it
       blamed = true;
       if (ClipQueue.noteItemFailure(entry.key)) {
-        await ClipQueue.parkFile(entry.key);
+        await ClipQueue.parkFile(entry.key); // atomic rename; never deleted
       }
     }
-    if (blamed) {
-      // The engine works; these clips are simply bad. Their requeue re-fires the
-      // queue watcher, so a brief hold keeps that from becoming a spin — but
-      // there is nothing to escalate away from, and escalating would delay the
-      // good clips that are syncing perfectly well.
-      ClipQueue.noteDrainFailure(escalate: false);
-    } else {
-      // Nothing was delivered after any failure: treat the engine as down and
-      // back off properly. This is the case that must never blame a clip.
-      ClipQueue.noteDrainFailure();
-    }
+    return blamed;
   }
 }

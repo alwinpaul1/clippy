@@ -128,7 +128,12 @@ abstract class ClipQueue {
   /// and must never be counted: that is how a backlog gets destroyed.
   static bool noteItemFailure(String? name) {
     if (name == null) return false;
-    if (_failures.length > 200) _failures.clear(); // hard backstop
+    // Evict the OLDEST entries rather than wiping the map: a clear would reset
+    // everyone's strikes partway through a big jam, so no clip could ever reach
+    // three and the jam would be unparkable forever.
+    while (_failures.length > 500) {
+      _failures.remove(_failures.keys.first);
+    }
     final n = (_failures[name] ?? 0) + 1;
     _failures[name] = n;
     if (n >= maxItemFailures) {

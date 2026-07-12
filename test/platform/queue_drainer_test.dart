@@ -224,8 +224,18 @@ void main() {
     expect(synced, contains('900.txt'),
         reason: 'the good clip must get through on the FIRST run — a jammed '
             'head must never stop the whole device from syncing');
-    expect(tmp.listSync().where((f) => f.path.endsWith('.dead')), hasLength(61),
-        reason: 'and every bad clip is eventually parked (never deleted)');
+    // NOT destroyed: every one of the 61 is still there — most still queued,
+    // and only those with genuine SAME-BATCH evidence against them parked.
+    // A jam bigger than one batch is stepped over and retried rather than
+    // convicted, because no good clip ever lands in its batch. That is
+    // deliberate: convicting it would mean accepting run-global evidence, and a
+    // transient fault that fails a batch then heals would destroy thirty
+    // innocent clips (see the recovering-engine test). Stale files are cheap;
+    // destroyed clips are not.
+    final stillQueued =
+        onDisk().where((n) => n.startsWith('0') && n.endsWith('.txt')).length;
+    final parked = onDisk().where((n) => n.endsWith('.dead')).length;
+    expect(stillQueued + parked, 61, reason: 'not one clip may be destroyed');
   });
 
   test('losing the link mid-drain puts the undelivered remainder back', () async {
@@ -295,6 +305,48 @@ void main() {
             'must not escalate the backoff and make every good clip wait');
     expect(File('${tmp.path}/001.txt').existsSync(), isTrue,
         reason: 'and the clip is still queued, not destroyed');
+  });
+
+  /// The mirror of the dying-engine case, and just as destructive: a transient
+  /// global fault (memory pressure while a 24MB batch is in flight) fails a
+  /// whole batch, then HEALS — and the next batch's clip syncs fine. A
+  /// run-global "something was delivered" rule convicts all 30 innocent clips.
+  test('an engine that RECOVERS later in the run does not convict the clips '
+      'that failed before it healed', () async {
+    for (var i = 1; i <= 30; i++) {
+      put('${i.toString().padLeft(3, '0')}.txt', 'batch-one');
+    }
+
+    for (var run = 0; run < 4; run++) {
+      put('90$run.txt', 'copied-after'); // lands in the NEXT batch
+      ClipQueue.expireCooldownForTests();
+      var pressure = 30; // the first batch fails; then the pressure lifts
+      await drainer((item) async {
+        if (pressure-- > 0) throw StateError('out of memory');
+      }).run();
+    }
+
+    expect(tmp.listSync().where((f) => f.path.endsWith('.dead')), isEmpty,
+        reason: 'nothing synced AFTER them IN THEIR BATCH — a fault that heals '
+            'in a later batch is evidence about the engine, not about them');
+    expect(onDisk().where((n) => n.endsWith('.txt')), hasLength(30),
+        reason: 'all thirty innocent clips must still be queued');
+  });
+
+  test('a clip whose file cannot be deleted is not delivered twice (and does '
+      'not spin the drain forever)', () async {
+    put('001.txt', 'undeletable');
+    var uploads = 0;
+
+    await drainer((item) async {
+      uploads++;
+      // Simulate drain()'s delete silently failing: the file is back.
+      File('${tmp.path}/001.txt').writeAsStringSync('undeletable');
+    }).run();
+
+    expect(uploads, 1,
+        reason: 'the run must not re-read and re-sync the same clip forever — '
+            'every handled name is remembered, delivered or failed');
   });
 
   test('a clip that threw is rescued when the link drops immediately after',
