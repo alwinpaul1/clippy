@@ -165,10 +165,18 @@ class QueueDrainer {
         // re-reading and re-writing the whole backlog every 20s against a full
         // disk is how a "rare" requeue-write loss stops being rare.
         ClipQueue.noteDrainFailure();
-      } else if (deliveredTotal > 0) {
-        // A clean, productive run. Only this clears the backoff — an empty
-        // directory is not evidence (the other isolate may be mid-batch, with
-        // its files already deleted).
+      } else if (deliveredTotal > 0 && !holding) {
+        // A clean, productive run that looked at EVERYTHING. Only this clears
+        // the backoff.
+        //
+        // Not a holding run: it deliberately skipped every clip we have failed
+        // on, so it proves nothing about them. Clearing the hold on its say-so
+        // would let the very next run re-read the whole known-bad backlog —
+        // which is what the hold is for. It expires on its own schedule, and
+        // the backlog is retried then.
+        //
+        // And not an empty directory: that is not evidence either (the other
+        // isolate may be mid-batch, with its files already deleted).
         ClipQueue.noteDrainSuccess();
       }
       _draining = false;

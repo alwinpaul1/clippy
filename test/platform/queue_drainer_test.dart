@@ -498,6 +498,42 @@ void main() {
             'treating it as such makes every cooldown a no-op, forever');
   });
 
+  /// The full cycle, and the thing that must never happen: the known-bad backlog
+  /// is DEFERRED while the hold stands, but never STRANDED. Once the hold
+  /// expires and the engine recovers, every one of those clips must sync.
+  test('the deferred backlog is retried once the hold expires — never stranded',
+      () async {
+    for (var i = 1; i <= 5; i++) {
+      put('00$i.txt', 'clip-$i');
+    }
+    var engineUp = false;
+
+    // The engine is down: the backlog fails and earns a hold.
+    await drainer((item) async {
+      if (!engineUp) throw StateError('engine down');
+    }).run();
+    expect(ClipQueue.inCooldown, isTrue);
+
+    // The user copies something. It syncs (the bypass) — but that must NOT
+    // forgive the hold, or the next run drags all five back through a sick disk.
+    put('900.txt', 'fresh');
+    await drainer((item) async {
+      if (!engineUp && item.text != 'fresh') throw StateError('engine down');
+    }).run();
+    expect(ClipQueue.inCooldown, isTrue,
+        reason: 'a run that skipped the backlog proves nothing about it');
+
+    // The hold expires and the engine recovers.
+    engineUp = true;
+    ClipQueue.expireCooldownForTests();
+    final synced = <String>[];
+    await drainer((item) async => synced.add(item.name!)).run();
+
+    expect(synced, hasLength(5),
+        reason: 'deferred is not stranded — every clip must sync in the end');
+    expect(onDisk(), isEmpty);
+  });
+
   test('a clip that threw is rescued when the link drops immediately after',
       () async {
     put('001.txt', 'a');
