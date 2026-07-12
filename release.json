@@ -1,18 +1,10 @@
 {
-  "version": "1.0.31",
+  "version": "1.0.32",
   "notes": {
     "features": [],
     "improvements": [
-      "Clippy now notices the moment background sync stops — even while you're looking at the app — and brings it back on its own",
-      "A big backlog of clips now syncs in batches, so a long offline stretch can't overwhelm the app"
+      "In-app updates now verify each download against a checksum before installing, and only ever install from Clippy's own server"
     ],
-    "fixes": [
-      "Images no longer reappear as new clips \"copied\" on a device that never copied them",
-      "Fixed a long copy sometimes syncing cut off halfway",
-      "Screenshots and copies are no longer lost when captured just as another clip arrives",
-      "Clips are no longer lost when the connection drops mid-sync",
-      "Clips no longer sync twice when two syncs start at the same moment",
-      "A screenshot that failed to read once is retried instead of skipped for good"
-    ]
+    "fixes": []
   }
 }
