@@ -109,47 +109,27 @@ abstract class ClipQueue {
   @visibleForTesting
   static void expireCooldownForTests() => _cooldownUntil = null;
 
-  /// How long a clip must have been failing before a LONE failure — one with no
-  /// other clip succeeding to prove the engine even works — may be blamed on the
-  /// clip itself. Until then a global outage (disk full, no crypto) is presumed.
-  @visibleForTesting
-  static Duration poisonMinAge = const Duration(minutes: 10);
-  static final Map<String, DateTime> _firstFail = {};
-
-  /// Record that [name] failed, and report whether it should now be quarantined.
+  /// Record that [name] failed, and report whether it has now failed on enough
+  /// SEPARATE runs to be given up on (the caller parks it).
   ///
-  /// [engineProven] means something ELSE succeeded in the same run: the engine
-  /// works, so the fault really is this clip's, and three strikes (each from a
-  /// separate, cooldown-separated run) is enough.
-  ///
-  /// Without that proof the failure is indistinguishable from a total engine
-  /// outage, so we additionally require the clip to have been failing for
-  /// [poisonMinAge]. That is what stops a transient fault from parking a whole
-  /// backlog — while still guaranteeing that a genuinely unprocessable clip,
-  /// ALONE in the queue, eventually stops blocking it.
-  static bool noteItemFailure(String? name, {required bool engineProven}) {
+  /// This is only ever called when the engine PROVED itself during the run —
+  /// something else was delivered — so the failure really is this clip's. A
+  /// failure with nothing delivered is indistinguishable from a broken engine
+  /// and must never be counted: that is how a backlog gets destroyed.
+  static bool noteItemFailure(String? name) {
     if (name == null) return false;
-    if (_failures.length > 200) {
-      _failures.clear();
-      _firstFail.clear();
-    }
+    if (_failures.length > 200) _failures.clear(); // hard backstop
     final n = (_failures[name] ?? 0) + 1;
     _failures[name] = n;
-    final first = _firstFail[name] ??= DateTime.now();
-    if (n < maxItemFailures) return false;
-    if (engineProven || DateTime.now().difference(first) >= poisonMinAge) {
+    if (n >= maxItemFailures) {
       _failures.remove(name);
-      _firstFail.remove(name);
       return true;
     }
     return false;
   }
 
   static void clearFailures(String? name) {
-    if (name != null) {
-      _failures.remove(name);
-      _firstFail.remove(name);
-    }
+    if (name != null) _failures.remove(name);
   }
 
   /// Clear the static machine between tests. Strike counters and cooldowns are
@@ -159,11 +139,9 @@ abstract class ClipQueue {
   @visibleForTesting
   static void resetForTests() {
     _failures.clear();
-    _firstFail.clear();
     _cooldownUntil = null;
     _drainFailures = 0;
     _lastBeat = null;
-    poisonMinAge = const Duration(minutes: 10);
   }
 
   /// Park an unprocessable clip instead of destroying it: drain() already
