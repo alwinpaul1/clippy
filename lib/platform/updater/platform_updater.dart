@@ -122,9 +122,11 @@ Future<void> downloadTo(
     // A stream can end SHORT of its declared length without throwing (the socket
     // closed mid-download). That is a truncated file, not a tampered one — the
     // common failure on a slow mobile link. Say so, so it is retried rather than
-    // mistaken for an attack.
+    // mistaken for an attack. (Over-length is anomalous/hostile, but reported as
+    // its own thing rather than mislabelled "truncated".)
     if (total > 0 && received != total) {
-      throw DownloadException('download truncated ($received of $total bytes)');
+      final how = received < total ? 'truncated' : 'over-length';
+      throw DownloadException('download $how ($received of $total bytes)');
     }
     hashSink.close();
     final actual = base16((await hashSink.hash()).bytes);

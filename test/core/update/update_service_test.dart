@@ -96,5 +96,13 @@ void main() {
       expect(() => svc.artifactUri('https://evil.example/x.apk'),
           throwsA(isA<Exception>()));
     });
+
+    test('same host but a DIFFERENT PORT is REFUSED', () {
+      expect(
+          () => svc.artifactUri('https://relay.clippy.app:8443/download/x.apk'),
+          throwsA(isA<Exception>()),
+          reason: 'a foothold on another port of the same host is exactly what '
+              'the origin pin defends against');
+    });
   });
 }

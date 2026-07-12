@@ -57,9 +57,15 @@ class UpdateService {
   Uri artifactUri(String pathOrUrl) {
     final u = Uri.parse(pathOrUrl);
     if (!u.hasScheme) return manifestUri.resolve(pathOrUrl);
-    if (u.scheme == manifestUri.scheme && u.host == manifestUri.host) return u;
-    throw Exception('update artifact host ${u.host} is not the manifest host '
-        '${manifestUri.host} — refusing');
+    // Same ORIGIN: scheme, host, AND port. Pinning only host would let a
+    // tampered manifest redirect to another port on the same machine — a
+    // service an attacker with a foothold there could control.
+    final sameOrigin = u.scheme == manifestUri.scheme &&
+        u.host == manifestUri.host &&
+        u.port == manifestUri.port;
+    if (sameOrigin) return u;
+    throw Exception('update artifact origin ${u.scheme}://${u.host}:${u.port} '
+        'is not the manifest origin — refusing');
   }
 
   /// [key] is a `version+build` identifier (see [UpdateController]) so a
