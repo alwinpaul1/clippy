@@ -549,13 +549,17 @@ abstract class ClipQueue {
     if (dir == null) return;
     try {
       if (!dir.existsSync()) return;
-      _lastBound = DateTime.now();
       final entries = dir.listSync().whereType<File>().toList();
       // A drain is live SOMEWHERE (this isolate's link being down says nothing
       // about the other's). Since the batch cap leaves its tail on disk between
       // batches, and we prune oldest-first, pruning now would delete precisely
       // the clips it is about to deliver.
+      //
+      // Standing down does NOT spend the throttle: otherwise one unlucky
+      // overlap with a live drain would push the next pruning pass a whole
+      // minute past the moment the queue actually needed it.
       if (_drainLive(entries)) return;
+      _lastBound = DateTime.now();
       // The bound is judged against EVERYTHING on disk (that's the real
       // usage), but only files past the age gate are eligible for deletion —
       // fresh writes protect themselves by mtime.
