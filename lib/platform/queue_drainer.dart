@@ -48,7 +48,6 @@ class QueueDrainer {
     // oldest-first — exactly the next batches).
     final beat = Timer.periodic(
         const Duration(seconds: 20), (_) => unawaited(ClipQueue.beat()));
-    var delivered = 0;
     var i = 0;
     var items = const <ClipQueueItem>[];
     try {
@@ -60,37 +59,69 @@ class QueueDrainer {
         i = 0;
         items = await ClipQueue.drain();
         if (items.isEmpty) break;
+
+        // Attempt the WHOLE batch before judging anything. A failure alone says
+        // nothing: the engine (a prefs write, the crypto box, an allocation)
+        // fails for every clip alike, so one failure looks exactly like a bad
+        // clip. What tells them apart is whether ANYTHING ELSE went through.
+        var delivered = 0;
+        final failed = <ClipQueueItem>[];
         for (; i < items.length; i++) {
-          if (!canContinue()) return;
+          if (!canContinue()) return; // finally requeues items[i..]
           final item = items[i];
           try {
             await process(item);
             ClipQueue.clearFailures(item.name);
             delivered++;
           } catch (_) {
-            if (ClipQueue.isPoison(item.name)) {
-              await ClipQueue.quarantine(item); // parked, not destroyed
-              continue;
-            }
-            if (delivered > 0) {
-              // The engine demonstrably works — this clip is the problem.
-              await ClipQueue.requeue(item);
-              continue;
-            }
-            // Nothing has gone through: presume the fault is global.
-            await ClipQueue.requeue(item);
-            i++; // back on disk — the finally must not requeue it twice
-            ClipQueue.noteDrainFailure();
-            return;
+            failed.add(item); // held in memory; disposed of below, once
           }
         }
+
+        if (failed.isEmpty) continue; // clean batch — go get the next one
+
+        if (delivered == 0) {
+          // NOTHING worked: presume the ENGINE is down, not the clips. Put the
+          // batch back untouched and back off — never burn through the queue
+          // proving a broken engine is still broken.
+          //
+          // One exception, or the queue could jam forever: strike ONLY the head
+          // clip. If it is genuinely unprocessable and sits alone in the queue,
+          // nothing will ever succeed to prove the engine works, so without this
+          // it would block every drain for good. ClipQueue withholds judgement
+          // until such a clip has been failing for poisonMinAge, which a
+          // transient outage never reaches.
+          final head = failed.first;
+          if (ClipQueue.noteItemFailure(head.name, engineProven: false)) {
+            await ClipQueue.quarantine(head); // parked, never destroyed
+            await ClipQueue.requeueAll(failed.skip(1).toList());
+          } else {
+            await ClipQueue.requeueAll(failed);
+          }
+          ClipQueue.noteDrainFailure();
+          return;
+        }
+
+        // Something DID go through, so the engine works and these clips are
+        // individually suspect. ONE strike each — and because the run stops
+        // here, the next strike can only come from a LATER run, behind the
+        // cooldown. That time separation is the whole point: three strikes in
+        // one loop would quarantine a backlog that hit a two-second hiccup.
+        for (final f in failed) {
+          if (ClipQueue.noteItemFailure(f.name, engineProven: true)) {
+            await ClipQueue.quarantine(f); // parked, never destroyed
+          } else {
+            await ClipQueue.requeue(f);
+          }
+        }
+        ClipQueue.noteDrainFailure(); // retry the stragglers later, not now
+        return;
       }
-      // Only a real delivery clears the backoff. An empty drain must not: the
-      // other isolate may be mid-drain (it deletes the file before sending), so
-      // "the directory looks empty" is not evidence that anything works.
-      if (delivered > 0) ClipQueue.noteDrainSuccess();
+      ClipQueue.noteDrainSuccess();
     } finally {
       beat.cancel();
+      // Any early exit (link lost, disposal) leaves the un-attempted tail
+      // holding the only copy of clips whose files drain() already deleted.
       if (i < items.length) await ClipQueue.requeueAll(items.sublist(i));
       _draining = false;
     }

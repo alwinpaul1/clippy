@@ -11,7 +11,7 @@ void main() {
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('clippy-queue-test');
     ClipQueue.debugDir = tmp;
-    ClipQueue.noteDrainSuccess(); // no cooldown/backoff bleed between tests
+    ClipQueue.resetForTests(); // no strike/cooldown bleed between tests
   });
 
   tearDown(() {
@@ -137,17 +137,29 @@ void main() {
             'the only way it can expire');
   });
 
-  test('a repeatedly-failing clip is counted, and a success resets the count',
-      () {
-    expect(ClipQueue.isPoison('poison.txt'), isFalse, reason: 'retry once');
-    expect(ClipQueue.isPoison('poison.txt'), isFalse, reason: 'and again');
-    expect(ClipQueue.isPoison('poison.txt'), isTrue,
-        reason: 'only after failing on SEPARATE drains is a clip poison');
+  test('a repeatedly-failing clip is only blamed once the engine has PROVEN it '
+      'works — otherwise a global outage looks identical', () {
+    // engineProven: something else synced fine, so this clip really is the
+    // problem. Three strikes (each from a separate run) and it is poison.
+    expect(ClipQueue.noteItemFailure('a.txt', engineProven: true), isFalse);
+    expect(ClipQueue.noteItemFailure('a.txt', engineProven: true), isFalse);
+    expect(ClipQueue.noteItemFailure('a.txt', engineProven: true), isTrue);
 
-    expect(ClipQueue.isPoison('flaky.txt'), isFalse);
-    ClipQueue.clearFailures('flaky.txt');
-    expect(ClipQueue.isPoison('flaky.txt'), isFalse,
-        reason: 'a transient failure must never accumulate toward poison');
+    // Without that proof, judgement is withheld until the clip has been failing
+    // longer than any transient fault would last.
+    expect(ClipQueue.noteItemFailure('b.txt', engineProven: false), isFalse);
+    expect(ClipQueue.noteItemFailure('b.txt', engineProven: false), isFalse);
+    expect(ClipQueue.noteItemFailure('b.txt', engineProven: false), isFalse,
+        reason: 'three strikes in quick succession is exactly what a 10-second '
+            'engine outage looks like — do not park the backlog for it');
+
+    ClipQueue.poisonMinAge = Duration.zero; // it has now been failing for ages
+    expect(ClipQueue.noteItemFailure('b.txt', engineProven: false), isTrue);
+
+    // A success wipes the slate.
+    expect(ClipQueue.noteItemFailure('c.txt', engineProven: true), isFalse);
+    ClipQueue.clearFailures('c.txt');
+    expect(ClipQueue.noteItemFailure('c.txt', engineProven: true), isFalse);
   });
 
   test('a failed drain backs off, so a GLOBAL fault cannot burn through the '

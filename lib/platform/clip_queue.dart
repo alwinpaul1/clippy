@@ -98,22 +98,61 @@ abstract class ClipQueue {
     _cooldownUntil = null;
   }
 
-  /// Count a failure for [name] and report whether it has now failed on enough
-  /// SEPARATE drains to be treated as poison (the caller quarantines it).
-  static bool isPoison(String? name) {
+  /// How long a clip must have been failing before a LONE failure — one with no
+  /// other clip succeeding to prove the engine even works — may be blamed on the
+  /// clip itself. Until then a global outage (disk full, no crypto) is presumed.
+  @visibleForTesting
+  static Duration poisonMinAge = const Duration(minutes: 10);
+  static final Map<String, DateTime> _firstFail = {};
+
+  /// Record that [name] failed, and report whether it should now be quarantined.
+  ///
+  /// [engineProven] means something ELSE succeeded in the same run: the engine
+  /// works, so the fault really is this clip's, and three strikes (each from a
+  /// separate, cooldown-separated run) is enough.
+  ///
+  /// Without that proof the failure is indistinguishable from a total engine
+  /// outage, so we additionally require the clip to have been failing for
+  /// [poisonMinAge]. That is what stops a transient fault from parking a whole
+  /// backlog — while still guaranteeing that a genuinely unprocessable clip,
+  /// ALONE in the queue, eventually stops blocking it.
+  static bool noteItemFailure(String? name, {required bool engineProven}) {
     if (name == null) return false;
-    if (_failures.length > 200) _failures.clear(); // hard backstop
+    if (_failures.length > 200) {
+      _failures.clear();
+      _firstFail.clear();
+    }
     final n = (_failures[name] ?? 0) + 1;
     _failures[name] = n;
-    if (n >= maxItemFailures) {
+    final first = _firstFail[name] ??= DateTime.now();
+    if (n < maxItemFailures) return false;
+    if (engineProven || DateTime.now().difference(first) >= poisonMinAge) {
       _failures.remove(name);
+      _firstFail.remove(name);
       return true;
     }
     return false;
   }
 
   static void clearFailures(String? name) {
-    if (name != null) _failures.remove(name);
+    if (name != null) {
+      _failures.remove(name);
+      _firstFail.remove(name);
+    }
+  }
+
+  /// Clear the static machine between tests. Strike counters and cooldowns are
+  /// process-wide, so without this one test's failures silently poison the
+  /// next test's clips — which is exactly how two of these tests came to pass
+  /// for the wrong reason.
+  @visibleForTesting
+  static void resetForTests() {
+    _failures.clear();
+    _firstFail.clear();
+    _cooldownUntil = null;
+    _drainFailures = 0;
+    _lastBeat = null;
+    poisonMinAge = const Duration(minutes: 10);
   }
 
   /// Park an unprocessable clip instead of destroying it: drain() already
