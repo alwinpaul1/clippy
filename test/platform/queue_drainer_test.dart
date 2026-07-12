@@ -487,8 +487,12 @@ void main() {
     await drainer((item) async => throw StateError('engine down')).run();
     expect(ClipQueue.inCooldown, isTrue);
 
-    // A corrupt file: invalid UTF-8, so drain() can never materialize it.
-    File('${tmp.path}/002.txt').writeAsBytesSync([0xC3, 0x28, 0x41]);
+    // A file drain() cannot materialize — and aged, like any backlog clip. (The
+    // real shape is not a corrupt byte: it is a 25MB screenshot that OOMs while
+    // being read in the memory-tight service isolate.)
+    final unreadable = File('${tmp.path}/002.txt')
+      ..writeAsBytesSync([0xC3, 0x28, 0x41]) // invalid UTF-8
+      ..setLastModifiedSync(DateTime.now().subtract(const Duration(hours: 1)));
     var attempts = 0;
 
     await drainer((item) async => attempts++).run();
@@ -496,6 +500,12 @@ void main() {
     expect(attempts, 0,
         reason: 'a file that cannot even be read is not "untried work" — '
             'treating it as such makes every cooldown a no-op, forever');
+    expect(unreadable.existsSync(), isTrue,
+        reason: 'and it must NOT be deleted for failing to read: an age gate '
+            'keys off when the clip was WRITTEN, so it would destroy a good '
+            'screenshot captured an hour ago on its first transient read error '
+            '— the one path in this codebase that would DELETE a clip rather '
+            'than park it');
   });
 
   /// The full cycle, and the thing that must never happen: the known-bad backlog

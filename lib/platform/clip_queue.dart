@@ -110,7 +110,11 @@ abstract class ClipQueue {
     // would otherwise list the whole directory. One listing per burst is enough.
     final last = _untriedAt;
     if (last != null &&
-        DateTime.now().difference(last) < const Duration(seconds: 1)) {
+        DateTime.now().difference(last) < const Duration(milliseconds: 300)) {
+      // Short on purpose: the inotify burst from a failed drain's requeues lands
+      // within milliseconds, so this still collapses ~400 listings into one —
+      // but a stale `false` must never make a clip the user JUST copied wait for
+      // the service's next 10s tick.
       return _untriedCache;
     }
     final dir = await _dir();
@@ -311,12 +315,15 @@ abstract class ClipQueue {
     try {
       t = await f.readAsString();
     } catch (_) {
-      // Could be a mid-write race — but a file still unreadable minutes later
-      // is corrupt (bad UTF-8, flaky flash) and can NEVER become a clip. Mark
-      // it tried, or it forever looks like "untried work" and turns the
-      // cooldown into a no-op; reap it once it is clearly not mid-write.
+      // A read can fail transiently — an OOM decoding a big image in the
+      // memory-tight service isolate, an EIO on flaky flash — so the file is
+      // LEFT ALONE: the next drain (or the other isolate, which may have the
+      // memory) gets it. It is only marked tried, because a file that cannot be
+      // read is not "untried work" and must not turn every cooldown into a
+      // no-op. NEVER reap it here: mtime is when the clip was WRITTEN, not how
+      // long we have failed to read it, so an age gate would delete a perfectly
+      // good screenshot captured an hour ago on its first read error.
       noteAttemptFailed(f.uri.pathSegments.last);
-      _reapIfStale(f);
       return null;
     }
     if (t.isEmpty) {
@@ -334,8 +341,9 @@ abstract class ClipQueue {
     try {
       bytes = await f.readAsBytes();
     } catch (_) {
-      noteAttemptFailed(f.uri.pathSegments.last); // see _drainText
-      _reapIfStale(f);
+      // See _drainText: marked tried, but NEVER deleted — a big image that OOMs
+      // in this isolate may well decode in the other one.
+      noteAttemptFailed(f.uri.pathSegments.last);
       return null;
     }
     if (bytes.isEmpty) {
