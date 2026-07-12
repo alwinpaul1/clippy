@@ -31,9 +31,12 @@ abstract class PlatformUpdater {
   static PlatformUpdater _lazyDesktop() => DesktopUpdater();
 }
 
-/// Thrown when a downloaded artifact's SHA-256 does not match the manifest's.
-/// The file is deleted before this is raised — a tampered or corrupt binary is
-/// never left on disk where an install path might pick it up.
+/// Thrown when a downloaded artifact's SHA-256 does not match the manifest's —
+/// i.e. the bytes were TAMPERED with (a completed download whose content is
+/// wrong). A truncated download is a [DownloadException] instead, so a flaky
+/// network is never mistaken for an attack. The file is deleted before either
+/// is raised — a bad binary is never left where an install path could pick it
+/// up.
 class IntegrityException implements Exception {
   IntegrityException(this.expected, this.actual);
   final String expected;
@@ -43,6 +46,22 @@ class IntegrityException implements Exception {
       'update artifact failed its integrity check '
       '(expected $expected, got $actual) — refusing to install';
 }
+
+/// A download that could not complete or was misconfigured — retryable, and NOT
+/// evidence of tampering. Covers a truncated stream and a malformed manifest
+/// hash. Callers fall back to the download page.
+class DownloadException implements Exception {
+  DownloadException(this.message);
+  final String message;
+  @override
+  String toString() => 'update download failed: $message';
+}
+
+/// No real artifact comes close to this; a stream past it is a runaway or a
+/// hostile endpoint, and is cut off before it can fill the disk.
+const _maxArtifactBytes = 400 * 1024 * 1024;
+
+final _hex64 = RegExp(r'^[0-9a-f]{64}$');
 
 /// Streams [url] to [dest], reporting progress, AND verifies its SHA-256 against
 /// [expectedSha256] before returning. Throws on a non-200 response; throws
@@ -59,9 +78,19 @@ Future<void> downloadTo(
   required String expectedSha256,
   void Function(double)? onProgress,
   http.Client? client,
+  int maxBytes = _maxArtifactBytes,
 }) async {
+  // Validate the expected hash BEFORE spending a download on it. A malformed
+  // manifest hash (stray space, wrong case, a `sha256:` prefix) is a manifest
+  // problem, not tampering — and reporting it as such lets the UI fall back to
+  // the download page instead of crying wolf.
+  final expected = expectedSha256.trim().toLowerCase();
+  if (!_hex64.hasMatch(expected)) {
+    throw DownloadException('manifest hash is not a 64-char hex SHA-256');
+  }
   final c = client ?? http.Client();
   final hashSink = Sha256().newHashSink();
+  var ok = false;
   try {
     final req = http.Request('GET', url);
     final res = await c.send(req);
@@ -80,6 +109,9 @@ Future<void> downloadTo(
         sink.add(chunk);
         hashSink.add(chunk);
         received += chunk.length;
+        if (received > maxBytes) {
+          throw DownloadException('artifact exceeds the size limit');
+        }
         if (total > 0) onProgress?.call(received / total);
       }
     } finally {
@@ -87,16 +119,27 @@ Future<void> downloadTo(
       // doesn't leak the file handle onto the partial artifact.
       await sink.close();
     }
+    // A stream can end SHORT of its declared length without throwing (the socket
+    // closed mid-download). That is a truncated file, not a tampered one — the
+    // common failure on a slow mobile link. Say so, so it is retried rather than
+    // mistaken for an attack.
+    if (total > 0 && received != total) {
+      throw DownloadException('download truncated ($received of $total bytes)');
+    }
     hashSink.close();
     final actual = base16((await hashSink.hash()).bytes);
-    if (actual != expectedSha256.toLowerCase()) {
-      try {
-        dest.deleteSync();
-      } catch (_) {}
-      throw IntegrityException(expectedSha256.toLowerCase(), actual);
-    }
+    if (actual != expected) throw IntegrityException(expected, actual);
+    ok = true;
   } finally {
     if (client == null) c.close();
+    // Delete the partial/bad artifact on ANY failure, not just a hash mismatch:
+    // the desktop updaters reuse a fixed filename, so a leftover could be handed
+    // to the installer on a later run.
+    if (!ok) {
+      try {
+        if (dest.existsSync()) dest.deleteSync();
+      } catch (_) {}
+    }
   }
 }
 

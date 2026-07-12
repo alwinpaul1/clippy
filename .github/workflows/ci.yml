@@ -200,10 +200,12 @@ jobs:
               sys.exit(f"release.json version {rel.get('version')!r} != "
                        f"pubspec {sys.argv[1]!r} — update release.json's "
                        "version and notes as part of every release.")
-          # SHA-256 of each staged artifact. The client verifies this before
-          # installing and REFUSES to update without a match, so every artifact
-          # named below MUST exist — a missing one is a broken build, not a
-          # silent no-hash download.
+          # SHA-256 of each artifact the IN-APP UPDATER installs. The client
+          # verifies this before installing and REFUSES to update without a
+          # match, so every artifact named below MUST exist — a missing one is a
+          # broken build, not a silent no-hash download. (Clippy-macOS.dmg is the
+          # manual browser-download path only; the updater uses the .zip, so the
+          # manifest carries the .zip hash. The .dmg is not auto-installed.)
           arts = {'android': 'Clippy-Android.apk',
                   'macos':   'Clippy-macOS.zip',
                   'windows': 'Clippy-Setup.exe'}
