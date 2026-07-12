@@ -15,6 +15,7 @@ import '../core/state/prefs_state_store.dart';
 import '../core/sync/sync_action.dart';
 import '../core/sync/sync_engine.dart';
 import 'clip_queue.dart';
+import 'queue_drainer.dart';
 import 'device_name.dart';
 import 'image_clipboard.dart';
 import 'secure_key_store.dart';
@@ -89,16 +90,16 @@ class _BackgroundSyncHandler extends TaskHandler {
     unawaited(_ensureRunning()); // reconnect safety net
     // Drain clips the background AccessibilityService captured (the queue
     // watcher fires instantly; this tick is the fallback).
-    unawaited(_drainQueue());
-    // While the relay is unreachable the queue only grows (drains are gated
-    // on a confirmed link) — keep the disk bounded. This isolate's link being
-    // down says nothing about the UI isolate's independent connection, so
-    // the disconnected gate is only a cost optimization; enforceBound's
-    // drain.lock heartbeat is what actually prevents racing an active drain
-    // in either isolate.
-    if (!(_store?.isConnected ?? false)) {
-      unawaited(ClipQueue.enforceBound());
-    }
+    // Keep the disk bounded — UNCONDITIONALLY. Gating this on "my link is
+    // down" was a real bug: the queue also stops draining while CONNECTED if
+    // the engine is failing (prefs write, crypto, memory — the drain backs off
+    // and waits), and in exactly that state captures keep landing with nothing
+    // pruning them, so the 200-file bound became dead code precisely when it
+    // was needed. But run it AFTER our own drain, never beside it: fired side
+    // by side, the pruner can win the race, see no drain heartbeat yet, and
+    // delete OLDEST-FIRST — exactly the batch the drain was about to take. (The
+    // OTHER isolate's drain is what the heartbeat protects against.)
+    unawaited(_drainQueue().whenComplete(ClipQueue.enforceBound));
     if (!_uiAlive) {
       // A clip that arrived while the last heartbeat was stale (UI already
       // dead but _uiTimeout not yet elapsed) was skipped, not lost — apply
@@ -113,23 +114,11 @@ class _BackgroundSyncHandler extends TaskHandler {
   }
 
 
-  Future<void> _drainQueue() async {
-    final engine = _engine;
-    final store = _store;
-    if (engine == null || store == null) return;
-    // Draining consumes the on-disk queue file — the only copy that survives
-    // a process kill. Leave it there until the relay link is confirmed; the
-    // connected listener drains the instant we're back.
-    if (!store.isConnected) return;
-    final items = await ClipQueue.drain();
-    for (var i = 0; i < items.length; i++) {
-      // The link can die mid-drain (the files are already consumed) — put the
-      // undelivered remainder back on disk so a process kill can't lose it.
-      if (!store.isConnected) {
-        await ClipQueue.requeueAll(items.sublist(i));
-        return;
-      }
-      final item = items[i];
+  late final QueueDrainer _drainer = QueueDrainer(
+    canContinue: () => _store?.isConnected ?? false,
+    process: (item) async {
+      final engine = _engine!;
+      final store = _store!;
       final actions = item.isImage
           ? await engine.onLocalImage(
               base64Encode(item.imageBytes!),
@@ -146,7 +135,15 @@ class _BackgroundSyncHandler extends TaskHandler {
           await store.append(a.clip.copyWith(device: _deviceName));
         }
       }
-    }
+    },
+  );
+
+  /// Drain the queue the background AccessibilityService writes to. The failure
+  /// policy lives in [QueueDrainer] — see there for why a failure aborts rather
+  /// than burning through the batch.
+  Future<void> _drainQueue() async {
+    if (_engine == null || _store == null) return;
+    await _drainer.run();
   }
 
   Future<void> _scanScreenshots() async {
@@ -188,10 +185,14 @@ class _BackgroundSyncHandler extends TaskHandler {
             age < const Duration(seconds: 2)) {
           continue;
         }
-        _pushedShots.add(e.path);
         try {
           final bytes = await e.readAsBytes();
-          if (bytes.isEmpty) continue;
+          if (bytes.isEmpty) continue; // still being written — retry next tick
+          // Marked only once the read SUCCEEDED: marking up front meant a
+          // transient failure (a MediaProvider hiccup, an OEM still
+          // recompressing the file) blacklisted that screenshot for the life of
+          // the service — it would never sync, and nothing would ever say so.
+          _pushedShots.add(e.path);
           final (out, outMime) = ImageClipboard.prepareForRelay(bytes, mime: mime);
           final actions = await engine.onLocalImage(base64Encode(out), mime: outMime);
           for (final a in actions) {
@@ -321,7 +322,26 @@ class _BackgroundSyncHandler extends TaskHandler {
 /// active app (Android otherwise suspends a backgrounded app's network).
 /// No-op on non-Android platforms — desktop apps stay alive anyway.
 class ForegroundServiceManager {
-  static bool get _isAndroid => !kIsWeb && Platform.isAndroid;
+  /// Host-test override for the platform gate (same hook style as
+  /// [ClipQueue.debugDir]): every method below early-returns off Android, so
+  /// without this the service state machine would be untestable.
+  @visibleForTesting
+  static bool? debugIsAndroid;
+
+  /// Clear the static machine between tests. Without this, one test's in-flight
+  /// poll or backoff counter silently disables the next one — a suite that
+  /// lies is worse than no suite.
+  @visibleForTesting
+  static void resetForTests() {
+    stopHealthWatch();
+    _polling = false;
+    _starting = false;
+    _reviveFailures = 0;
+    _reviveSkips = 0;
+  }
+
+  static bool get _isAndroid =>
+      debugIsAndroid ?? (!kIsWeb && Platform.isAndroid);
 
   /// Heartbeat payload the UI isolate sends while it's alive.
   static const uiAlivePing = 'clippy.ui-alive';
@@ -393,58 +413,229 @@ class ForegroundServiceManager {
   static const _serviceTypesVersion = 2; // 1 = legacy dataSync, 2 = specialUse
   static const _typesVersionKey = 'fgs_service_types_version';
 
-  static Future<void> start() async {
-    if (!_isAndroid) return;
-
-    // Deliberately NOT requesting notification permission: Clippy posts no
-    // real notifications, and on Android 13+ a foreground service whose app
-    // lacks the permission runs fine with its (required) notification simply
-    // never displayed. That keeps background sync alive with no visible
-    // "sync active" notification.
-    if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
-      await FlutterForegroundTask.requestIgnoreBatteryOptimization();
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    final stale = (prefs.getInt(_typesVersionKey) ?? 1) != _serviceTypesVersion;
-    if (await FlutterForegroundTask.isRunningService) {
-      if (!stale) {
-        backgroundSyncAlive.value = true;
-        return;
-      }
-      // Running under the old persisted type — stop it so the start below
-      // rewrites the options with the current one.
-      await FlutterForegroundTask.stopService();
-    }
-    await FlutterForegroundTask.startService(
-      serviceId: 4242,
-      // specialUse, NOT dataSync: Android 15+ stops a dataSync service after 6
-      // hours per 24h and then refuses to restart it, so background sync died
-      // for the rest of the day and clips only moved when the app was opened.
-      // Must stay in sync with android:foregroundServiceType in the manifest
-      // (CI enforces it) AND with [_serviceTypesVersion] above.
-      serviceTypes: const [ForegroundServiceTypes.specialUse],
-      notificationTitle: 'Clippy',
-      notificationText: 'Clipboard sync active',
-      callback: clippyServiceCallback,
-    );
-    await prefs.setInt(_typesVersionKey, _serviceTypesVersion);
-    backgroundSyncAlive.value = await FlutterForegroundTask.isRunningService;
+  /// Publish liveness, invalidating any health poll already in flight — its
+  /// answer is older than this one and must not overwrite it.
+  static void _publishAlive(bool alive) {
+    _healthGen++;
+    backgroundSyncAlive.value = alive;
   }
 
-  /// Re-check (and revive) the service whenever the app comes back. It can die
-  /// without any signal to the user: an OEM battery manager sleeps it, a
-  /// platform restriction refuses a restart, an update replaced the package.
-  /// If it stays down, [backgroundSyncAlive] tells the UI to say so instead of
-  /// showing a green light that only knows about the foreground connection.
+  /// Start the background service, migrating a stale service type if needed.
+  ///
+  /// NEVER throws: this is awaited inside ClipController.init() BEFORE the
+  /// lifecycle observer and screenshot sync are wired up, so an escape here
+  /// would take the rest of the Android integration down with it. Failures are
+  /// reported through [backgroundSyncAlive], which the UI surfaces.
+  ///
+  /// The plugin does not throw either: start/stop return a ServiceRequestResult
+  /// with the error folded inside, and they ALREADY wait (5s deadline) for the
+  /// service state to actually flip. Those results must therefore be CHECKED —
+  /// a stop that times out leaves the OLD service running, and asking
+  /// `isRunningService` afterwards would answer "yes" about the very service we
+  /// were trying to replace: we would record the migration as done and strand
+  /// the phone on the stale type forever.
+  /// [askBatteryExemption] opens a SYSTEM DIALOG when the app isn't exempt, so
+  /// only the app-launch path passes it. A poll-driven revive must never fire
+  /// it: on a phone whose OEM keeps refusing the service, every retry would
+  /// throw the dialog back in the user's face, and dismissing it resumes the
+  /// app, which polls, which retries, which opens it again — inescapable.
+  /// Returns true if the service is up, false if the attempt failed, and NULL
+  /// if no attempt was made because one was already in flight — the caller must
+  /// not score that as a failure (the resume path fires ensureRunning() and the
+  /// health poll back to back, so it happens on every resume).
+  static Future<bool?> start({bool askBatteryExemption = false}) async {
+    if (!_isAndroid) return null;
+    if (_starting) return null; // re-entrancy: init and a resume can race
+    _starting = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stale =
+          (prefs.getInt(_typesVersionKey) ?? 1) != _serviceTypesVersion;
+      // Timeout everywhere we await the native side: a wedged channel would
+      // otherwise leave _starting (and the health watch's _polling) stuck true
+      // for the life of the process, silently killing both.
+      if (await FlutterForegroundTask.isRunningService
+          .timeout(const Duration(seconds: 10))) {
+        if (!stale) {
+          _publishAlive(true);
+          return true;
+        }
+        // Running under the old persisted type — stop it so the start below
+        // rewrites the options with the current one.
+        final stopped = await FlutterForegroundTask.stopService();
+        if (stopped is! ServiceRequestSuccess) {
+          // The old service is still up, on the stale type. Leave the version
+          // unwritten so the next launch retries, and don't vouch for health
+          // we don't have.
+          _publishAlive(false);
+          return false;
+        }
+      }
+      final started = await FlutterForegroundTask.startService(
+        serviceId: 4242,
+        // specialUse, NOT dataSync: Android 15+ stops a dataSync service after
+        // 6 hours per 24h and then refuses to restart it — and bans it from
+        // BOOT_COMPLETED starts outright — so background sync died for the rest
+        // of the day AND after every reboot, and clips only moved when the app
+        // was opened. Must stay in sync with android:foregroundServiceType in
+        // the manifest (CI enforces it) AND with [_serviceTypesVersion] above.
+        serviceTypes: const [ForegroundServiceTypes.specialUse],
+        notificationTitle: 'Clippy',
+        notificationText: 'Clipboard sync active',
+        callback: clippyServiceCallback,
+      );
+      final ok = started is ServiceRequestSuccess;
+      // Record the migration ONLY once the new service actually came up — a
+      // failed start must be retried next launch, not remembered as done.
+      if (ok) await prefs.setInt(_typesVersionKey, _serviceTypesVersion);
+      _publishAlive(ok);
+      if (askBatteryExemption) unawaited(_askBatteryExemption());
+      return ok;
+    } catch (_) {
+      // Prefs/channel calls still throw — report, never break app init.
+      _publishAlive(false);
+      return false;
+    } finally {
+      _starting = false;
+    }
+  }
+
+  static bool _starting = false;
+
+  /// Ask to be exempted from battery optimization — the exemption is what lifts
+  /// the background-FGS-start restrictions, so the boot and package-replaced
+  /// receivers can revive the service.
+  ///
+  /// NOT awaited by [start]: this opens a system dialog and the future only
+  /// completes when the user answers it. Awaiting it inside start() stalls
+  /// ClipController.init() — which has not yet registered the lifecycle
+  /// observer or the health watch — for as long as that dialog is up, and if
+  /// the user backgrounds Clippy from it, neither ever gets registered.
+  ///
+  /// (Deliberately NOT requesting notification permission, by contrast: Clippy
+  /// posts no real notifications, and on Android 13+ an FGS whose app lacks the
+  /// permission runs fine with its required notification simply never shown.)
+  static Future<void> _askBatteryExemption() async {
+    try {
+      if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
+        await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+      }
+    } catch (_) {
+      // The user can decline; sync still works while the app is alive.
+    }
+  }
+
+  /// Re-check (and revive) the service. It can die with no signal to the user:
+  /// an OEM battery manager sleeps it, a platform restriction refuses a
+  /// restart, an update replaced the package. If it stays down,
+  /// [backgroundSyncAlive] tells the UI to say so instead of showing a green
+  /// light that only knows about the foreground connection.
   static Future<void> ensureRunning() async {
     if (!_isAndroid) return;
-    if (await FlutterForegroundTask.isRunningService) {
-      backgroundSyncAlive.value = true;
+    try {
+      if (await FlutterForegroundTask.isRunningService) {
+        _publishAlive(true);
+        return;
+      }
+    } catch (_) {
+      _publishAlive(false);
       return;
     }
-    await start(); // start() publishes the resulting state
+    await start(); // publishes the resulting state and never throws
   }
+
+  @visibleForTesting
+  static Duration healthPollInterval = const Duration(seconds: 20);
+  static Timer? _healthTimer;
+  // Bumped on every publish/cancel: a poll's answer is discarded if anything
+  // newer landed while its platform call was in flight (they can resolve out
+  // of order, and a stale `false` over a live service is the same lie again).
+  static int _healthGen = 0;
+
+  /// Watch the service's liveness WHILE the app is in the foreground. A kill
+  /// can land at any moment (OEM battery manager, platform restriction), not
+  /// just while we were away — and [ensureRunning]'s resume-time check would
+  /// leave the header claiming "Synced" until the next lifecycle transition,
+  /// which is the same lie this whole change exists to stop telling.
+  ///
+  /// Also REPAIRS: a death found here is revived on the spot (the user is
+  /// looking at the app, so "reopen Clippy" is not an instruction they can
+  /// follow). Retries back off exponentially — a system that is flatly refusing
+  /// the service must not be fought once per poll forever — and the revive
+  /// never asks for the battery exemption, whose system dialog would otherwise
+  /// reappear on every attempt.
+  static void startHealthWatch() {
+    if (!_isAndroid || _healthTimer != null) return;
+    // Check immediately: re-arming (every focus regain — a pulled-down
+    // notification shade counts) restarts the interval from zero, so a
+    // frequently-refocused app would otherwise never reach its first poll.
+    unawaited(_pollHealth());
+    _healthTimer = Timer.periodic(healthPollInterval, (_) => _pollHealth());
+  }
+
+  static void stopHealthWatch() {
+    _healthTimer?.cancel();
+    _healthTimer = null;
+    _healthGen++; // any in-flight poll's answer is now void
+  }
+
+  static bool _polling = false;
+
+  static Future<void> _pollHealth() async {
+    if (_polling) return; // a slow channel call must not stack up ticks
+    _polling = true;
+    final gen = _healthGen;
+    try {
+      // Timeout: a native side that never answers would otherwise leave
+      // _polling stuck true and silently kill the watch for the whole process.
+      final alive = await FlutterForegroundTask.isRunningService
+          .timeout(const Duration(seconds: 10));
+      // Anything published while this call was in flight (a start(), a stop,
+      // a cancelled watch) is NEWER than this reading — never overwrite it.
+      if (gen != _healthGen) return;
+      backgroundSyncAlive.value = alive;
+      if (alive) {
+        _reviveFailures = 0;
+        _reviveSkips = 0; // a recovery must not leave a stale backoff budget
+        return;
+      }
+      // Don't just report the death — repair it. The user is LOOKING at the
+      // app, so "open Clippy to sync" is not an instruction they can follow,
+      // and without it the service stays dead for the whole foreground session
+      // (resume-time ensureRunning never fires while the app never leaves
+      // `resumed`). Backed off: when the system is flatly refusing to start the
+      // service, retrying every 20s forever just burns battery and log.
+      if (_reviveSkips > 0) {
+        _reviveSkips--;
+        return;
+      }
+      // _polling stays TRUE across this await: start() never polls, and
+      // releasing the guard here would let the next tick start a second poll
+      // whose finally then clears the flag out from under this one — the very
+      // stacking the guard exists to prevent.
+      final outcome = await start();
+      if (outcome == null) return; // a start was already in flight — not a failure
+      if (outcome) {
+        _reviveFailures = 0;
+        _reviveSkips = 0;
+      } else {
+        _reviveFailures++;
+        // 1, 2, 4, 8, 16, 30 polls between attempts (~10 min at a 20s poll).
+        _reviveSkips = (1 << (_reviveFailures - 1).clamp(0, 5)).clamp(1, 30);
+      }
+    } on TimeoutException {
+      // A slow channel (GC pause, cold plugin, loaded device) says NOTHING
+      // about the service. Reporting "dead" here would put a red banner over a
+      // perfectly healthy service; leave the last known state and re-poll.
+    } catch (_) {
+      if (gen == _healthGen) backgroundSyncAlive.value = false;
+    } finally {
+      _polling = false;
+    }
+  }
+
+  static int _reviveFailures = 0;
+  static int _reviveSkips = 0;
 
   static Future<void> stop() async {
     if (!_isAndroid) return;

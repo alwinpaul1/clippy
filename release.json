@@ -1,14 +1,18 @@
 {
-  "version": "1.0.30",
+  "version": "1.0.31",
   "notes": {
     "features": [],
     "improvements": [
-      "Clippy now tells you when background sync has stopped, instead of showing a green light regardless",
-      "Background sync restarts itself after an app update — no need to open Clippy to get it going again"
+      "Clippy now notices the moment background sync stops — even while you're looking at the app — and brings it back on its own",
+      "A big backlog of clips now syncs in batches, so a long offline stretch can't overwhelm the app"
     ],
     "fixes": [
-      "Made the background-sync fix stick: it now applies on its own, even if you don't open the app after updating",
-      "Clips captured while the app was asleep no longer pile up unbounded on the phone"
+      "Images no longer reappear as new clips \"copied\" on a device that never copied them",
+      "Fixed a long copy sometimes syncing cut off halfway",
+      "Screenshots and copies are no longer lost when captured just as another clip arrives",
+      "Clips are no longer lost when the connection drops mid-sync",
+      "Clips no longer sync twice when two syncs start at the same moment",
+      "A screenshot that failed to read once is retried instead of skipped for good"
     ]
   }
 }
