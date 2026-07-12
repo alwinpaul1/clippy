@@ -439,7 +439,12 @@ class ClipController extends ChangeNotifier
   Future<void> applyItem(HistoryItem item) async {
     await _engine?.noteApplied(item.hash);
     if (item.isImage && item.imageBytes != null) {
-      _handledImageFp = await ImageClipboard.fingerprint(item.imageBytes!);
+      // PERSIST it: the clipboard outlives the process, so a relaunch would
+      // otherwise re-read this picture, fail to recognise it (the platform
+      // hands it back re-encoded, so the hash differs), and re-upload it as a
+      // clip this device supposedly copied.
+      await _setHandledImageFp(
+          await ImageClipboard.fingerprint(item.imageBytes!));
       await ImageClipboard.write(item.imageBytes!);
     } else {
       _handledText = item.text;
