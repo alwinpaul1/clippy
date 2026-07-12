@@ -388,7 +388,11 @@ class ForegroundServiceManager {
     if (await FlutterForegroundTask.isRunningService) return;
     await FlutterForegroundTask.startService(
       serviceId: 4242,
-      serviceTypes: const [ForegroundServiceTypes.dataSync],
+      // specialUse, NOT dataSync: Android 15+ stops a dataSync service after 6
+      // hours per 24h and then refuses to restart it, so background sync died
+      // for the rest of the day and clips only moved when the app was opened.
+      // Must stay in sync with android:foregroundServiceType in the manifest.
+      serviceTypes: const [ForegroundServiceTypes.specialUse],
       notificationTitle: 'Clippy',
       notificationText: 'Clipboard sync active',
       callback: clippyServiceCallback,

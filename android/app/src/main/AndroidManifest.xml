@@ -1,7 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Keep the relay connection alive while backgrounded. -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Keep the relay connection alive while backgrounded.
+         NOT dataSync: Android 15+ caps dataSync services at 6 hours per 24h,
+         after which the system REFUSES to (re)start them
+         (ForegroundServiceStartNotAllowedException) until the quota resets —
+         the service then crash-loops and background sync silently dies for the
+         rest of the day, which is exactly the "it only syncs when I open the
+         app" failure. Clipboard sync must hold its connection indefinitely and
+         fits no other type, which is what specialUse is for (exempt from the
+         timeout; Clippy ships as a direct APK, not via Play). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Delete/clear haptics via Vibrator (performHapticFeedback is
          unreliable on Samsung — gated behind system touch-vibration). -->
@@ -87,11 +95,17 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-        <!-- Keeps Clippy's relay connection alive in the background. -->
+        <!-- Keeps Clippy's relay connection alive in the background. See the
+             FOREGROUND_SERVICE_SPECIAL_USE permission above for why this is
+             not dataSync. -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
-            android:foregroundServiceType="dataSync"
-            android:exported="false" />
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Maintains the persistent encrypted WebSocket that syncs the clipboard between the user's own paired devices; the connection must stay live for a copy on another device to arrive." />
+        </service>
         <!-- Background clipboard capture (opt-in): an AccessibilityService keeps
              a privileged, long-lived process that can capture copies without
              Clippy being the keyboard. -->
