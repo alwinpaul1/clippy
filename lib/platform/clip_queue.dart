@@ -57,6 +57,17 @@ abstract class ClipQueue {
     }
   }
 
+  /// How much a single drain may hold in memory at once. The queue's own bound
+  /// is 200MB of DISK, and every drained item is materialized as bytes in a
+  /// list — an hours-long backlog (the service died; captures kept landing)
+  /// would otherwise be read in one go and OOM the app at the worst possible
+  /// moment: launch. Whatever doesn't fit stays on disk, oldest-first, and the
+  /// next drain takes the next batch.
+  @visibleForTesting
+  static int maxDrainBytes = 24 << 20;
+  @visibleForTesting
+  static int maxDrainFiles = 30;
+
   static Future<List<ClipQueueItem>> drain() async {
     final dir = await _dir();
     if (dir == null) return const [];
@@ -66,6 +77,7 @@ abstract class ClipQueue {
         ..sort((a, b) => a.path.compareTo(b.path));
       if (files.isEmpty) return const [];
       final items = <ClipQueueItem>[];
+      var bytes = 0;
       for (final f in files) {
         final ext = f.path.split('.').last.toLowerCase();
         // Images are staged as `<name>.part` then renamed in, so a `.part`
@@ -76,10 +88,20 @@ abstract class ClipQueue {
           _reapIfStale(f);
           continue;
         }
+        // Batch cap: stop BEFORE consuming the file, so it stays on disk (the
+        // only crash-proof copy) for the next pass. Never cap at zero items —
+        // one clip larger than the budget must still make progress.
+        if (items.isNotEmpty &&
+            (items.length >= maxDrainFiles || bytes >= maxDrainBytes)) {
+          break;
+        }
         final mime = _imageMimes[ext];
         final item =
             mime != null ? await _drainImage(f, mime) : await _drainText(f);
-        if (item != null) items.add(item);
+        if (item != null) {
+          items.add(item);
+          bytes += item.imageBytes?.length ?? item.text?.length ?? 0;
+        }
       }
       return items;
     } catch (_) {

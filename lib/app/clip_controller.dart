@@ -269,25 +269,50 @@ class ClipController extends ChangeNotifier
   /// Push text AND images the background native code captured while the UI was
   /// away (focus-trick text + the MediaStore screenshot observer). Engine dedup
   /// absorbs repeats.
+  bool _draining = false;
+
   Future<void> _drainQueue() async {
     // Draining consumes the on-disk queue file — the only copy that survives
     // a process kill. Hold off until the relay link is confirmed; the
     // connected listener re-drains the instant it comes back.
     if (_store?.isConnected != true) return;
-    final items = await ClipQueue.drain();
-    for (var i = 0; i < items.length; i++) {
-      // Link died (or we were disposed) mid-drain with the files already
-      // consumed — put the undelivered remainder back on disk.
-      if (_disposed || _store?.isConnected != true) {
-        await ClipQueue.requeueAll(items.sublist(i));
-        return;
+    // Resume, reconnect and the queue watcher can all fire a drain at once;
+    // overlapping passes would read and upload the same file twice before
+    // either deleted it.
+    if (_draining) return;
+    _draining = true;
+    var i = 0;
+    var items = const <ClipQueueItem>[];
+    try {
+      // drain() returns a bounded BATCH (the backlog after a dead service can
+      // be huge), so keep going until the disk is dry.
+      while (!_disposed && _store?.isConnected == true) {
+        i = 0;
+        items = await ClipQueue.drain();
+        if (items.isEmpty) break;
+        for (; i < items.length; i++) {
+          // Link died (or we were disposed) mid-drain with the files already
+          // consumed — the finally below puts the remainder back on disk.
+          if (_disposed || _store?.isConnected != true) return;
+          final item = items[i];
+          if (item.isImage) {
+            // fromQueue: a queued capture is NOT the clipboard echo of an image
+            // we just applied — it was captured by native code, possibly hours
+            // ago. Suppressing it would drop the clip for good: drain() has
+            // already deleted its file.
+            await _pushLocalImage(item.imageBytes!,
+                mime: item.mime, fromQueue: true);
+          } else {
+            await _pushLocal(item.text!);
+          }
+        }
       }
-      final item = items[i];
-      if (item.isImage) {
-        await _pushLocalImage(item.imageBytes!, mime: item.mime);
-      } else {
-        await _pushLocal(item.text!);
-      }
+    } finally {
+      // ANY early exit — dead link, disposal, or a throw from the engine/store
+      // — leaves the remaining items holding the ONLY copy of clips whose disk
+      // files drain() already deleted.
+      if (i < items.length) await ClipQueue.requeueAll(items.sublist(i));
+      _draining = false;
     }
   }
 
@@ -346,10 +371,29 @@ class ClipController extends ChangeNotifier
   /// Manual capture (phones without background capture, or any device).
   Future<void> addManual(String text) => _pushLocal(text);
 
-  Future<void> _pushLocalImage(Uint8List png, {String? mime}) async {
+  /// [fromQueue] marks a capture the native code wrote to disk, not a live
+  /// clipboard read-back.
+  ///
+  /// The TIME window must not gate a queued clip: it was captured whenever the
+  /// native code saw it (possibly hours ago), and drain() has already deleted
+  /// its file — suppressing it destroys the clip outright. But it can still BE
+  /// an echo (Clippy writes an incoming image to the clipboard; the a11y
+  /// service captures that write and queues it), and a clipboard round-trip
+  /// re-encodes the image, so a content HASH won't catch it. Use the same
+  /// format-agnostic fingerprint the watcher path uses: identity, not timing.
+  /// Dropping a true echo loses nothing — that image is already in the room.
+  Future<void> _pushLocalImage(Uint8List png,
+      {String? mime, bool fromQueue = false}) async {
     if (_disposed) return;
-    final until = _suppressImageUntil;
-    if (until != null && DateTime.now().isBefore(until)) return; // our own echo
+    if (fromQueue) {
+      final fp = await ImageClipboard.fingerprint(png);
+      if (fp != null && fp == _handledImageFp) return; // our own write, echoed
+    } else {
+      final until = _suppressImageUntil;
+      if (until != null && DateTime.now().isBefore(until)) {
+        return; // our own echo
+      }
+    }
     final engine = _engine;
     final store = _store;
     if (engine == null || store == null) return;
