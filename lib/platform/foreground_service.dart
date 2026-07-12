@@ -321,7 +321,14 @@ class _BackgroundSyncHandler extends TaskHandler {
 /// active app (Android otherwise suspends a backgrounded app's network).
 /// No-op on non-Android platforms — desktop apps stay alive anyway.
 class ForegroundServiceManager {
-  static bool get _isAndroid => !kIsWeb && Platform.isAndroid;
+  /// Host-test override for the platform gate (same hook style as
+  /// [ClipQueue.debugDir]): every method below early-returns off Android, so
+  /// without this the service state machine would be untestable.
+  @visibleForTesting
+  static bool? debugIsAndroid;
+
+  static bool get _isAndroid =>
+      debugIsAndroid ?? (!kIsWeb && Platform.isAndroid);
 
   /// Heartbeat payload the UI isolate sends while it's alive.
   static const uiAlivePing = 'clippy.ui-alive';
@@ -444,6 +451,30 @@ class ForegroundServiceManager {
       return;
     }
     await start(); // start() publishes the resulting state
+  }
+
+  @visibleForTesting
+  static Duration healthPollInterval = const Duration(seconds: 20);
+  static Timer? _healthTimer;
+
+  /// Watch the service's liveness WHILE the app is in the foreground. A kill
+  /// can land at any moment (OEM battery manager, platform restriction), not
+  /// just while we were away — and [ensureRunning]'s resume-time check would
+  /// leave the header claiming "Synced" until the next lifecycle transition,
+  /// which is the same lie this whole change exists to stop telling.
+  ///
+  /// Reports only. Reviving is [ensureRunning]'s job on resume, so a service
+  /// the system is actively refusing can't be fought in a restart loop here.
+  static void startHealthWatch() {
+    if (!_isAndroid || _healthTimer != null) return;
+    _healthTimer = Timer.periodic(healthPollInterval, (_) async {
+      backgroundSyncAlive.value = await FlutterForegroundTask.isRunningService;
+    });
+  }
+
+  static void stopHealthWatch() {
+    _healthTimer?.cancel();
+    _healthTimer = null;
   }
 
   static Future<void> stop() async {

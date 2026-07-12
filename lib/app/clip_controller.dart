@@ -197,6 +197,10 @@ class ClipController extends ChangeNotifier
       // the phone's clipboard without opening Clippy. Android requires a
       // foreground-service notification for this (kept at MIN importance).
       await ForegroundServiceManager.start();
+      // The service can be killed while the app sits open (OEM battery
+      // manager) — poll its liveness so the header stops claiming "Synced"
+      // the moment it dies, not at the next resume.
+      ForegroundServiceManager.startHealthWatch();
       // Android 10+ blocks clipboard reads while backgrounded (for every app,
       // service or not), so capture outgoing copies the moment Clippy returns
       // to the foreground instead.
@@ -237,12 +241,18 @@ class ClipController extends ChangeNotifier
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed && !isDesktop) {
+      // Nothing to watch while we're away: the service's own liveness is the
+      // background story, and a timer here would just burn wakeups.
+      ForegroundServiceManager.stopHealthWatch();
+    }
     if (state == AppLifecycleState.resumed && !isDesktop) {
       ForegroundServiceManager.pingAlive();
       // The service may have died while we were away (OEM battery manager, a
       // platform restriction, an app update) — revive it, and let the UI say
       // so if it stays down.
       unawaited(ForegroundServiceManager.ensureRunning());
+      ForegroundServiceManager.startHealthWatch();
       onClipboardChanged();
       unawaited(_drainQueue());
       // The service's tick is the only other thing that bounds the queue, so a
@@ -405,6 +415,7 @@ class ClipController extends ChangeNotifier
   void dispose() {
     _disposed = true;
     WidgetsBinding.instance.removeObserver(this);
+    ForegroundServiceManager.stopHealthWatch();
     _uiPing?.cancel();
     _macShots?.stop();
     ShareChannel.listen();
