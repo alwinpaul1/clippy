@@ -214,6 +214,94 @@ void main() {
             'back, or a process kill loses it for good');
   });
 
+  /// The canonical shape, and the one that destroyed a clip: store.append()
+  /// throws BECAUSE the socket died — and canContinue() reads that same socket,
+  /// so it goes false on the very next iteration. A clip that threw is held in
+  /// memory, and an early return must not walk away from it: drain() already
+  /// deleted its file, so at that instant it exists NOWHERE else.
+  test('a clip that threw is rescued when the link drops immediately after',
+      () async {
+    put('001.txt', 'a');
+    put('002.txt', 'b');
+    put('003.txt', 'c');
+    var up = true;
+
+    await drainer(
+      (item) async {
+        if (item.text == 'a') {
+          up = false; // the socket died: the send throws AND the link is gone
+          throw StateError('socket closed');
+        }
+      },
+      canContinue: () => up,
+    ).run();
+
+    expect(onDisk(), ['001.txt', '002.txt', '003.txt'],
+        reason: 'the FAILED clip and the un-attempted tail must BOTH be back on '
+            'disk — a finally that only rescues items[i..] silently destroys the '
+            'one that threw');
+    expect(tmp.listSync().where((f) => f.path.endsWith('.dead')), isEmpty);
+  });
+
+  test('a LONG total outage does not bleed good clips into quarantine one by '
+      'one', () async {
+    for (var i = 1; i <= 5; i++) {
+      put('00$i.txt', 'clip-$i');
+    }
+    ClipQueue.poisonMinAge = Duration.zero; // as if failing "for ages"
+
+    for (var run = 0; run < 6; run++) {
+      ClipQueue.noteDrainSuccess(); // cooldowns expire; the outage persists
+      await drainer((item) async => throw StateError('disk full')).run();
+    }
+
+    expect(tmp.listSync().where((f) => f.path.endsWith('.dead')), isEmpty,
+        reason: 'five clips failing TOGETHER is evidence for a broken engine, '
+            'not against any one of them — parking the oldest every 10 minutes '
+            'is just a slower shredder');
+    expect(onDisk().where((n) => n.endsWith('.txt')), hasLength(5));
+  });
+
+  test('an empty drain does NOT forgive the backoff (the other isolate may be '
+      'mid-batch, having already deleted the files)', () async {
+    ClipQueue.noteDrainFailure();
+    ClipQueue.expireCooldownForTests(); // the hold lapses; the failure stands
+    expect(ClipQueue.drainFailures, 1);
+
+    // Nothing on disk: this drain observes nothing, so it proves nothing.
+    await drainer((item) async {}).run();
+
+    expect(ClipQueue.drainFailures, 1,
+        reason: '"the directory looks empty" is not evidence that the engine '
+            'works — only a fully delivered batch is. Resetting here lets the '
+            'two isolates keep each other at the 15s floor forever.');
+
+    // A batch that actually goes through IS evidence.
+    put('001.txt', 'a');
+    await drainer((item) async {}).run();
+    expect(ClipQueue.drainFailures, 0);
+  });
+
+  test('if PARKING the clip fails too, it goes back on the queue — "could not '
+      'save it" must never become "deleted it"', () async {
+    put('001.txt', 'poison');
+    // Make the .dead write fail the way a full disk would (the same fault that
+    // most plausibly broke the engine in the first place): something is already
+    // in the way of that exact path.
+    Directory('${tmp.path}/001.txt.dead').createSync();
+    ClipQueue.poisonMinAge = Duration.zero;
+
+    for (var run = 0; run < 4; run++) {
+      ClipQueue.noteDrainSuccess();
+      await drainer((item) async => throw StateError('unprocessable')).run();
+    }
+
+    expect(File('${tmp.path}/001.txt').existsSync(), isTrue,
+        reason: 'quarantine() could not write the clip, so the drainer must put '
+            'it back — drain() already deleted the original, so swallowing that '
+            'failure destroys it');
+  });
+
   test('overlapping drains do not double-upload the same file', () async {
     put('001.txt', 'a');
     var uploads = 0;

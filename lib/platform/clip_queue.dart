@@ -98,6 +98,17 @@ abstract class ClipQueue {
     _cooldownUntil = null;
   }
 
+  /// The escalation level of the backoff. A drain that observed nothing must
+  /// not reset this — an empty directory is not evidence that anything works
+  /// (the other isolate may be mid-batch, having already deleted the files).
+  @visibleForTesting
+  static int get drainFailures => _drainFailures;
+
+  /// Let the hold expire WITHOUT forgiving the failures, so a test can drive
+  /// the next drain without waiting out a real cooldown.
+  @visibleForTesting
+  static void expireCooldownForTests() => _cooldownUntil = null;
+
   /// How long a clip must have been failing before a LONE failure — one with no
   /// other clip succeeding to prove the engine even works — may be blamed on the
   /// clip itself. Until then a global outage (disk full, no crypto) is presumed.
@@ -159,11 +170,16 @@ abstract class ClipQueue {
   /// deleted its file, so writing it back under `.dead` is the difference
   /// between "we could not sync this" and "we silently threw it away".
   /// Reaped after a day by [enforceBound].
-  static Future<void> quarantine(ClipQueueItem item) async {
+  ///
+  /// Returns FALSE if the parking write failed — the caller must then put the
+  /// clip back on the queue. Swallowing that failure would destroy the clip in
+  /// exactly the case this exists for: the disk being full is both the likeliest
+  /// reason the clip could not be processed AND the reason it cannot be parked.
+  static Future<bool> quarantine(ClipQueueItem item) async {
     final name = item.name;
-    if (name == null || name.contains('/')) return;
+    if (name == null || name.contains('/')) return false;
     final dir = await _dir();
-    if (dir == null) return;
+    if (dir == null) return false;
     try {
       dir.createSync(recursive: true);
       final f = File('${dir.path}/$name.dead');
@@ -173,8 +189,9 @@ abstract class ClipQueue {
         await f.writeAsString(item.text!);
       }
       debugPrint('ClipQueue: quarantined unprocessable clip $name');
+      return true;
     } catch (_) {
-      // Nothing more we can do — but we tried not to lose it.
+      return false; // the caller requeues it — never lose it here
     }
   }
 
