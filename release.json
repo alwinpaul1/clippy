@@ -1,17 +1,13 @@
 {
-  "version": "1.0.28",
+  "version": "1.0.29",
   "notes": {
     "features": [],
     "improvements": [
-      "The Clippy mascot now comes alive on the empty screen",
-      "Smoother, safer server updates with no sync interruption"
+      "Android background sync now stays alive around the clock"
     ],
     "fixes": [
-      "Clips copied during long offline stretches always sync when you're back",
-      "Deleting a clip on one device can no longer bring back a copy someone re-copied later",
-      "Clear all now works even right after opening the app offline",
-      "Old screenshots no longer jump to the top of history after a reconnect",
-      "History shows the same clips on every device after bulk deletes"
+      "Fixed the big one: after about 6 hours in the background, Android was shutting Clippy's sync down — so clips only moved once you opened the app. It now keeps running.",
+      "Images copied from Gallery now reach your other devices while Clippy is closed"
     ]
   }
 }
