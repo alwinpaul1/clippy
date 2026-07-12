@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/update/update_info.dart';
+import '../platform/updater/platform_updater.dart';
 import 'theme.dart';
 import 'update_controller.dart';
 
@@ -97,7 +98,14 @@ class _UpdateSheetState extends State<_UpdateSheet> {
       if (mounted) {
         setState(() {
           _progress = null;
-          _error = "Couldn't update. Try again, or download from the site.";
+          // An integrity failure is not a transient hiccup: the download did
+          // not match what we published, so "try again" will just fail the same
+          // way. Send the user to the site (a plain HTTPS browser download)
+          // instead. Everything else IS retryable.
+          _error = e is IntegrityException
+              ? "This update couldn't be verified. Please download it from "
+                  'the site instead.'
+              : "Couldn't update. Try again, or download from the site.";
         });
       }
     }
