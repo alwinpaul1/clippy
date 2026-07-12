@@ -13,13 +13,20 @@ enum CheckResult { updateAvailable, upToDate, failed }
 /// update, and runs the platform installer. A single shared instance ([updater])
 /// keeps the cross-cutting check out of the widget constructors.
 class UpdateController {
-  UpdateController({UpdateService? service})
-      : _service = service ?? UpdateService(
-          manifestUri: _manifestUri(),
-          currentVersion: _currentVersion,
-        );
+  UpdateController({
+    UpdateService? service,
+    PlatformUpdater? Function()? updaterFactory,
+  })  : _service = service ??
+            UpdateService(
+              manifestUri: _manifestUri(),
+              currentVersion: _currentVersion,
+            ),
+        // Injectable so the fail-closed guarantee (no hash → no install) is
+        // testable without a real platform installer that would download.
+        _updaterFactory = updaterFactory ?? PlatformUpdater.forCurrent;
 
   final UpdateService _service;
+  final PlatformUpdater? Function() _updaterFactory;
 
   /// The available update, or null when up to date / not yet checked.
   final ValueNotifier<UpdateInfo?> available = ValueNotifier(null);
@@ -99,7 +106,7 @@ class UpdateController {
     UpdateInfo info, {
     void Function(double)? onProgress,
   }) async {
-    final updater = PlatformUpdater.forCurrent();
+    final updater = _updaterFactory();
     final url = artifactUrl(info);
     if (updater == null || url == null) {
       throw Exception('In-app update unavailable on this platform');
