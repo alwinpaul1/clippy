@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/models/remote_clip.dart';
 import '../platform/clip_queue.dart';
+import '../platform/queue_drainer.dart';
 
 import '../core/backend/websocket_clip_store.dart';
 import '../core/history/history_item.dart';
@@ -61,6 +62,10 @@ class ClipController extends ChangeNotifier
   // JPEG re-reads as PNG), so a raw-byte / content-hash compare misses the echo.
   String? _handledText;
   String? _handledImageFp;
+  SharedPreferences? _prefs;
+  // The echo fingerprint must outlive the process: the CLIPBOARD does. See the
+  // incoming-image path for why lastAppliedHash cannot stand in for it.
+  static const _imageFpKey = 'clippy.lastAppliedImageFp';
   bool _incomingImagePending = false;
 
   List<HistoryItem> history = const [];
@@ -95,6 +100,11 @@ class ClipController extends ChangeNotifier
     // cache key is room-scoped so a re-pair can never surface another room's
     // clips.
     final prefs = await SharedPreferences.getInstance();
+    _prefs = prefs;
+    // Restore the echo guard for whatever image is (still) on this device's
+    // clipboard, so a relaunch does not re-upload a picture Clippy itself put
+    // there — attributed to this device, as if the user had copied it.
+    _handledImageFp = prefs.getString(_imageFpKey);
     final cacheKey = 'clippy.clips.${roomToken.hashCode.toRadixString(16)}';
     final cached = prefs.getString(cacheKey);
     if (cached != null) {
@@ -159,8 +169,14 @@ class ClipController extends ChangeNotifier
             _incomingImagePending = true;
             // Register the picture up front so the watcher's re-encoded
             // read-back is recognised as our own echo however much later it
-            // fires (macOS App Nap can delay it well past the time window).
-            _handledImageFp = await ImageClipboard.fingerprint(jpeg);
+            // fires (macOS App Nap can delay it well past the time window) —
+            // and PERSIST it, because the clipboard outlives the process. The
+            // platform hands our own write back re-encoded (a JPEG we applied
+            // re-reads as PNG), so lastAppliedHash cannot catch it; without the
+            // fingerprint surviving a restart, the app relaunches, re-reads the
+            // image IT put on the clipboard, and re-uploads it as a clip this
+            // device supposedly copied.
+            await _setHandledImageFp(await ImageClipboard.fingerprint(jpeg));
             await ImageClipboard.write(jpeg);
           } catch (_) {
             // Corrupt payload — skip.
@@ -196,7 +212,14 @@ class ClipController extends ChangeNotifier
       // Keep receiving in the background so copies from other devices land on
       // the phone's clipboard without opening Clippy. Android requires a
       // foreground-service notification for this (kept at MIN importance).
-      await ForegroundServiceManager.start();
+      // The only place that may open the battery-exemption dialog: a
+      // poll-driven revive must never do it, or a phone whose OEM keeps
+      // refusing the service would throw the dialog up on every retry.
+      await ForegroundServiceManager.start(askBatteryExemption: true);
+      // The service can be killed while the app sits open (OEM battery
+      // manager) — poll its liveness so the header stops claiming "Synced"
+      // the moment it dies, not at the next resume.
+      ForegroundServiceManager.startHealthWatch();
       // Android 10+ blocks clipboard reads while backgrounded (for every app,
       // service or not), so capture outgoing copies the moment Clippy returns
       // to the foreground instead.
@@ -237,19 +260,26 @@ class ClipController extends ChangeNotifier
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed && !isDesktop) {
+      // Nothing to watch while we're away: the service's own liveness is the
+      // background story, and a timer here would just burn wakeups.
+      ForegroundServiceManager.stopHealthWatch();
+    }
     if (state == AppLifecycleState.resumed && !isDesktop) {
       ForegroundServiceManager.pingAlive();
       // The service may have died while we were away (OEM battery manager, a
       // platform restriction, an app update) — revive it, and let the UI say
       // so if it stays down.
       unawaited(ForegroundServiceManager.ensureRunning());
+      ForegroundServiceManager.startHealthWatch();
       onClipboardChanged();
+      // Bound the disk unconditionally — a dead service means nothing pruned
+      // while captures kept landing, and a CONNECTED-but-failing engine stops
+      // the drain too. Not chained to the drain: that made the pruner see our
+      // own fresh heartbeat every time and never prune at all. Each isolate's
+      // drain now beats under its own name and releases it when finished.
       unawaited(_drainQueue());
-      // The service's tick is the only other thing that bounds the queue, so a
-      // dead service means nothing was pruning it while captures kept landing.
-      // Gated on the link being down for the same reason the service gates it:
-      // never prune files the drain above is about to deliver.
-      if (_store?.isConnected != true) unawaited(ClipQueue.enforceBound());
+      unawaited(ClipQueue.enforceBound());
       // Re-check photo access: the user may have just returned from granting
       // full access via the "Fix" banner, which should now clear it.
       unawaited(_startScreenshotSync());
@@ -259,28 +289,26 @@ class ClipController extends ChangeNotifier
   /// Push text AND images the background native code captured while the UI was
   /// away (focus-trick text + the MediaStore screenshot observer). Engine dedup
   /// absorbs repeats.
-  Future<void> _drainQueue() async {
-    // Draining consumes the on-disk queue file — the only copy that survives
-    // a process kill. Hold off until the relay link is confirmed; the
-    // connected listener re-drains the instant it comes back.
-    if (_store?.isConnected != true) return;
-    final items = await ClipQueue.drain();
-    for (var i = 0; i < items.length; i++) {
-      // Link died (or we were disposed) mid-drain with the files already
-      // consumed — put the undelivered remainder back on disk.
-      if (_disposed || _store?.isConnected != true) {
-        await ClipQueue.requeueAll(items.sublist(i));
-        return;
-      }
-      final item = items[i];
+  late final QueueDrainer _drainer = QueueDrainer(
+    canContinue: () => !_disposed && _store?.isConnected == true,
+    process: (item) async {
       if (item.isImage) {
-        await _pushLocalImage(item.imageBytes!, mime: item.mime);
+        // fromQueue: a queued capture is NOT the clipboard echo of an image we
+        // just applied — it was captured by native code, maybe hours ago. The
+        // time window must not gate it (drain() already deleted its file, so
+        // suppressing it destroys the clip); the fingerprint check inside
+        // catches a true echo instead.
+        await _pushLocalImage(item.imageBytes!, mime: item.mime, fromQueue: true);
       } else {
         await _pushLocal(item.text!);
       }
-    }
-  }
+    },
+  );
 
+  /// Push text AND images the background native code captured while the UI was
+  /// away. The failure policy (requeue, back off, quarantine) lives in
+  /// [QueueDrainer] — both isolates must behave identically.
+  Future<void> _drainQueue() => _drainer.run();
 
   @override
   void onClipboardChanged() async {
@@ -312,13 +340,13 @@ class ClipController extends ChangeNotifier
       _incomingImagePending = false;
       if (fp != null && fp == _handledImageFp) return;
       if (expectingEcho && fp == null) return;
-      _handledImageFp = fp;
+      await _setHandledImageFp(fp);
       await _pushLocalImage(png, mime: clipMime);
       return;
     }
     // Clipboard no longer holds an image — the image guard is stale.
     _incomingImagePending = false;
-    _handledImageFp = null;
+    await _setHandledImageFp(null);
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text;
     if (text == null || text.isEmpty || text == _handledText) return;
@@ -336,10 +364,41 @@ class ClipController extends ChangeNotifier
   /// Manual capture (phones without background capture, or any device).
   Future<void> addManual(String text) => _pushLocal(text);
 
-  Future<void> _pushLocalImage(Uint8List png, {String? mime}) async {
+  /// [fromQueue] marks a capture the native code wrote to disk, not a live
+  /// clipboard read-back.
+  ///
+  /// The TIME window must not gate a queued clip: it was captured whenever the
+  /// native code saw it (possibly hours ago), and drain() has already deleted
+  /// its file — suppressing it destroys the clip outright. But it can still BE
+  /// an echo (Clippy writes an incoming image to the clipboard; the a11y
+  /// service captures that write and queues it), and a clipboard round-trip
+  /// re-encodes the image, so a content HASH won't catch it. Use the same
+  /// format-agnostic fingerprint the watcher path uses: identity, not timing.
+  /// Dropping a true echo loses nothing — that image is already in the room.
+  /// Set the echo fingerprint and persist it (null clears it).
+  Future<void> _setHandledImageFp(String? fp) async {
+    _handledImageFp = fp;
+    final prefs = _prefs;
+    if (prefs == null) return;
+    if (fp == null) {
+      await prefs.remove(_imageFpKey);
+    } else {
+      await prefs.setString(_imageFpKey, fp);
+    }
+  }
+
+  Future<void> _pushLocalImage(Uint8List png,
+      {String? mime, bool fromQueue = false}) async {
     if (_disposed) return;
-    final until = _suppressImageUntil;
-    if (until != null && DateTime.now().isBefore(until)) return; // our own echo
+    if (fromQueue) {
+      final fp = await ImageClipboard.fingerprint(png);
+      if (fp != null && fp == _handledImageFp) return; // our own write, echoed
+    } else {
+      final until = _suppressImageUntil;
+      if (until != null && DateTime.now().isBefore(until)) {
+        return; // our own echo
+      }
+    }
     final engine = _engine;
     final store = _store;
     if (engine == null || store == null) return;
@@ -381,7 +440,12 @@ class ClipController extends ChangeNotifier
   Future<void> applyItem(HistoryItem item) async {
     await _engine?.noteApplied(item.hash);
     if (item.isImage && item.imageBytes != null) {
-      _handledImageFp = await ImageClipboard.fingerprint(item.imageBytes!);
+      // PERSIST it: the clipboard outlives the process, so a relaunch would
+      // otherwise re-read this picture, fail to recognise it (the platform
+      // hands it back re-encoded, so the hash differs), and re-upload it as a
+      // clip this device supposedly copied.
+      await _setHandledImageFp(
+          await ImageClipboard.fingerprint(item.imageBytes!));
       await ImageClipboard.write(item.imageBytes!);
     } else {
       _handledText = item.text;
@@ -405,6 +469,7 @@ class ClipController extends ChangeNotifier
   void dispose() {
     _disposed = true;
     WidgetsBinding.instance.removeObserver(this);
+    ForegroundServiceManager.stopHealthWatch();
     _uiPing?.cancel();
     _macShots?.stop();
     ShareChannel.listen();

@@ -647,7 +647,11 @@ class _GlassHeader extends StatelessWidget {
                               ? 'Reconnecting…'
                               : (bgAlive
                                   ? 'Synced'
-                                  : 'Background sync paused — open to sync');
+                                  // The app is open — "open Clippy" would be an
+                                  // instruction the user cannot follow. Say what
+                                  // is true; the health watch is already
+                                  // retrying in the background.
+                                  : 'Background sync stopped — retrying');
                           return Row(
                             children: [
                               Container(

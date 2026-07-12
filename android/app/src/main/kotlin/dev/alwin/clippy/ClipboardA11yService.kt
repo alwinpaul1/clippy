@@ -117,14 +117,18 @@ class ClipboardA11yService : AccessibilityService() {
             val name = c.getString(1) ?: ""
             val path = c.getString(2) ?: ""
             val added = c.getLong(3)
-            // A real screenshot's DISPLAY_NAME starts with "Screenshot";
-            // Samsung also emits a "thumbnail_Screenshot…" whose PATH contains
-            // "Screenshot" — exclude it so we sync the full image, not the 13KB
-            // thumbnail.
+            // Same test as MainActivity's foreground observer — the two MUST
+            // agree, or a screenshot syncs only while Clippy is open. Matching
+            // the FOLDER as well as the name is what covers non-English builds,
+            // whose screenshots are named e.g. "Captura_de_pantalla…" but still
+            // land in Pictures/Screenshots.
+            // Samsung also emits a "thumbnail_Screenshot…" derivative — exclude
+            // it so we sync the full image, not the ~13KB thumbnail.
             val isThumb = name.startsWith("thumbnail", ignoreCase = true) ||
                 path.contains(".thumbnails", ignoreCase = true)
             val looksLikeShot = !isThumb &&
-                name.startsWith("Screenshot", ignoreCase = true)
+                (path.contains("Screenshot", ignoreCase = true) ||
+                    name.startsWith("Screenshot", ignoreCase = true))
             if (!looksLikeShot) return
             // Fresh only: taken after we started AND within the last 20s (skip
             // edits/rescans of old files, and never the phone's whole history).
@@ -338,7 +342,13 @@ class ClipboardA11yService : AccessibilityService() {
             val dir = File(filesDir, "clip_queue")
             dir.mkdirs()
             val name = "${System.currentTimeMillis()}_${emitSeq.getAndIncrement()}"
-            File(dir, "$name.txt").writeText(text)
+            // Stage as .part then rename, exactly like emitImage: the Dart
+            // watcher fires on CREATE, so a plain writeText lets the drain read
+            // a partially-flushed file — a long copy would sync TRUNCATED and
+            // the file is deleted straight after, with no way to notice.
+            val part = File(dir, "$name.txt.part")
+            part.writeText(text)
+            if (!part.renameTo(File(dir, "$name.txt"))) part.delete()
         } catch (_: Exception) {}
     }
 
