@@ -366,12 +366,32 @@ class ForegroundServiceManager {
         // Apple-ecosystem feel: sync comes back on its own after a reboot
         // (the service isolate runs the receive loop until the app is opened).
         autoRunOnBoot: true,
+        // ...and after an app update. Without this, every in-app update ended
+        // background sync until the user happened to open Clippy again — the
+        // process (and its service) dies with the package replace, and nothing
+        // restarts it.
+        autoRunOnMyPackageReplaced: true,
         // Survive swipe-from-recents: the plugin re-arms a restart alarm
         // instead of stopping (so the background receive loop keeps running).
         stopWithTask: false,
       ),
     );
   }
+
+  /// Whether the background service is actually up. The relay dot in the UI
+  /// only reflects the UI isolate's OWN connection, so a dead service still
+  /// showed a green "Synced" — which is precisely why a six-hour outage went
+  /// unnoticed for weeks. This is the honest signal.
+  static final ValueNotifier<bool> backgroundSyncAlive = ValueNotifier(true);
+
+  /// Bumped whenever the service's declared type changes. The plugin persists
+  /// serviceTypes in its OWN prefs and replays them on the next boot/restart —
+  /// so an install carrying a stale type would restart with a type the manifest
+  /// no longer declares, and the system kills the service (the very failure
+  /// this type change fixes). A version mismatch forces one stop+start, which
+  /// is the only thing that rewrites those persisted options.
+  static const _serviceTypesVersion = 2; // 1 = legacy dataSync, 2 = specialUse
+  static const _typesVersionKey = 'fgs_service_types_version';
 
   static Future<void> start() async {
     if (!_isAndroid) return;
@@ -385,18 +405,45 @@ class ForegroundServiceManager {
       await FlutterForegroundTask.requestIgnoreBatteryOptimization();
     }
 
-    if (await FlutterForegroundTask.isRunningService) return;
+    final prefs = await SharedPreferences.getInstance();
+    final stale = (prefs.getInt(_typesVersionKey) ?? 1) != _serviceTypesVersion;
+    if (await FlutterForegroundTask.isRunningService) {
+      if (!stale) {
+        backgroundSyncAlive.value = true;
+        return;
+      }
+      // Running under the old persisted type — stop it so the start below
+      // rewrites the options with the current one.
+      await FlutterForegroundTask.stopService();
+    }
     await FlutterForegroundTask.startService(
       serviceId: 4242,
       // specialUse, NOT dataSync: Android 15+ stops a dataSync service after 6
       // hours per 24h and then refuses to restart it, so background sync died
       // for the rest of the day and clips only moved when the app was opened.
-      // Must stay in sync with android:foregroundServiceType in the manifest.
+      // Must stay in sync with android:foregroundServiceType in the manifest
+      // (CI enforces it) AND with [_serviceTypesVersion] above.
       serviceTypes: const [ForegroundServiceTypes.specialUse],
       notificationTitle: 'Clippy',
       notificationText: 'Clipboard sync active',
       callback: clippyServiceCallback,
     );
+    await prefs.setInt(_typesVersionKey, _serviceTypesVersion);
+    backgroundSyncAlive.value = await FlutterForegroundTask.isRunningService;
+  }
+
+  /// Re-check (and revive) the service whenever the app comes back. It can die
+  /// without any signal to the user: an OEM battery manager sleeps it, a
+  /// platform restriction refuses a restart, an update replaced the package.
+  /// If it stays down, [backgroundSyncAlive] tells the UI to say so instead of
+  /// showing a green light that only knows about the foreground connection.
+  static Future<void> ensureRunning() async {
+    if (!_isAndroid) return;
+    if (await FlutterForegroundTask.isRunningService) {
+      backgroundSyncAlive.value = true;
+      return;
+    }
+    await start(); // start() publishes the resulting state
   }
 
   static Future<void> stop() async {

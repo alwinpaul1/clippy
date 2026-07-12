@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../core/history/history_item.dart';
+import '../platform/foreground_service.dart';
 import '../platform/haptics.dart';
 import '../platform/share_channel.dart';
 import '../core/pairing/pairing_key.dart';
@@ -633,22 +634,44 @@ class _GlassHeader extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(2, 8, 8, 12),
                 child: Row(
                   children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: reconnecting ? c.rust : c.green,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 9),
                     Expanded(
-                      child: Text(
-                        reconnecting ? 'Reconnecting…' : 'Synced',
-                        style: Ct.body(
-                          13,
-                          color: reconnecting ? c.rust : c.muted2,
-                        ),
+                      child: ValueListenableBuilder<bool>(
+                        // A green "Synced" dot only ever meant "the UI's own
+                        // connection is up" — it stayed green through a
+                        // six-hour background-sync outage. Tell the truth.
+                        valueListenable:
+                            ForegroundServiceManager.backgroundSyncAlive,
+                        builder: (context, bgAlive, _) {
+                          final warn = reconnecting || !bgAlive;
+                          final label = reconnecting
+                              ? 'Reconnecting…'
+                              : (bgAlive
+                                  ? 'Synced'
+                                  : 'Background sync paused — open to sync');
+                          return Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: warn ? c.rust : c.green,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 9),
+                              Flexible(
+                                child: Text(
+                                  label,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Ct.body(
+                                    13,
+                                    color: warn ? c.rust : c.muted2,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ),
                     if (showCollapseAll) ...[

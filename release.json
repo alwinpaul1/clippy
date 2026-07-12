@@ -1,13 +1,14 @@
 {
-  "version": "1.0.29",
+  "version": "1.0.30",
   "notes": {
     "features": [],
     "improvements": [
-      "Android background sync now stays alive around the clock"
+      "Clippy now tells you when background sync has stopped, instead of showing a green light regardless",
+      "Background sync restarts itself after an app update — no need to open Clippy to get it going again"
     ],
     "fixes": [
-      "Fixed the big one: after about 6 hours in the background, Android was shutting Clippy's sync down — so clips only moved once you opened the app. It now keeps running.",
-      "Images copied from Gallery now reach your other devices while Clippy is closed"
+      "Made the background-sync fix stick: it now applies on its own, even if you don't open the app after updating",
+      "Clips captured while the app was asleep no longer pile up unbounded on the phone"
     ]
   }
 }
