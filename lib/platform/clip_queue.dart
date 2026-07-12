@@ -423,6 +423,7 @@ abstract class ClipQueue {
   /// at all: a beat left behind stands the pruner down for a full minute, and
   /// the service drains every 10 seconds.
   static Future<void> releaseBeat() async {
+    if (_lastBeat == null) return; // we never beat — nothing to let go of
     final dir = await _dir();
     if (dir == null) return;
     _lastBeat = null;
@@ -431,11 +432,13 @@ abstract class ClipQueue {
     } catch (_) {}
   }
 
-  /// Is a drain live in ANY isolate?
-  static bool _drainLive(Directory dir) {
+  /// Is a drain live in ANY isolate? Takes the directory listing the caller
+  /// already has — enforceBound needs it anyway, and listing twice per pass is
+  /// pure I/O on the phone.
+  static bool _drainLive(List<File> entries) {
     final now = DateTime.now();
     try {
-      for (final f in dir.listSync().whereType<File>()) {
+      for (final f in entries) {
         if (!f.uri.pathSegments.last.startsWith(_beatPrefix)) continue;
         final age = now.difference(f.statSync().modified);
         if (age < _beatFresh) return true;
@@ -547,18 +550,19 @@ abstract class ClipQueue {
     try {
       if (!dir.existsSync()) return;
       _lastBound = DateTime.now();
+      final entries = dir.listSync().whereType<File>().toList();
       // A drain is live SOMEWHERE (this isolate's link being down says nothing
       // about the other's). Since the batch cap leaves its tail on disk between
       // batches, and we prune oldest-first, pruning now would delete precisely
       // the clips it is about to deliver.
-      if (_drainLive(dir)) return;
+      if (_drainLive(entries)) return;
       // The bound is judged against EVERYTHING on disk (that's the real
       // usage), but only files past the age gate are eligible for deletion —
       // fresh writes protect themselves by mtime.
       var count = 0;
       var total = 0;
       final prunable = <(File, int)>[];
-      for (final f in dir.listSync().whereType<File>()) {
+      for (final f in entries) {
         if (f.uri.pathSegments.last.startsWith(_beatPrefix)) continue; // not a clip
         if (f.path.endsWith('.part')) {
           _reapIfStale(f);
