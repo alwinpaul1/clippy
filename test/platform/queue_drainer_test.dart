@@ -628,6 +628,28 @@ void main() {
         reason: 'the bound must actually bound');
   });
 
+  /// drain() beats as soon as the DIRECTORY has files — then filters. A queue
+  /// holding only parked (.dead) or staging (.part) files therefore beats and
+  /// hands back an empty batch, so the drainer never arms its timer and, if the
+  /// release is conditional on that timer, never lets go of the beat. The orphan
+  /// stands the pruner down for a minute, every tick — and .dead files are
+  /// exactly what a long-failing queue accumulates.
+  test('a drain that finds only parked clips leaves no orphaned heartbeat',
+      () async {
+    put('001.txt', 'unprocessable');
+    await ClipQueue.parkFile('001.txt'); // -> 001.txt.dead
+    expect(File('${tmp.path}/001.txt.dead').existsSync(), isTrue);
+
+    await drainer((item) async {}).run();
+
+    expect(
+        tmp.listSync().where((f) => f.uri.pathSegments.last.startsWith('drain.beat')),
+        isEmpty,
+        reason: 'drain() beat because the directory had files, then returned '
+            'nothing — the beat must still be released, or the queue bound '
+            'stands down forever');
+  });
+
   test('an EMPTY queue writes no heartbeat — the service ticks every 10s', () async {
     await drainer((item) async {}).run();
 

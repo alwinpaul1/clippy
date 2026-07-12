@@ -182,10 +182,13 @@ class QueueDrainer {
       }
     } finally {
       beat?.cancel();
-      // Release OUR beat (never the other isolate's): a beat left behind stands
-      // the pruner down for a full minute, and with a drain every 10s that means
-      // the queue bound would never run at all.
-      if (beat != null) await ClipQueue.releaseBeat();
+      // Release OUR beat (never the other isolate's) — ALWAYS, not just when we
+      // armed the timer. ClipQueue.drain() beats as soon as the directory has
+      // FILES, but under a hold every one of them may be skipped, so it can beat
+      // and still hand back an empty batch. That orphaned beat stands the pruner
+      // down for a full minute, and a holding run happens on every tick while a
+      // backlog is failing — precisely when the bound has to work.
+      await ClipQueue.releaseBeat();
       if (i < items.length) await ClipQueue.requeueAll(items.sublist(i));
       // Solo failures can only be judged now, when the run's full delivery
       // count is known.
