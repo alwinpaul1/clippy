@@ -275,10 +275,11 @@ class ClipController extends ChangeNotifier
       onClipboardChanged();
       // Bound the disk unconditionally — a dead service means nothing pruned
       // while captures kept landing, and a CONNECTED-but-failing engine stops
-      // the drain too. But AFTER the drain, never racing it: fired side by side
-      // (both unawaited), enforceBound can win, see no drain heartbeat yet, and
-      // prune OLDEST-FIRST — exactly the batch the drain was about to deliver.
-      unawaited(_drainQueue().whenComplete(ClipQueue.enforceBound));
+      // the drain too. Not chained to the drain: that made the pruner see our
+      // own fresh heartbeat every time and never prune at all. Each isolate's
+      // drain now beats under its own name and releases it when finished.
+      unawaited(_drainQueue());
+      unawaited(ClipQueue.enforceBound());
       // Re-check photo access: the user may have just returned from granting
       // full access via the "Fix" banner, which should now clear it.
       unawaited(_startScreenshotSync());

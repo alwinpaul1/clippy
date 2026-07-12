@@ -36,7 +36,7 @@ void main() {
       .listSync()
       .whereType<File>()
       .map((f) => f.uri.pathSegments.last)
-      .where((n) => n != 'drain.beat')
+      .where((n) => !n.startsWith('drain.beat'))
       .toList()
     ..sort();
 
@@ -110,7 +110,7 @@ void main() {
     aged('002.txt', 'undelivered too');
     // A drain in EITHER isolate refreshes the heartbeat; the pruner (whose own
     // link may be down) must stand down while it runs.
-    File('${tmp.path}/drain.beat').writeAsStringSync('');
+    File('${tmp.path}/drain.beat.test').writeAsStringSync('');
 
     await ClipQueue.enforceBound();
 
@@ -124,7 +124,7 @@ void main() {
     ClipQueue.maxQueueFiles = 1;
     aged('001.txt', 'a');
     aged('002.txt', 'b');
-    File('${tmp.path}/drain.beat')
+    File('${tmp.path}/drain.beat.test')
       ..writeAsStringSync('')
       ..setLastModifiedSync(
           DateTime.now().subtract(const Duration(minutes: 5)));

@@ -60,12 +60,16 @@ class QueueDrainer {
   }
 
   Future<void> _drain(bool holding) async {
-    // Hold the "a drain is live" heartbeat for the WHOLE run: one oversized
-    // image can upload for minutes, and a stale beat lets the other isolate's
-    // enforceBound prune the tail we are working through (it prunes
+    // The "a drain is live" heartbeat, held for as long as we are WORKING: one
+    // oversized image can upload for minutes, and a stale beat lets the other
+    // isolate's enforceBound prune the tail we are working through (it prunes
     // oldest-first — exactly the next batches).
-    final beat = Timer.periodic(
-        const Duration(seconds: 20), (_) => unawaited(ClipQueue.beat()));
+    //
+    // Armed lazily, only once a batch actually comes back with something. The
+    // service ticks this every 10 seconds; beating on an empty queue would be a
+    // flash write every 10 seconds, forever, for nothing. (ClipQueue.drain()
+    // already beats when it has files — that is the right condition.)
+    Timer? beat;
     // EVERY clip this run has already handled — delivered or failed. Failures
     // stay on disk and must be stepped over; a success is normally gone, but if
     // drain()'s delete ever fails (read-only mount, a hostile OEM FS) the file
@@ -92,7 +96,8 @@ class QueueDrainer {
     var i = 0;
     var items = const <ClipQueueItem>[];
     try {
-      await ClipQueue.beat();
+      // No eager beat: ClipQueue.drain() beats itself the moment it actually has
+      // files, which is the only condition that warrants a flash write.
       // drain() returns a bounded BATCH (a long-dead service leaves a huge
       // backlog, and reading it all at once would OOM the app at launch), so
       // keep going until nothing is left that this run has not already tried.
@@ -102,6 +107,8 @@ class QueueDrainer {
         final seenBefore = seen.length;
         items = await ClipQueue.drain(skip: seen);
         if (items.isEmpty) break;
+        beat ??= Timer.periodic(
+            const Duration(seconds: 20), (_) => unawaited(ClipQueue.beat()));
 
         // Judgement is scoped to THIS BATCH, whose clips were attempted
         // back-to-back. A run-global counter cannot tell "this clip is bad"
@@ -111,7 +118,12 @@ class QueueDrainer {
         var deliveredInBatch = 0;
         final failedAt = <String, int>{};
         for (; i < items.length; i++) {
-          if (!canContinue()) return; // finally puts items[i..] back
+          if (!canContinue()) {
+            // Judge what this batch DID complete — an aborted run must not
+            // silently discard a strike a clip legitimately earned.
+            await _judgeBatch(failedAt, deliveredInBatch);
+            return; // finally puts items[i..] back
+          }
           final item = items[i];
           final name = item.name;
           try {
@@ -132,6 +144,7 @@ class QueueDrainer {
             // clip. Abort instead: no strike, no "tried" mark, no backoff.
             if (!canContinue()) {
               i++; // already back on disk — the finally must not requeue it too
+              await _judgeBatch(failedAt, deliveredInBatch);
               return;
             }
             lastFailure = events++;
@@ -168,7 +181,11 @@ class QueueDrainer {
         if (seen.length == seenBefore) break;
       }
     } finally {
-      beat.cancel();
+      beat?.cancel();
+      // Release OUR beat (never the other isolate's): a beat left behind stands
+      // the pruner down for a full minute, and with a drain every 10s that means
+      // the queue bound would never run at all.
+      if (beat != null) await ClipQueue.releaseBeat();
       if (i < items.length) await ClipQueue.requeueAll(items.sublist(i));
       // Solo failures can only be judged now, when the run's full delivery
       // count is known.

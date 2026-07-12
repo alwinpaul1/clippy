@@ -35,7 +35,7 @@ void main() {
       .listSync()
       .whereType<File>()
       .map((f) => f.uri.pathSegments.last)
-      .where((n) => n != 'drain.beat')
+      .where((n) => !n.startsWith('drain.beat'))
       .toList()
     ..sort();
 
@@ -597,6 +597,43 @@ void main() {
     expect(onDisk(), contains('002.txt'), reason: 'and it is still queued');
     expect(ClipQueue.inCooldown, isFalse,
         reason: 'nor may a dead link look like a broken engine and set a hold');
+  });
+
+  /// Chaining enforceBound onto the drain's completion made it see the beat the
+  /// drain itself had just written, stand down, and NEVER prune — the queue's
+  /// disk bound became dead code. A drain must release its own beat.
+  test('a finished drain releases its heartbeat, so the queue bound still runs',
+      () async {
+    put('001.txt', 'a');
+    await drainer((item) async {}).run();
+
+    expect(
+        tmp.listSync().where((f) => f.uri.pathSegments.last.startsWith('drain.beat')),
+        isEmpty,
+        reason: 'a beat left behind stands the pruner down for a whole minute, '
+            'and the service drains every 10 seconds — the bound would never '
+            'run again');
+
+    // And the pruner really does prune once the drain has let go.
+    ClipQueue.maxQueueFiles = 1;
+    addTearDown(() => ClipQueue.maxQueueFiles = 200);
+    for (var i = 1; i <= 3; i++) {
+      File('${tmp.path}/10$i.txt')
+        ..writeAsStringSync('old')
+        ..setLastModifiedSync(
+            DateTime.now().subtract(const Duration(minutes: 5)));
+    }
+    await ClipQueue.enforceBound();
+    expect(onDisk().where((n) => n.endsWith('.txt')).length, lessThan(3),
+        reason: 'the bound must actually bound');
+  });
+
+  test('an EMPTY queue writes no heartbeat — the service ticks every 10s', () async {
+    await drainer((item) async {}).run();
+
+    expect(tmp.listSync(), isEmpty,
+        reason: 'beating on an empty queue is a flash write every 10 seconds, '
+            'forever, for nothing');
   });
 
   test('a clip that threw is rescued when the link drops immediately after',

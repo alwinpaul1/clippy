@@ -122,7 +122,7 @@ abstract class ClipQueue {
     try {
       for (final f in dir.listSync().whereType<File>()) {
         final name = f.uri.pathSegments.last;
-        if (name == _beatName ||
+        if (name.startsWith(_beatPrefix) ||
             name.endsWith('.part') ||
             name.endsWith('.dead')) {
           continue;
@@ -220,6 +220,7 @@ abstract class ClipQueue {
   /// for the wrong reason.
   @visibleForTesting
   static void resetForTests() {
+    _lastBound = null;
     _failures.clear();
     _tried.clear();
     _untriedAt = null;
@@ -281,7 +282,7 @@ abstract class ClipQueue {
       final files = dir
           .listSync()
           .whereType<File>()
-          .where((f) => !f.path.endsWith(_beatName))
+          .where((f) => !f.uri.pathSegments.last.startsWith(_beatPrefix))
           .toList()
         ..sort((a, b) => a.path.compareTo(b.path));
       if (files.isEmpty) return const [];
@@ -377,8 +378,20 @@ abstract class ClipQueue {
   // It is only ever refreshed, NEVER deleted — that is what killed the old
   // drain.lock: whichever drain finished first deleted the lock out from under
   // the other one. Staleness expires it instead.
-  static const _beatName = 'drain.beat';
+  // ONE FILE PER ISOLATE. A single shared beat could never be released: whoever
+  // finished first would delete it out from under the other's live drain (that
+  // is what killed the old drain.lock). With a file each, an isolate releases
+  // only its OWN — no race — and enforceBound simply stands down while ANY beat
+  // is fresh. Without a release, a drain's own beat keeps standing the pruner
+  // down for a whole minute after it ends, and with the service draining every
+  // 10s that means the queue bound never runs at all.
+  static const _beatPrefix = 'drain.beat';
+  static final String _beatName =
+      '$_beatPrefix.${DateTime.now().microsecondsSinceEpoch}';
   static const _beatFresh = Duration(minutes: 1);
+  // A beat from an isolate that died mid-drain would otherwise hold the pruner
+  // off forever; reap it once no live drain could possibly still own it.
+  static const _beatStale = Duration(minutes: 5);
   static DateTime? _lastBeat;
 
   /// Refresh the "a drain is live" heartbeat. Callers must keep calling this
@@ -405,13 +418,36 @@ abstract class ClipQueue {
     } catch (_) {}
   }
 
-  static bool _drainLive(Directory dir) {
+  /// This isolate's drain is over. Deleting only OUR beat is always safe — the
+  /// other isolate owns a different file — and it is what lets enforceBound run
+  /// at all: a beat left behind stands the pruner down for a full minute, and
+  /// the service drains every 10 seconds.
+  static Future<void> releaseBeat() async {
+    final dir = await _dir();
+    if (dir == null) return;
+    _lastBeat = null;
     try {
-      final beat = File('${dir.path}/$_beatName');
-      return DateTime.now().difference(beat.statSync().modified) < _beatFresh;
-    } catch (_) {
-      return false; // no heartbeat — nothing is draining
-    }
+      File('${dir.path}/$_beatName').deleteSync();
+    } catch (_) {}
+  }
+
+  /// Is a drain live in ANY isolate?
+  static bool _drainLive(Directory dir) {
+    final now = DateTime.now();
+    try {
+      for (final f in dir.listSync().whereType<File>()) {
+        if (!f.uri.pathSegments.last.startsWith(_beatPrefix)) continue;
+        final age = now.difference(f.statSync().modified);
+        if (age < _beatFresh) return true;
+        // Left behind by an isolate that died mid-drain.
+        if (age > _beatStale) {
+          try {
+            f.deleteSync();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    return false; // no live heartbeat — nothing is draining
   }
 
   /// Whether [f]'s last modification is older than [age]. Treats a
@@ -496,11 +532,21 @@ abstract class ClipQueue {
   /// staging files are exempt from the bound (they are mid-write), but stale
   /// ones are reaped here too: while offline — the only time this runs —
   /// drain() never runs, so its reaper can't.
+  // The bound is a slow-moving condition, but the service ticks the drain (and
+  // now this) every 10s. Listing + stat-ing 200 files that often is pure battery.
+  static DateTime? _lastBound;
+
   static Future<void> enforceBound() async {
+    final last = _lastBound;
+    if (last != null &&
+        DateTime.now().difference(last) < const Duration(seconds: 60)) {
+      return;
+    }
     final dir = await _dir();
     if (dir == null) return;
     try {
       if (!dir.existsSync()) return;
+      _lastBound = DateTime.now();
       // A drain is live SOMEWHERE (this isolate's link being down says nothing
       // about the other's). Since the batch cap leaves its tail on disk between
       // batches, and we prune oldest-first, pruning now would delete precisely
@@ -513,7 +559,7 @@ abstract class ClipQueue {
       var total = 0;
       final prunable = <(File, int)>[];
       for (final f in dir.listSync().whereType<File>()) {
-        if (f.path.endsWith(_beatName)) continue; // not a clip
+        if (f.uri.pathSegments.last.startsWith(_beatPrefix)) continue; // not a clip
         if (f.path.endsWith('.part')) {
           _reapIfStale(f);
           continue;
