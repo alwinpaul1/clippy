@@ -166,26 +166,37 @@ void main() {
     expect(ClipQueue.inCooldown, isFalse, reason: 'a success clears the hold');
   });
 
-  test('a quarantined clip is PARKED on disk, never destroyed, and is not '
-      're-drained', () async {
-    await ClipQueue.quarantine(
-        const ClipQueueItem.text('unprocessable', name: '001.txt'));
+  test('parking renames the clip to .dead — it is never rewritten, never lost, '
+      'and never re-drained', () async {
+    put('001.txt', 'unprocessable');
+
+    expect(await ClipQueue.parkFile('001.txt'), isTrue);
 
     expect(File('${tmp.path}/001.txt.dead').existsSync(), isTrue,
-        reason: 'drain() already deleted the original — dropping it here is '
-            'the difference between "could not sync" and "silently destroyed"');
+        reason: 'an atomic rename: nothing is held in memory, nothing rewritten');
+    expect(File('${tmp.path}/001.txt').existsSync(), isFalse);
     expect(await ClipQueue.drain(), isEmpty,
         reason: 'a parked clip must not be re-read (it would come back as '
-            'garbage text and fail forever)');
+            'garbage and fail forever)');
   });
 
-  test('quarantined clips are reaped after a day, not hoarded', () async {
-    await ClipQueue.quarantine(
-        const ClipQueueItem.text('old', name: '002.txt'));
+  test('a park that fails leaves the clip exactly where it was — still queued',
+      () async {
+    put('001.txt', 'unprocessable');
+    Directory('${tmp.path}/001.txt.dead').createSync(); // rename will fail
+
+    expect(await ClipQueue.parkFile('001.txt'), isFalse);
+    expect(File('${tmp.path}/001.txt').existsSync(), isTrue,
+        reason: '"could not park it" must never become "deleted it"');
+  });
+
+  test('parked clips are reaped after a day, not hoarded', () async {
+    put('002.txt', 'old');
+    await ClipQueue.parkFile('002.txt');
     File('${tmp.path}/002.txt.dead').setLastModifiedSync(
         DateTime.now().subtract(const Duration(days: 2)));
-    await ClipQueue.quarantine(
-        const ClipQueueItem.text('recent', name: '003.txt'));
+    put('003.txt', 'recent');
+    await ClipQueue.parkFile('003.txt');
 
     await ClipQueue.enforceBound();
 

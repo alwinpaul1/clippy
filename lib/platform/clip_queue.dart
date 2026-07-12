@@ -85,9 +85,19 @@ abstract class ClipQueue {
     return until != null && DateTime.now().isBefore(until);
   }
 
-  /// A drain failed: back off, exponentially, so a persistent fault (no disk,
-  /// no crypto) costs us one attempt a minute instead of a spinning core.
-  static void noteDrainFailure() {
+  /// A drain failed: hold off before touching the queue again.
+  ///
+  /// [escalate] doubles the hold each time, up to 4 minutes — right when the
+  /// ENGINE is down, so a persistent fault costs one attempt a minute instead of
+  /// a spinning core. It is WRONG when the engine is proven healthy and only a
+  /// bad clip failed: the hold then exists solely to stop the requeue's inotify
+  /// event from spinning, and escalating it would make every GOOD clip wait
+  /// minutes to sync because one clip happens to be unprocessable.
+  static void noteDrainFailure({bool escalate = true}) {
+    if (!escalate) {
+      _cooldownUntil = DateTime.now().add(const Duration(seconds: 15));
+      return;
+    }
     _drainFailures++;
     final secs = (15 * (1 << (_drainFailures - 1).clamp(0, 4))).clamp(15, 240);
     _cooldownUntil = DateTime.now().add(Duration(seconds: secs));
@@ -144,32 +154,22 @@ abstract class ClipQueue {
     _lastBeat = null;
   }
 
-  /// Park an unprocessable clip instead of destroying it: drain() already
-  /// deleted its file, so writing it back under `.dead` is the difference
-  /// between "we could not sync this" and "we silently threw it away".
-  /// Reaped after a day by [enforceBound].
-  ///
-  /// Returns FALSE if the parking write failed — the caller must then put the
-  /// clip back on the queue. Swallowing that failure would destroy the clip in
-  /// exactly the case this exists for: the disk being full is both the likeliest
-  /// reason the clip could not be processed AND the reason it cannot be parked.
-  static Future<bool> quarantine(ClipQueueItem item) async {
-    final name = item.name;
+  /// Park a clip we have given up on. The clip is already back on disk (a
+  /// failure is requeued the moment it happens), so this is an atomic RENAME to
+  /// `<name>.dead` — nothing is rewritten, nothing is held in memory, and a
+  /// failure here leaves the clip exactly where it was: still queued. It stops
+  /// blocking the queue but is never destroyed; [enforceBound] reaps it after a
+  /// day.
+  static Future<bool> parkFile(String? name) async {
     if (name == null || name.contains('/')) return false;
     final dir = await _dir();
     if (dir == null) return false;
     try {
-      dir.createSync(recursive: true);
-      final f = File('${dir.path}/$name.dead');
-      if (item.isImage) {
-        await f.writeAsBytes(item.imageBytes!);
-      } else {
-        await f.writeAsString(item.text!);
-      }
-      debugPrint('ClipQueue: quarantined unprocessable clip $name');
+      File('${dir.path}/$name').renameSync('${dir.path}/$name.dead');
+      debugPrint('ClipQueue: parked unprocessable clip $name');
       return true;
     } catch (_) {
-      return false; // the caller requeues it — never lose it here
+      return false; // still on the queue — we simply could not park it
     }
   }
 
@@ -184,7 +184,11 @@ abstract class ClipQueue {
   @visibleForTesting
   static int maxDrainFiles = 30;
 
-  static Future<List<ClipQueueItem>> drain() async {
+  /// [skip] holds the basenames of clips that already failed during this drain
+  /// run. They stay ON DISK (never held in RAM, never at risk from a process
+  /// kill) but are stepped over, so a jam at the head of the queue can never
+  /// starve whatever is behind it — at any size.
+  static Future<List<ClipQueueItem>> drain({Set<String> skip = const {}}) async {
     final dir = await _dir();
     if (dir == null) return const [];
     try {
@@ -212,6 +216,7 @@ abstract class ClipQueue {
         // A quarantined clip is parked, not queued — never re-read it (it would
         // come back as garbage "text" and fail forever).
         if (ext == 'dead') continue;
+        if (skip.contains(f.uri.pathSegments.last)) continue; // failed already
         // Batch cap: stop BEFORE consuming the file, so it stays on disk (the
         // only crash-proof copy) for the next pass. Never cap at zero items —
         // one clip larger than the budget must still make progress.

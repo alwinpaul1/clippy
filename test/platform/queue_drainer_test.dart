@@ -141,11 +141,15 @@ void main() {
             'delivered 1 of 8');
   });
 
-  test('a clip that fails every time is quarantined only after SEPARATE runs, '
-      'and is parked rather than destroyed', () async {
+  test('a clip that fails every time is parked only after SEPARATE runs, and is '
+      'parked rather than destroyed', () async {
+    var seq = 100;
     Future<void> attempt() async {
-      put('001.txt', 'good'); // a fresh good clip each run proves the engine
-      ClipQueue.noteDrainSuccess(); // the cooldown expires between runs
+      // A newer clip, drained AFTER the poison one — only a delivery that comes
+      // after a failure is evidence against it (an engine that dies part-way
+      // delivers first and throws after; that must convict nobody).
+      put('${seq++}.txt', 'good');
+      ClipQueue.expireCooldownForTests();
       await drainer((item) async {
         if (item.text == 'poison') throw StateError('unprocessable');
       }).run();
@@ -201,9 +205,9 @@ void main() {
   /// failures were written straight back to disk, drain() would re-read the same
   /// 30 forever and the good clip behind them would never once be attempted —
   /// the device silently stops syncing, permanently.
-  test('a whole batch of failing clips does NOT starve the good clips behind '
-      'them', () async {
-    for (var i = 1; i <= 30; i++) {
+  test('a jam of ANY size does not starve the good clips behind it (61 clips — '
+      'past every internal batch and memory bound)', () async {
+    for (var i = 1; i <= 61; i++) {
       put('${i.toString().padLeft(3, '0')}.txt', 'bad');
     }
     final synced = <String>[];
@@ -220,8 +224,8 @@ void main() {
     expect(synced, contains('900.txt'),
         reason: 'the good clip must get through on the FIRST run — a jammed '
             'head must never stop the whole device from syncing');
-    expect(tmp.listSync().where((f) => f.path.endsWith('.dead')), hasLength(30),
-        reason: 'and the bad clips are eventually parked (never deleted)');
+    expect(tmp.listSync().where((f) => f.path.endsWith('.dead')), hasLength(61),
+        reason: 'and every bad clip is eventually parked (never deleted)');
   });
 
   test('losing the link mid-drain puts the undelivered remainder back', () async {
@@ -250,6 +254,49 @@ void main() {
   /// so it goes false on the very next iteration. A clip that threw is held in
   /// memory, and an early return must not walk away from it: drain() already
   /// deleted its file, so at that instant it exists NOWHERE else.
+  /// The engine delivers one clip and then dies — a disk filling up: the first
+  /// prefs write fits, the next does not. Repeated over runs, "something synced
+  /// earlier in this run" would frame every clip behind the death and park them
+  /// all. Only a delivery AFTER the failure is evidence against a clip.
+  test('an engine that dies part-way through, run after run, never blames the '
+      'clips behind the death', () async {
+    for (var i = 1; i <= 8; i++) {
+      put('00$i.txt', 'clip-$i');
+    }
+
+    for (var run = 0; run < 4; run++) {
+      ClipQueue.noteDrainSuccess(); // cooldowns expire
+      var alive = 1; // exactly one clip goes through, then the disk is full
+      await drainer((item) async {
+        if (alive-- <= 0) throw StateError('disk full');
+      }).run();
+    }
+
+    expect(tmp.listSync().where((f) => f.path.endsWith('.dead')), isEmpty,
+        reason: 'nothing was ever delivered AFTER these clips failed — the '
+            'engine died, and a dying engine must never convict the backlog');
+  });
+
+  test('an unprocessable clip that cannot even be PARKED does not pin sync '
+      'latency at four minutes', () async {
+    put('001.txt', 'poison');
+    Directory('${tmp.path}/001.txt.dead').createSync(); // the park will fail
+
+    for (var run = 0; run < 6; run++) {
+      put('90$run.txt', 'good'); // proves the engine, so 001 is answerable
+      ClipQueue.expireCooldownForTests();
+      await drainer((item) async {
+        if (item.text == 'poison') throw StateError('unprocessable');
+      }).run();
+    }
+
+    expect(ClipQueue.drainFailures, 0,
+        reason: 'the engine is demonstrably healthy — a clip it cannot swallow '
+            'must not escalate the backoff and make every good clip wait');
+    expect(File('${tmp.path}/001.txt').existsSync(), isTrue,
+        reason: 'and the clip is still queued, not destroyed');
+  });
+
   test('a clip that threw is rescued when the link drops immediately after',
       () async {
     put('001.txt', 'a');
