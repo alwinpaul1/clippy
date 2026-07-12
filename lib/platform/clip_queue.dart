@@ -220,7 +220,7 @@ abstract class ClipQueue {
   /// for the wrong reason.
   @visibleForTesting
   static void resetForTests() {
-    _lastBound = null;
+    _boundNextAt = null;
     _failures.clear();
     _tried.clear();
     _untriedAt = null;
@@ -536,15 +536,19 @@ abstract class ClipQueue {
   /// ones are reaped here too: while offline — the only time this runs —
   /// drain() never runs, so its reaper can't.
   // The bound is a slow-moving condition, but the service ticks the drain (and
-  // now this) every 10s. Listing + stat-ing 200 files that often is pure battery.
-  static DateTime? _lastBound;
+  // this) every 10s: listing + stat-ing 200 files that often is pure battery.
+  // Two different waits, because they answer two different questions:
+  //  * a pass that RAN has just settled the queue — nothing can change fast
+  //    enough to matter for a minute;
+  //  * a pass that stood down for a live drain settled nothing, so it must come
+  //    back soon — but not on every tick for the length of a long drain.
+  static DateTime? _boundNextAt;
+  static const _boundAfterPass = Duration(seconds: 60);
+  static const _boundAfterStandDown = Duration(seconds: 15);
 
   static Future<void> enforceBound() async {
-    final last = _lastBound;
-    if (last != null &&
-        DateTime.now().difference(last) < const Duration(seconds: 60)) {
-      return;
-    }
+    final next = _boundNextAt;
+    if (next != null && DateTime.now().isBefore(next)) return;
     final dir = await _dir();
     if (dir == null) return;
     try {
@@ -558,8 +562,11 @@ abstract class ClipQueue {
       // Standing down does NOT spend the throttle: otherwise one unlucky
       // overlap with a live drain would push the next pruning pass a whole
       // minute past the moment the queue actually needed it.
-      if (_drainLive(entries)) return;
-      _lastBound = DateTime.now();
+      if (_drainLive(entries)) {
+        _boundNextAt = DateTime.now().add(_boundAfterStandDown);
+        return;
+      }
+      _boundNextAt = DateTime.now().add(_boundAfterPass);
       // The bound is judged against EVERYTHING on disk (that's the real
       // usage), but only files past the age gate are eligible for deletion —
       // fresh writes protect themselves by mtime.
