@@ -12,14 +12,16 @@ class AndroidUpdater implements PlatformUpdater {
   static const _channel = MethodChannel('clippy/update');
 
   @override
-  Future<void> update(Uri artifactUrl, {void Function(double)? onProgress}) async {
+  Future<void> update(Uri artifactUrl,
+      {required String sha256, void Function(double)? onProgress}) async {
     final base = await getApplicationSupportDirectory(); // == filesDir
     final dir = Directory('${base.path}/updates');
     dir.createSync(recursive: true);
     final apk = File('${dir.path}/clippy-update.apk');
     if (apk.existsSync()) apk.deleteSync();
 
-    await downloadTo(artifactUrl, apk, onProgress: onProgress);
+    await downloadTo(artifactUrl, apk,
+        expectedSha256: sha256, onProgress: onProgress);
 
     await _channel.invokeMethod('installApk', {'path': apk.path});
   }

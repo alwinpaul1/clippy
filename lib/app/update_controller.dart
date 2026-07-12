@@ -82,6 +82,17 @@ class UpdateController {
     return path == null ? null : _service.artifactUri(path);
   }
 
+  /// The expected SHA-256 of the current platform's artifact, from the manifest.
+  String? artifactSha256(UpdateInfo info) => kIsWeb
+      ? null
+      : (defaultTargetPlatform == TargetPlatform.android
+          ? info.androidSha256
+          : defaultTargetPlatform == TargetPlatform.macOS
+              ? info.macosSha256
+              : defaultTargetPlatform == TargetPlatform.windows
+                  ? info.windowsSha256
+                  : null);
+
   /// Downloads and applies the update. Throws on failure (caller shows an error
   /// and can fall back to the download page).
   Future<void> runUpdate(
@@ -93,7 +104,17 @@ class UpdateController {
     if (updater == null || url == null) {
       throw Exception('In-app update unavailable on this platform');
     }
-    await updater.update(url, onProgress: onProgress);
+    // Fail CLOSED: an update with no published hash is not installed. The check
+    // is worthless if it is skipped whenever the hash is missing — a network
+    // attacker would just strip it. CI always publishes one; its absence means
+    // a tampered manifest or a broken build, and the UI falls back to the
+    // download page (a browser download over HTTPS).
+    final sha = artifactSha256(info);
+    if (sha == null || sha.isEmpty) {
+      throw Exception('Update manifest is missing its integrity hash — '
+          'refusing to install. Use the download page instead.');
+    }
+    await updater.update(url, sha256: sha, onProgress: onProgress);
   }
 }
 
