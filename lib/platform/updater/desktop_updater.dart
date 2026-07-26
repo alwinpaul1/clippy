@@ -45,12 +45,21 @@ class DesktopUpdater implements PlatformUpdater {
     final exe = File(Platform.resolvedExecutable);
     final installedApp = exe.parent.parent.parent.path; // -> Clippy.app
 
-    // Detached helper: wait for us to quit, swap the bundle, relaunch.
+    // Detached helper: wait for THIS process to quit, swap the bundle, relaunch.
+    // Must interpolate Dart's [pid] — a bare `$pid` in the script is empty, so
+    // the wait loop never runs and `rm -rf` races the still-running app (swap
+    // fails; user stays on the old build).
+    final selfPid = pid;
     final helper = File('${tmp.path}/clippy-update.sh');
     helper.writeAsStringSync('''#!/bin/bash
-while kill -0 $pid 2>/dev/null; do sleep 0.3; done
+set -e
+while kill -0 $selfPid 2>/dev/null; do sleep 0.3; done
+# Brief settle so macOS releases bundle locks after exit.
+sleep 0.5
 rm -rf "$installedApp"
 ditto "${newApp.path}" "$installedApp"
+# Clear quarantine so Gatekeeper does not block the relaunch of a swapped app.
+xattr -dr com.apple.quarantine "$installedApp" 2>/dev/null || true
 open "$installedApp"
 ''');
     await Process.run('chmod', ['+x', helper.path]);
