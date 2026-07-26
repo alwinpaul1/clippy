@@ -11,12 +11,15 @@ in-app-update manifest.
 
 Everything below is triggered by two files. To ship a new version:
 
-1. **Bump the version in `pubspec.yaml`** (line `version:`), format `SEMVER+BUILD`.
-   Always raise **at least the build number** — the updater treats a higher
-   semver *or* a higher build as "newer" (`isNewerThan` in
-   `lib/core/update/update_info.dart`). Examples:
-   - bug/maintenance: `1.0.0+1` → `1.0.1+2`
-   - new features:    `1.0.0+1` → `1.1.0+2`
+1. **Bump the user-facing version in `pubspec.yaml`** (line `version:`).
+   Format is still Flutter's `SEMVER+BUILD` (Android needs a monotonic build
+   integer), but **users only ever see SEMVER** — never show `+build` in the
+   UI. **Always raise the SEMVER** for every release; never ship a
+   build-only re-release of the same SEMVER (no more `1.0.33+36` → `+37`).
+   Raise the build number alongside the SEMVER (keep it strictly increasing).
+   Examples:
+   - bug/maintenance: `1.0.34+41` → `1.0.35+42`
+   - new features:    `1.0.34+41` → `1.1.0+42`
 
 2. **Edit `release.json`** (repo root) — set its `"version"` to the new semver
    (CI FAILS the build if it doesn't match `pubspec.yaml`, so stale notes can

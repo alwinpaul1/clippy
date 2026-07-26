@@ -39,7 +39,7 @@ class UpdateBanner extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Update available — v${info.displayVersion}',
+                  'Update available — v${info.version}',
                   style: Ct.body(13, weight: FontWeight.w500, color: c.ink),
                 ),
               ),
@@ -132,7 +132,7 @@ class _UpdateSheetState extends State<_UpdateSheet> {
                 Expanded(child: Text(title, style: Ct.title(22, color: c.ink))),
               ],
             ),
-            Text('Version ${info.displayVersion}',
+            Text('Version ${info.version}',
                 style: Ct.body(13, color: c.muted)),
             const SizedBox(height: 16),
             Flexible(

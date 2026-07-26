@@ -22,11 +22,6 @@ void main() {
     expect(u.isNewerThan('1.2.0', 1), false); // older manifest
   });
 
-  test('displayVersion includes build so build-only releases look distinct', () {
-    final u = UpdateInfo.fromJson({'version': '1.0.33', 'build': 36});
-    expect(u.displayVersion, '1.0.33+36');
-  });
-
   test('isBugUpdate when features empty', () {
     final bug = UpdateInfo.fromJson({
       'version': '1.0.1',
