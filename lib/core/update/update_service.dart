@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,21 +23,59 @@ class UpdateService {
         _client = client ?? http.Client();
 
   static const _dismissKey = 'clippy.update.dismissed';
+  static const _timeout = Duration(seconds: 12);
 
   /// Returns the manifest's [UpdateInfo] iff it is strictly newer than the
   /// running app; null if up to date. THROWS on a non-200 response, a network
   /// failure, or an unreadable manifest — so the manual "Check for updates"
   /// path can tell "up to date" apart from "couldn't reach the relay".
+  ///
+  /// Transient DNS / socket failures get one short retry (macOS + Tailscale
+  /// MagicDNS sometimes returns a one-shot lookup miss).
   Future<UpdateInfo?> checkOrThrow() async {
-    final res = await _client.get(manifestUri);
-    if (res.statusCode != 200) {
-      throw Exception('manifest returned HTTP ${res.statusCode}');
+    Object? lastError;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final res = await _client.get(manifestUri).timeout(_timeout);
+        if (res.statusCode != 200) {
+          throw Exception('manifest returned HTTP ${res.statusCode}');
+        }
+        final info = UpdateInfo.fromJson(
+          (jsonDecode(res.body) as Map).cast<String, dynamic>(),
+        );
+        final cur = await _currentVersion();
+        return info.isNewerThan(cur.version, cur.build) ? info : null;
+      } on TimeoutException {
+        lastError = Exception('timed out reaching ${manifestUri.host}');
+        if (attempt == 0) {
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+          continue;
+        }
+      } on SocketException catch (e) {
+        lastError = e;
+        if (attempt == 0) {
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+          continue;
+        }
+      } on http.ClientException catch (e) {
+        // package:http wraps many lookup failures as ClientException.
+        lastError = e;
+        final msg = e.message.toLowerCase();
+        final transient = msg.contains('failed host lookup') ||
+            msg.contains('connection') ||
+            msg.contains('network is unreachable') ||
+            msg.contains('nodename');
+        if (attempt == 0 && transient) {
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+          continue;
+        }
+      }
+      // Non-transient errors (bad JSON, non-200) are not caught above and
+      // propagate. Transient catches fall through here after the last attempt.
+      break;
     }
-    final info = UpdateInfo.fromJson(
-      (jsonDecode(res.body) as Map).cast<String, dynamic>(),
-    );
-    final cur = await _currentVersion();
-    return info.isNewerThan(cur.version, cur.build) ? info : null;
+    // ignore: only_throw_errors — lastError is Exception | SocketException | ClientException
+    throw lastError ?? Exception('could not reach the update server');
   }
 
   /// Silent check (automatic/startup path): the manifest's [UpdateInfo] iff

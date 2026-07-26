@@ -6,6 +6,8 @@
       "Relay and downloads now run on clippy.alwinpaul.me (self-hosted VPS) instead of Railway",
       "In-app updates and sync work for any network — no VPN required for users"
     ],
-    "fixes": []
+    "fixes": [
+      "Update check retries briefly on DNS/network blips and shows a clearer error if it still fails"
+    ]
   }
 }

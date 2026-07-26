@@ -179,16 +179,16 @@ class SettingsPage extends StatelessWidget {
     final result = await updater.checkNow();
     if (!context.mounted) return;
     switch (result) {
-      case CheckResult.updateAvailable:
+      case CheckResultUpdateAvailable():
         final info = updater.available.value;
         if (info != null) await showUpdateSheet(context, info);
-      case CheckResult.upToDate:
+      case CheckResultUpToDate():
         messenger.showSnackBar(
           const SnackBar(content: Text("You're on the latest version.")),
         );
-      case CheckResult.failed:
+      case CheckResultFailed(:final message):
         messenger.showSnackBar(
-          const SnackBar(content: Text("Couldn't check for updates.")),
+          SnackBar(content: Text("Couldn't check for updates: $message")),
         );
     }
   }

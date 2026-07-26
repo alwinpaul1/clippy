@@ -7,7 +7,22 @@ import '../platform/updater/platform_updater.dart';
 import 'relay_config.dart';
 
 /// Outcome of a manual "Check for updates".
-enum CheckResult { updateAvailable, upToDate, failed }
+sealed class CheckResult {
+  const CheckResult();
+}
+
+final class CheckResultUpdateAvailable extends CheckResult {
+  const CheckResultUpdateAvailable();
+}
+
+final class CheckResultUpToDate extends CheckResult {
+  const CheckResultUpToDate();
+}
+
+final class CheckResultFailed extends CheckResult {
+  final String message;
+  const CheckResultFailed(this.message);
+}
 
 /// App-wide in-app-update state: checks the relay manifest, holds the available
 /// update, and runs the platform installer. A single shared instance ([updater])
@@ -61,12 +76,43 @@ class UpdateController {
   Future<CheckResult> checkNow() async {
     try {
       final info = await _service.checkOrThrow();
-      if (info == null) return CheckResult.upToDate;
+      if (info == null) return const CheckResultUpToDate();
       available.value = info;
-      return CheckResult.updateAvailable;
-    } catch (_) {
-      return CheckResult.failed;
+      return const CheckResultUpdateAvailable();
+    } catch (e) {
+      return CheckResultFailed(_friendlyCheckError(e));
     }
+  }
+
+  /// Short, user-facing reason for a failed update check (DNS / timeout / HTTP).
+  static String _friendlyCheckError(Object e) {
+    final s = e.toString().toLowerCase();
+    if (s.contains('failed host lookup') ||
+        s.contains('nodename') ||
+        s.contains('name or service not known') ||
+        s.contains('no address associated')) {
+      return 'could not resolve the update server (DNS/network)';
+    }
+    if (s.contains('timed out') || s.contains('timeout')) {
+      return 'timed out reaching the update server';
+    }
+    if (s.contains('connection refused') ||
+        s.contains('connection reset') ||
+        s.contains('network is unreachable')) {
+      return 'could not connect to the update server';
+    }
+    if (s.contains('http ')) {
+      // e.g. Exception: manifest returned HTTP 502
+      final m = RegExp(r'http\s+(\d+)').firstMatch(s);
+      if (m != null) return 'update server returned HTTP ${m.group(1)}';
+    }
+    // Strip noisy Exception: prefixes for the snackbar.
+    var msg = e.toString();
+    if (msg.startsWith('Exception: ')) msg = msg.substring(11);
+    if (msg.startsWith('SocketException: ')) msg = msg.substring(17);
+    if (msg.startsWith('ClientException: ')) msg = msg.substring(17);
+    if (msg.length > 120) msg = '${msg.substring(0, 117)}...';
+    return msg.isEmpty ? 'unknown error' : msg;
   }
 
   Future<void> dismiss() async {
