@@ -149,9 +149,49 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: flutter pub get
       - run: flutter build windows --release
-      - name: Build installer (Inno Setup, preinstalled on the runner)
+      - name: Build installer (Inno Setup, version from pubspec)
         shell: pwsh
-        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" windows\installer.iss'
+        run: |
+          $line = (Select-String -Path pubspec.yaml -Pattern '^version:').Line
+          $full = ($line -replace 'version:\s*', '').Trim()
+          $semver = ($full -split '\+')[0]
+          Write-Host "Inno AppVersion=$semver (from pubspec $full)"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+            "/DMyAppVersion=$semver" windows\installer.iss
+      # Optional Authenticode sign — runs only when secrets are present.
+      # Without a cert, SmartScreen still warns ("Unknown publisher"); signing
+      # is the only real fix. Secrets: WINDOWS_CERT_PFX_BASE64 + WINDOWS_CERT_PASSWORD
+      # (or use Azure Trusted Signing — see docs in CLAUDE.md).
+      - name: Sign Clippy-Setup.exe (Authenticode, optional)
+        if: ${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' }}
+        shell: pwsh
+        env:
+          WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'clippy-code-sign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
+          $signtool = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
+            -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\signtool.exe$' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) { throw 'signtool.exe not found on runner' }
+          Write-Host "Using $signtool"
+          & $signtool sign /f $pfx /p $env:WINDOWS_CERT_PASSWORD `
+            /tr http://timestamp.digicert.com /td sha256 /fd sha256 `
+            /d "Clippy" Clippy-Setup.exe
+          if ($LASTEXITCODE -ne 0) { throw "signtool sign failed: $LASTEXITCODE" }
+          & $signtool verify /pa /v Clippy-Setup.exe
+          if ($LASTEXITCODE -ne 0) { throw "signtool verify failed: $LASTEXITCODE" }
+          Remove-Item $pfx -Force
+          Write-Host 'Clippy-Setup.exe signed and verified'
+      - name: Note when unsigned
+        if: ${{ secrets.WINDOWS_CERT_PFX_BASE64 == '' }}
+        shell: pwsh
+        run: |
+          Write-Host '::notice::WINDOWS_CERT_PFX_BASE64 not set — Clippy-Setup.exe is UNSIGNED.'
+          Write-Host 'SmartScreen will warn until a code-signing cert is added (see CLAUDE.md).'
       - uses: actions/upload-artifact@v7
         with:
           name: windows-setup
