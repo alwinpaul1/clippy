@@ -321,6 +321,38 @@ Future<void> _handleRequest(HttpRequest req) async {
     await _serveVersion(req);
     return;
   }
+  // Allow-listed static assets for the download page (e.g. liquid-glass.js).
+  if (req.uri.path == '/liquid-glass.js') {
+    await _serveWebAsset(req, 'liquid-glass.js', 'application/javascript');
+    return;
+  }
+  req.response.statusCode = HttpStatus.notFound;
+  await req.response.close();
+}
+
+/// Serve a file from the web/ root (allow-listed callers only — no path traversal).
+Future<void> _serveWebAsset(
+  HttpRequest req,
+  String name,
+  String mime,
+) async {
+  for (final dir in [
+    'web',
+    '/app/web',
+    '${File(Platform.resolvedExecutable).parent.parent.path}/web',
+  ]) {
+    final file = File('$dir/$name');
+    if (file.existsSync()) {
+      final parts = mime.split('/');
+      req.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentType = ContentType(parts[0], parts[1])
+        ..headers.set('Cache-Control', 'public, max-age=86400')
+        ..add(await file.readAsBytes());
+      await req.response.close();
+      return;
+    }
+  }
   req.response.statusCode = HttpStatus.notFound;
   await req.response.close();
 }
