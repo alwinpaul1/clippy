@@ -68,19 +68,14 @@ staging a one-off VPS upload.
   `/download/Clippy-Setup.exe`. If you rename an artifact, update the matching
   path in the "Generate update manifest" step of `ci.yml` in the same change.
 
-- **Windows code signing (SmartScreen).** Unsigned `Clippy-Setup.exe` triggers
-  SmartScreen ("Unknown publisher"). There is **no free software-only fix** —
-  you need an Authenticode cert (OV cloud/HSM, or Azure Trusted Signing).
-  CI signs automatically when these secrets exist:
-  - `WINDOWS_CERT_PFX_BASE64` — base64 of the `.pfx` (export from your CA/HSM)
-  - `WINDOWS_CERT_PASSWORD` — PFX password
-  Timestamp uses DigiCert (`http://timestamp.digicert.com`). Without the
-  secrets, CI still builds an unsigned installer and prints a notice.
-  Note (2026): EV no longer auto-bypasses SmartScreen; reputation still builds
-  over downloads. Signing shows a real publisher name and is required for a
-  professional install path.
-  **Never regenerate** the Inno `AppId` in `windows/installer.iss` — it is the
-  permanent upgrade identity.
+- **Windows code signing (SmartScreen).** Best **free** path: open-source
+  eligibility (MIT `LICENSE` + `CODE_SIGNING_POLICY.md`) and
+  [SignPath Foundation](https://signpath.org) — apply once, then set
+  `SIGNPATH_*` secrets (see `docs/windows-code-signing.md`). CI also supports
+  a paid PFX: `WINDOWS_CERT_PFX_BASE64` + `WINDOWS_CERT_PASSWORD`. Without
+  either, the installer ships **unsigned** and SmartScreen may warn.
+  Note (2026): EV no longer auto-bypasses SmartScreen. **Never regenerate**
+  the Inno `AppId` in `windows/installer.iss`.
 
 ---
 

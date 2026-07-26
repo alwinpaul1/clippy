@@ -5,8 +5,8 @@
       "Stable release on clippy.alwinpaul.me — self-hosted relay for all devices, no VPN required"
     ],
     "improvements": [
+      "Open-source MIT license and SignPath-ready code signing policy for free Windows Authenticode",
       "Windows installer uses a permanent AppId and real AppVersion from the release",
-      "CI can Authenticode-sign Clippy-Setup.exe when a code-signing certificate is configured",
       "In-app updates show full version+build labels",
       "Update checks retry briefly on DNS/network blips"
     ],

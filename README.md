@@ -3,8 +3,9 @@
 Cross-device clipboard sync. Copy on one device, paste on another — text and
 images, end-to-end encrypted, with no account and no cloud reading your data.
 
-**Platforms:** macOS · Windows · Android
-**Download:** <https://clippy.alwinpaul.me>
+**Platforms:** macOS · Windows · Android  
+**Download:** <https://clippy.alwinpaul.me>  
+**License:** [MIT](LICENSE)
 
 ## What it does
 
@@ -22,6 +23,12 @@ images, end-to-end encrypted, with no account and no cloud reading your data.
   are idempotent (no duplicates).
 - **Self-updating** — every client checks the relay's update manifest and
   installs new releases in-app on all three platforms.
+
+## Code signing policy
+
+See [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md). Free Windows code signing
+for open-source releases is provided by [SignPath.io](https://about.signpath.io),
+certificate by [SignPath Foundation](https://signpath.org) (once approved).
 
 ## Privacy model
 

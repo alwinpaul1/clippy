@@ -191,6 +191,53 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "signtool verify failed: $LASTEXITCODE" }
           Remove-Item $pfx -Force
           Write-Host 'Clippy-Setup.exe signed and verified'
+      # Free OSS path: SignPath Foundation (after apply + secrets). See
+      # CODE_SIGNING_POLICY.md and docs/windows-code-signing.md.
+      - name: Upload unsigned installer for SignPath
+        id: upload-unsigned-windows
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-setup-unsigned
+          path: Clippy-Setup.exe
+          if-no-files-found: error
+      # Runs only when SIGNPATH_API_TOKEN is set (checked in a prior shell step via env).
+      # Until Alwin completes SignPath approval, this step is skipped cleanly.
+      - name: Check SignPath configuration
+        id: signpath-cfg
+        shell: pwsh
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+        run: |
+          if ([string]::IsNullOrEmpty($env:SIGNPATH_API_TOKEN)) {
+            echo "enabled=false" >> $env:GITHUB_OUTPUT
+            Write-Host '::notice::SIGNPATH_API_TOKEN not set — skip free OSS signing (apply at signpath.org).'
+          } else {
+            echo "enabled=true" >> $env:GITHUB_OUTPUT
+          }
+      - name: Sign via SignPath (free OSS, when configured)
+        if: steps.signpath-cfg.outputs.enabled == 'true'
+        id: signpath
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ secrets.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned-windows.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: ${{ github.workspace }}/signed-windows
+      - name: Prefer SignPath-signed installer when present
+        shell: pwsh
+        run: |
+          $signed = Get-ChildItem -Path "${{ github.workspace }}\signed-windows" -Recurse -Filter 'Clippy-Setup.exe' -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if ($signed) {
+            Copy-Item $signed.FullName -Destination Clippy-Setup.exe -Force
+            Write-Host "Using SignPath-signed installer: $($signed.FullName)"
+          } else {
+            Write-Host '::notice::No SignPath-signed binary — shipping PFX-signed or unsigned Clippy-Setup.exe.'
+          }
       - uses: actions/upload-artifact@v7
         with:
           name: windows-setup
