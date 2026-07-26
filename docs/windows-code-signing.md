@@ -30,16 +30,28 @@ Without secrets, build succeeds **unsigned** (same as before).
 
 ## How to enable signing
 
-1. Buy an **OV code signing** cert that can export a PFX for CI, **or** use
-   Azure Trusted Signing (cloud, no USB token in some flows).
-2. Export PFX, base64 it:
+### Option A — classic PFX (already wired in CI)
+
+1. Obtain an **OV** Authenticode cert (HSM/cloud export to PFX if required).
+2. Base64 the PFX:
    ```bash
    base64 -i ClippyCodeSign.pfx | pbcopy   # macOS
    ```
 3. GitHub → repo → Settings → Secrets:
    - `WINDOWS_CERT_PFX_BASE64`
    - `WINDOWS_CERT_PASSWORD`
-4. Push to `main` — Windows job should log `Clippy-Setup.exe signed and verified`.
+4. Push to `main` — Windows job logs `Clippy-Setup.exe signed and verified`.
+
+### Option B — Azure Artifact Signing (~$10/mo if eligible)
+
+Not wired by default (needs Azure identity setup). Pattern:
+
+1. Azure Artifact Signing account + certificate profile  
+2. Entra app + OIDC federated credential for this GitHub repo  
+3. Secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`  
+4. Job uses `azure/login` + `azure/artifact-signing-action` on `Clippy-Setup.exe`  
+
+Geo/eligibility limits apply (see Microsoft docs).
 
 ## Installer identity
 
