@@ -1,15 +1,15 @@
 {
-  "version": "1.0.33",
+  "version": "1.0.34",
   "notes": {
-    "features": [],
+    "features": [
+      "Stable release on clippy.alwinpaul.me — self-hosted relay for all devices, no VPN required"
+    ],
     "improvements": [
-      "Relay and downloads now run on clippy.alwinpaul.me (self-hosted VPS) instead of Railway",
-      "In-app updates and sync work for any network — no VPN required for users"
+      "In-app updates show full version+build labels",
+      "Update checks retry briefly on DNS/network blips"
     ],
     "fixes": [
-      "Update check retries briefly on DNS/network blips and shows a clearer error if it still fails",
-      "Update banner and sheet show the full version+build so build-only releases are obvious",
-      "macOS in-app update actually waits for Clippy to quit before swapping the app (PID bug)"
+      "macOS in-app update now waits for Clippy to quit before swapping the app"
     ]
   }
 }
