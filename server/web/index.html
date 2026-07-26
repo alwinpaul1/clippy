@@ -73,13 +73,8 @@
   .btn:hover{background:var(--green-hover); transform:translateY(-1px)}
   .btn:focus-visible{outline:3px solid rgba(41,169,244,.5); outline-offset:2px}
   .btn svg{width:20px; height:20px; flex:none}
-  .others{font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--muted2)}
-  .others a{color:var(--muted); text-decoration:none; border-bottom:1px solid var(--border-strong)}
-  .others a:hover{color:var(--green)}
-  .others .sep{opacity:.5; margin:0 8px}
 
-  /* The three tips as small cards (same design language as platform cards;
-     they share the 3D tilt via the .feature selector in the tilt JS/CSS). */
+  /* Feature tips */
   .features{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:60px 0 72px}
   .feature{
     position:relative; background:var(--surface); border:1px solid var(--border);
@@ -89,52 +84,58 @@
   .feature h3{font-family:'Newsreader',serif; font-weight:500; font-size:18px; margin:0 0 5px; letter-spacing:-.01em}
   .feature p{margin:0; font-size:13.5px; color:var(--muted); line-height:1.5}
 
-  /* Platform cards */
-  .platforms-h{text-align:center; margin:0 0 24px}
-  .platforms-h h2{font-family:'Newsreader',serif; font-weight:500; font-size:30px; margin:0 0 6px; letter-spacing:-.01em}
-  .platforms-h p{margin:0; color:var(--muted); font-size:15px}
-  .cards{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin:0 0 72px}
-  .card{
-    position:relative;
-    background:var(--surface); border:1px solid var(--border); border-radius:16px;
-    padding:24px 22px; display:flex; flex-direction:column; gap:4px;
-    transition:border-color .18s ease, box-shadow .18s ease; scroll-margin-top:24px;
-  }
-  /* 3D tilt + cursor glare on hover, mouse only (mirrors the TiltCard effect).
-     JS sets --rx/--ry (tilt) and --gx/--gy (glare origin) per card. */
+  /* 3D tilt on feature cards only (mouse + fine pointer). */
   @media (hover:hover) and (pointer:fine){
-    .cards,.features{perspective:1000px}
-    .card,.feature{
+    .features{perspective:1000px}
+    .feature{
       transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));
       transform-style:preserve-3d;
       transition:transform .13s ease-out, border-color .18s ease, box-shadow .22s ease;
       will-change:transform;
     }
-    .card:hover,.feature:hover{box-shadow:0 20px 44px rgba(31,28,21,.17); border-color:var(--border-strong)}
-    .card::after,.feature::after{
+    .feature:hover{box-shadow:0 20px 44px rgba(31,28,21,.17); border-color:var(--border-strong)}
+    .feature::after{
       content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
       background:radial-gradient(circle at var(--gx,50%) var(--gy,50%), rgba(255,255,255,.55), transparent 46%);
       opacity:0; transition:opacity .2s ease;
     }
-    .card:hover::after,.feature:hover::after{opacity:.28}
+    .feature:hover::after{opacity:.28}
   }
-  @media (prefers-reduced-motion:reduce){.card,.feature{transform:none !important}}
-  /* Briefly highlight a card when you jump to it from an "Also on" link. */
-  .card.flash{animation:cardFlash 1.4s ease}
-  @keyframes cardFlash{0%,100%{box-shadow:0 0 0 0 rgba(31,75,63,0)}30%{box-shadow:0 0 0 3px rgba(31,75,63,.35)}}
-  .card.you{border-color:var(--green); box-shadow:0 6px 20px rgba(31,75,63,.10)}
-  .card .os-ic{width:30px; height:30px; margin-bottom:12px; color:var(--ink)}
-  .card h3{font-family:'Newsreader',serif; font-weight:500; font-size:22px; margin:0; letter-spacing:-.01em}
-  .card .req{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--muted2); margin:2px 0 16px}
-  .card .yours{display:inline-block; font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--green); margin-bottom:10px}
-  .card .dl{
-    margin-top:auto; display:inline-flex; align-items:center; justify-content:center; gap:8px;
-    text-decoration:none; font-weight:500; font-size:14.5px; padding:12px 16px; border-radius:11px;
-    border:1px solid var(--border-strong); color:var(--ink); transition:background .16s ease, border-color .16s ease;
+  @media (prefers-reduced-motion:reduce){.feature{transform:none !important}}
+
+  /* Platform picker: segmented toggle + one download button */
+  .platforms-h{text-align:center; margin:0 0 28px; scroll-margin-top:24px}
+  .platforms-h h2{font-family:'Newsreader',serif; font-weight:500; font-size:30px; margin:0 0 6px; letter-spacing:-.01em}
+  .platforms-h p{margin:0; color:var(--muted); font-size:15px}
+  .get-dl{
+    display:flex; flex-direction:column; align-items:center; gap:16px;
+    margin:0 0 72px;
   }
-  .card .dl:hover{background:var(--bg); border-color:var(--green)}
-  .card .dl.soon{color:var(--muted2); border-style:dashed; pointer-events:none}
-  .card .dl svg{width:16px; height:16px}
+  .os-toggle{
+    display:inline-flex; padding:4px; gap:2px;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:14px; box-shadow:0 1px 2px rgba(31,28,21,.04);
+  }
+  .os-opt{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    border:0; background:transparent; cursor:pointer;
+    font-family:'Instrument Sans',system-ui,sans-serif;
+    font-weight:500; font-size:14.5px; color:var(--muted);
+    padding:11px 20px; border-radius:11px;
+    transition:background .15s ease, color .15s ease, box-shadow .15s ease;
+  }
+  .os-opt svg{width:16px; height:16px; flex:none}
+  .os-opt:hover{color:var(--ink)}
+  .os-opt[aria-selected="true"]{
+    background:var(--green); color:#F4F1EA;
+    box-shadow:0 2px 8px rgba(31,75,63,.18);
+  }
+  .os-opt:focus-visible{outline:3px solid rgba(41,169,244,.45); outline-offset:2px}
+  .os-req{
+    font-family:'IBM Plex Mono',monospace; font-size:12px;
+    color:var(--muted2); margin:0; min-height:1.2em;
+  }
+  .get-dl .btn{min-width:240px}
 
   footer{border-top:1px solid var(--border); padding:28px 0 44px; color:var(--muted2); font-size:13px; text-align:center}
   footer a{color:var(--muted); text-decoration:none; border-bottom:1px solid var(--border-strong)}
@@ -155,13 +156,14 @@
   .topbar .mark .eyes{transform-origin:center; transform-box:fill-box; animation:blink 4.2s linear infinite}
 
   @media (max-width:720px){
-    .cards{grid-template-columns:1fr}
     .features{grid-template-columns:1fr}
+    .os-toggle{width:100%; max-width:360px}
+    .os-opt{flex:1; padding:11px 10px; font-size:13.5px}
   }
   @media (prefers-reduced-motion:reduce){
     .mascot .body,.mascot .eyes,
     .topbar .mark .body,.topbar .mark .eyes,.topbar .gh .animation{animation:none}
-    .btn,.card,.card .dl{transition:none}
+    .btn,.os-opt{transition:none}
   }
 </style>
 </head>
@@ -189,9 +191,8 @@
       <div class="cta-row">
         <a class="btn" id="primaryBtn" href="#get">
           <span id="primaryIcon"></span>
-          <span>Download Clippy</span>
+          <span id="primaryLabel">Download Clippy</span>
         </a>
-        <div class="others" id="others"></div>
       </div>
     </section>
 
@@ -205,37 +206,26 @@
       <h2>Get Clippy</h2>
       <p>Pick your platform — pair them and they share one clipboard.</p>
     </div>
-    <section class="cards" id="cards">
-      <div class="card" data-os="macos" id="card-macos">
-        <svg class="os-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.5 3c.1 1-.3 2-.9 2.7-.6.8-1.6 1.4-2.6 1.3-.1-1 .4-2 .9-2.6.6-.8 1.7-1.3 2.6-1.4zM19 17.2c-.5 1.1-.7 1.6-1.3 2.6-.9 1.3-2.1 3-3.6 3-1.4 0-1.7-.9-3.6-.9-1.8 0-2.2.9-3.6.9-1.5 0-2.7-1.5-3.5-2.8C1.1 16.9.8 12.6 2.3 10.4c1-1.5 2.6-2.4 4.1-2.4 1.5 0 2.5 1 3.7 1 1.2 0 1.9-1 3.7-1 1.3 0 2.7.7 3.7 2-3.2 1.8-2.7 6.4 1.8 7.2z"/></svg>
-        <span class="yours" hidden>Your device</span>
-        <h3>macOS</h3>
-        <div class="req">Apple Silicon &amp; Intel · macOS 12+</div>
-        <a class="dl" href="/download/Clippy-macOS.dmg">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
-          Download
-        </a>
+    <section class="get-dl" id="cards" aria-label="Download Clippy">
+      <div class="os-toggle" role="tablist" aria-label="Platform">
+        <button type="button" class="os-opt" role="tab" data-os="macos" id="tab-macos" aria-selected="false">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.5 3c.1 1-.3 2-.9 2.7-.6.8-1.6 1.4-2.6 1.3-.1-1 .4-2 .9-2.6.6-.8 1.7-1.3 2.6-1.4zM19 17.2c-.5 1.1-.7 1.6-1.3 2.6-.9 1.3-2.1 3-3.6 3-1.4 0-1.7-.9-3.6-.9-1.8 0-2.2.9-3.6.9-1.5 0-2.7-1.5-3.5-2.8C1.1 16.9.8 12.6 2.3 10.4c1-1.5 2.6-2.4 4.1-2.4 1.5 0 2.5 1 3.7 1 1.2 0 1.9-1 3.7-1 1.3 0 2.7.7 3.7 2-3.2 1.8-2.7 6.4 1.8 7.2z"/></svg>
+          macOS
+        </button>
+        <button type="button" class="os-opt" role="tab" data-os="android" id="tab-android" aria-selected="false">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.6 9.5l1.4-2.4a.4.4 0 10-.7-.4l-1.4 2.5A8.7 8.7 0 0012 8c-1.8 0-3.4.5-4.9 1.2L5.7 6.7a.4.4 0 10-.7.4l1.4 2.4A8 8 0 002 16h20a8 8 0 00-4.4-6.5zM7.5 13.8a1 1 0 110-2 1 1 0 010 2zm9 0a1 1 0 110-2 1 1 0 010 2z"/></svg>
+          Android
+        </button>
+        <button type="button" class="os-opt" role="tab" data-os="windows" id="tab-windows" aria-selected="false">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.5l7.5-1v7.2H3zM11.3 4.4L21 3v9.7h-9.7zM3 12.5h7.5v7.2L3 18.6zM11.3 12.5H21V21l-9.7-1.3z"/></svg>
+          Windows
+        </button>
       </div>
-      <div class="card" data-os="android" id="card-android">
-        <svg class="os-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.6 9.5l1.4-2.4a.4.4 0 10-.7-.4l-1.4 2.5A8.7 8.7 0 0012 8c-1.8 0-3.4.5-4.9 1.2L5.7 6.7a.4.4 0 10-.7.4l1.4 2.4A8 8 0 002 16h20a8 8 0 00-4.4-6.5zM7.5 13.8a1 1 0 110-2 1 1 0 010 2zm9 0a1 1 0 110-2 1 1 0 010 2z"/></svg>
-        <span class="yours" hidden>Your device</span>
-        <h3>Android</h3>
-        <div class="req">Android 6+ · sideload APK</div>
-        <a class="dl" href="/download/Clippy-Android.apk">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
-          Download
-        </a>
-      </div>
-      <div class="card" data-os="windows" id="card-windows">
-        <svg class="os-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.5l7.5-1v7.2H3zM11.3 4.4L21 3v9.7h-9.7zM3 12.5h7.5v7.2L3 18.6zM11.3 12.5H21V21l-9.7-1.3z"/></svg>
-        <span class="yours" hidden>Your device</span>
-        <h3>Windows</h3>
-        <div class="req">Windows 10+ · 64-bit</div>
-        <a class="dl" href="/download/Clippy-Setup.exe">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
-          Download
-        </a>
-      </div>
+      <p class="os-req" id="osReq"></p>
+      <a class="btn" id="getBtn" href="/download/Clippy-macOS.dmg">
+        <span id="getIcon"></span>
+        <span id="getLabel">Download for macOS</span>
+      </a>
     </section>
 
     <footer>
@@ -256,11 +246,18 @@
     android:{label:'Download for Android', href:'/download/Clippy-Android.apk'},
     windows:{label:'Download for Windows', href:'/download/Clippy-Setup.exe'}
   };
+  var REQS = {
+    macos:'Apple Silicon & Intel · macOS 12+',
+    android:'Android 6+ · sideload APK',
+    windows:'Windows 10+ · 64-bit'
+  };
   var ICON = {
     macos:'<svg viewBox="0 0 24 24" fill="#F4F1EA" width="20" height="20"><path d="M16.5 3c.1 1-.3 2-.9 2.7-.6.8-1.6 1.4-2.6 1.3-.1-1 .4-2 .9-2.6.6-.8 1.7-1.3 2.6-1.4zM19 17.2c-.5 1.1-.7 1.6-1.3 2.6-.9 1.3-2.1 3-3.6 3-1.4 0-1.7-.9-3.6-.9-1.8 0-2.2.9-3.6.9-1.5 0-2.7-1.5-3.5-2.8C1.1 16.9.8 12.6 2.3 10.4c1-1.5 2.6-2.4 4.1-2.4 1.5 0 2.5 1 3.7 1 1.2 0 1.9-1 3.7-1 1.3 0 2.7.7 3.7 2-3.2 1.8-2.7 6.4 1.8 7.2z"/></svg>',
     android:'<svg viewBox="0 0 24 24" fill="#F4F1EA" width="20" height="20"><path d="M17.6 9.5l1.4-2.4a.4.4 0 10-.7-.4l-1.4 2.5A8.7 8.7 0 0012 8c-1.8 0-3.4.5-4.9 1.2L5.7 6.7a.4.4 0 10-.7.4l1.4 2.4A8 8 0 002 16h20a8 8 0 00-4.4-6.5zM7.5 13.8a1 1 0 110-2 1 1 0 010 2zm9 0a1 1 0 110-2 1 1 0 010 2z"/></svg>',
     windows:'<svg viewBox="0 0 24 24" fill="#F4F1EA" width="20" height="20"><path d="M3 5.5l7.5-1v7.2H3zM11.3 4.4L21 3v9.7h-9.7zM3 12.5h7.5v7.2L3 18.6zM11.3 12.5H21V21l-9.7-1.3z"/></svg>'
   };
+  var ORDER = ['macos','android','windows'];
+
   function detectOS(){
     var ua=navigator.userAgent;
     // Client hints survive "Desktop site" spoofing better than the UA string.
@@ -276,43 +273,56 @@
     if(touch&&Math.min(screen.width,screen.height)<900) return 'android';
     return 'other';
   }
-  var os=detectOS();
-  var primaryOS = (os==='macos'||os==='android'||os==='windows') ? os : 'macos';
-  var d=DL[primaryOS];
-  var btn=document.getElementById('primaryBtn');
-  btn.href=d.href;
-  document.getElementById('primaryIcon').innerHTML=ICON[primaryOS];
-  btn.querySelector('span:nth-child(2)').textContent = d.label;
 
-  // "Also available on …" line
-  var order=['macos','android','windows'];
-  var names={macos:'macOS',android:'Android',windows:'Windows'};
-  var others=order.filter(function(o){return o!==primaryOS;});
-  var html='Also on '+others.map(function(o){return '<a href="#card-'+o+'" data-card="'+o+'">'+names[o]+'</a>';}).join('<span class="sep">·</span>');
-  document.getElementById('others').innerHTML=html;
-  // Clicking a platform scrolls to its card (never a direct download) + flashes it.
-  Array.prototype.forEach.call(document.querySelectorAll('#others a[data-card]'), function(a){
-    a.addEventListener('click', function(){
-      var card=document.getElementById('card-'+a.getAttribute('data-card'));
-      if(card){ card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash'); }
+  function selectOS(key){
+    if(!DL[key]) return;
+    var d = DL[key];
+    Array.prototype.forEach.call(document.querySelectorAll('.os-opt'), function(b){
+      var on = b.getAttribute('data-os') === key;
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+      b.tabIndex = on ? 0 : -1;
+    });
+    document.getElementById('osReq').textContent = REQS[key] || '';
+    var getBtn = document.getElementById('getBtn');
+    getBtn.href = d.href;
+    document.getElementById('getIcon').innerHTML = ICON[key];
+    document.getElementById('getLabel').textContent = d.label;
+    // Keep hero CTA in sync with the selected platform.
+    var primary = document.getElementById('primaryBtn');
+    primary.href = d.href;
+    document.getElementById('primaryIcon').innerHTML = ICON[key];
+    document.getElementById('primaryLabel').textContent = d.label;
+  }
+
+  var os = detectOS();
+  var primaryOS = (os==='macos'||os==='android'||os==='windows') ? os : 'macos';
+  selectOS(primaryOS);
+
+  Array.prototype.forEach.call(document.querySelectorAll('.os-opt'), function(b){
+    b.addEventListener('click', function(){ selectOS(b.getAttribute('data-os')); });
+    b.addEventListener('keydown', function(e){
+      var i = ORDER.indexOf(b.getAttribute('data-os'));
+      if(i < 0) return;
+      var next = -1;
+      if(e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % ORDER.length;
+      if(e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (i - 1 + ORDER.length) % ORDER.length;
+      if(e.key === 'Home') next = 0;
+      if(e.key === 'End') next = ORDER.length - 1;
+      if(next < 0) return;
+      e.preventDefault();
+      selectOS(ORDER[next]);
+      document.querySelector('.os-opt[data-os="'+ORDER[next]+'"]').focus();
     });
   });
 
-  // Mark the visitor's card
-  if(os==='ios'){ /* iOS: no build; leave primary as macos, note phone */ }
-  var mine=document.querySelector('.card[data-os="'+primaryOS+'"]');
-  if(mine && (os===primaryOS)){ mine.classList.add('you'); var y=mine.querySelector('.yours'); if(y) y.hidden=false; }
-
-  // 3D tilt + cursor glare on the platform cards. Mouse only, and off when the
-  // visitor prefers reduced motion (mirrors the TiltCard useHoverCapable /
-  // useReducedMotion guards). CSS reads the vars we set here.
+  // 3D tilt + cursor glare on feature cards. Mouse only; off for reduced motion.
   (function(){
     if(!window.matchMedia) return;
     var fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
     var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if(!fine || reduce) return;
-    var MAX = 9; // degrees of tilt at the card edges
-    Array.prototype.forEach.call(document.querySelectorAll('.card, .feature'), function(card){
+    var MAX = 9;
+    Array.prototype.forEach.call(document.querySelectorAll('.feature'), function(card){
       card.addEventListener('mousemove', function(e){
         var r = card.getBoundingClientRect();
         var px = (e.clientX - r.left) / r.width;
