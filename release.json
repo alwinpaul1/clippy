@@ -1,9 +1,10 @@
 {
-  "version": "1.0.32",
+  "version": "1.0.33",
   "notes": {
     "features": [],
     "improvements": [
-      "In-app updates now verify each download against a checksum before installing, and only ever install from Clippy's own server"
+      "Relay and downloads now run on clippy.alwinpaul.me (self-hosted VPS) instead of Railway",
+      "In-app updates and sync work for any network — no VPN required for users"
     ],
     "fixes": []
   }

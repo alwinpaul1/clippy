@@ -158,9 +158,11 @@ jobs:
           path: Clippy-Setup.exe
           if-no-files-found: error
 
-  # ---- Deploy relay + download page + fresh builds to Railway ----
+  # ---- Deploy relay + download page + fresh builds to VPS (clippy.alwinpaul.me) ----
+  # Railway was retired. Relay runs on the VPS via Docker + Caddy.
+  # Auto-deploy needs repo secrets: VPS_HOST, VPS_USER, VPS_SSH_KEY.
   deploy:
-    name: Deploy to Railway
+    name: Deploy to VPS
     needs: [app, relay, build-android, build-macos, build-windows]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
@@ -226,40 +228,37 @@ jobs:
           }, open('server/web/downloads/version.json', 'w'))
           print(open('server/web/downloads/version.json').read())
           PY
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-      - run: npm i -g @railway/cli
-      - name: Deploy (relay + page + builds)
+      - name: Deploy to VPS (rsync + docker rebuild)
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
-          if [ -z "$RAILWAY_TOKEN" ]; then
-            echo "::notice::RAILWAY_TOKEN not set — skipping deploy. Add a Railway"
-            echo "project token as the RAILWAY_TOKEN repo secret to enable auto-deploy."
+          if [ -z "$VPS_SSH_KEY" ] || [ -z "$VPS_HOST" ]; then
+            echo "::notice::VPS_SSH_KEY / VPS_HOST not set — skipping remote deploy."
+            echo "Relay is already on the VPS (clippy.alwinpaul.me). Add secrets to"
+            echo "auto-push artifacts on each main merge, or rsync server/web/downloads manually."
             exit 0
           fi
-          # Upload DETACHED, then verify for real (below). With --ci the CLI
-          # attaches to Railway's build-log stream and derives its exit code from
-          # it — so a flaky stream ("Failed to stream build logs") makes it exit 1
-          # even when the deploy succeeds (it can't read the terminal status, so
-          # it fails pessimistically). --detach returns once the build is queued
-          # and can't be tripped by the stream. --no-gitignore is REQUIRED: newer
-          # railway CLIs honour .gitignore (which excludes server/web/downloads/,
-          # the CI-staged artifacts), so without it the download files + version
-          # .json are dropped and every /download 404s. .railwayignore still
-          # trims build/, .dart_tool/, the Flutter app dirs, etc.
-          railway up --detach --no-gitignore --service clippy-relay
-
-          # Trust the served result, not the CLI: poll version.json until the
-          # relay serves the version we just built (the artifacts + manifest are
-          # part of this same upload). Fails only if it never goes live.
-          # Full SEMVER+BUILD (e.g. 1.0.10+11). Keeping the build is essential:
-          # for a build-only re-release the OLD manifest already serves the same
-          # semver, so comparing semver alone would "verify" instantly even if
-          # the deploy failed. The manifest carries both fields.
+          USER="${VPS_USER:-root}"
+          install -m 600 /dev/null ~/.ssh/vps_key
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/vps_key
+          # shellcheck disable=SC2029
+          rsync -az -e "ssh -i ~/.ssh/vps_key -o StrictHostKeyChecking=accept-new" \
+            server/ "${USER}@${VPS_HOST}:/opt/clippy/relay/"
+          ssh -i ~/.ssh/vps_key -o StrictHostKeyChecking=accept-new "${USER}@${VPS_HOST}" \
+            'set -e
+             cd /opt/clippy/relay
+             docker build -t clippy-relay:prod -f Dockerfile .
+             docker rm -f clippy-relay 2>/dev/null || true
+             docker run -d --name clippy-relay --restart unless-stopped \
+               -p 127.0.0.1:8088:8080 \
+               -e PORT=8080 -e DB_PATH=/data/clippy.json \
+               -v /opt/clippy/data:/data \
+               --stop-timeout 15 \
+               clippy-relay:prod'
           EXPECT=$(grep -E '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//' | tr -d '[:space:]')
-          URL="https://clippy-relay-production.up.railway.app/version.json"
+          URL="https://clippy.alwinpaul.me/version.json"
           echo "Waiting for relay to serve $EXPECT ..."
           for i in $(seq 1 40); do
             GOT=$(curl -fsS "$URL" 2>/dev/null | python3 -c "import sys,json;d=json.load(sys.stdin);print(f\"{d.get('version','')}+{d.get('build','')}\")" 2>/dev/null || true)

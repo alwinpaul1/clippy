@@ -4,7 +4,7 @@ Cross-device clipboard sync. Copy on one device, paste on another — text and
 images, end-to-end encrypted, with no account and no cloud reading your data.
 
 **Platforms:** macOS · Windows · Android
-**Download:** <https://clippy-relay-production.up.railway.app>
+**Download:** <https://clippy.alwinpaul.me>
 
 ## What it does
 
@@ -45,7 +45,7 @@ Clippy's relay is a zero-knowledge router:
                 │ wss (E2E-encrypted payloads)
         ┌───────▼────────┐
         │  Dart relay    │  rooms · recent-history catch-up · ack/reject
-        │  (Railway)     │  also serves the download page + update manifest
+        │  (VPS)         │  also serves the download page + update manifest
         └────────────────┘
 ```
 
@@ -54,7 +54,7 @@ Clippy's relay is a zero-knowledge router:
 - `android/` — native capture: accessibility service, screenshot observer,
   share-sheet targets, APK self-install.
 - `server/` — the relay (`dart`, no framework), its own test suite, the
-  download page, and the Dockerfile Railway builds.
+  download page, and the Dockerfile the VPS builds.
 
 ## Building from source
 
@@ -85,7 +85,8 @@ cd server && dart test      # relay: protocol, repository, durability
 ## Releasing
 
 Merging to `main` is the release. CI builds all three platforms, generates the
-update manifest from `pubspec.yaml` + `release.json`, and deploys the relay
-with the artifacts to Railway; clients see the update banner on next launch.
+update manifest from `pubspec.yaml` + `release.json`, and (with VPS deploy
+secrets) deploys the relay + artifacts to `clippy.alwinpaul.me`; clients see
+the update banner on next launch.
 To cut a release: raise the version in `pubspec.yaml` (at least the build
 number), write the changelog lists in `release.json`, and merge via PR.

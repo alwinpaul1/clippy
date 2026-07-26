@@ -6,7 +6,7 @@ import 'dart:io';
 
 import 'package:clippy/core/pairing/pairing_key.dart';
 
-const relay = 'wss://clippy-relay-production.up.railway.app';
+const relay = 'wss://clippy.alwinpaul.me';
 
 Future<void> main(List<String> args) async {
   final message = args.isNotEmpty ? args.join(' ') : 'Hello from your Mac 👋';
