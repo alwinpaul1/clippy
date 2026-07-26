@@ -41,25 +41,23 @@ Your clipboard is stuck on one machine. Clippy keeps a **shared, encrypted clipb
 | **Android background** | Accessibility-driven capture (including Chrome URL bar) + screenshot sync while the app is closed. |
 | **Desktop tray** | macOS menu bar / Windows system tray; hide-on-close keeps sync running. |
 | **Reliable delivery** | Ack protocol, retries, idempotent resends — no silent drops or duplicates. |
-| **In-app updates** | All three platforms check `version.json` and install from the relay’s download paths. |
+| **In-app updates** | All three platforms can install new builds from the download host. |
 
 ---
 
 ## Install
 
-**Preferred:** download builds from the site (always the latest release):
-
 **→ [https://clippy.alwinpaul.me](https://clippy.alwinpaul.me)**
 
-| Platform | Artifact |
-|----------|----------|
-| macOS | `.dmg` (manual) or `.zip` (in-app update) |
-| Windows | `Clippy-Setup.exe` (per-user Inno installer) |
-| Android | `Clippy-Android.apk` (release-signed) |
-
-**Windows:** SmartScreen may warn until the installer is Authenticode-signed (see [Code signing](#code-signing-policy)). Choose *More info → Run anyway* only if you trust the download source.
+| Platform | File |
+|----------|------|
+| macOS | `.dmg` or `.zip` |
+| Windows | `Clippy-Setup.exe` |
+| Android | `Clippy-Android.apk` |
 
 **Pairing:** open Clippy on one device → show QR / key → scan or paste on the other. Same key = same room.
+
+On Windows, if SmartScreen appears, use *More info → Run anyway* only when you trust the download source.
 
 ---
 
@@ -89,22 +87,21 @@ This program does not send clipboard contents or pairing keys to third-party ana
                             ▼
                  ┌─────────────────────┐
                  │  Dart WebSocket     │
-                 │  relay (VPS)        │
+                 │  relay              │
                  │  rooms · history    │
-                 │  /version.json      │
-                 │  /download/*        │
+                 │  downloads          │
                  └─────────────────────┘
 ```
 
 | Path | Role |
 |------|------|
-| `lib/` | Flutter app — sync engine, crypto, history, updaters, platform glue |
-| `android/` | Accessibility capture, screenshot observer, APK install channel |
-| `macos/` / `windows/` | Desktop runners, tray, Windows Inno installer |
+| `lib/` | Flutter app — sync engine, crypto, history, platform glue |
+| `android/` | Accessibility capture, screenshot observer, APK install |
+| `macos/` / `windows/` | Desktop runners and tray |
 | `server/` | Zero-knowledge relay, download page, Dockerfile |
 
-Default production relay: `wss://clippy.alwinpaul.me`  
-Override at build time: `--dart-define=CLIPPY_RELAY_URL=wss://…`
+Default relay: `wss://clippy.alwinpaul.me`  
+Override: `--dart-define=CLIPPY_RELAY_URL=wss://…`
 
 ---
 
@@ -112,9 +109,9 @@ Override at build time: `--dart-define=CLIPPY_RELAY_URL=wss://…`
 
 ### Prerequisites
 
-- [Flutter](https://flutter.dev) (see CI for pinned version)
-- For the relay: Dart SDK (or run only the app against a remote relay)
-- Platform toolchains for the targets you build (Xcode, Android SDK, Visual Studio on Windows)
+- [Flutter](https://flutter.dev)
+- Dart SDK (for a local relay)
+- Platform toolchains for the targets you build
 
 ### Run the app
 
@@ -122,17 +119,17 @@ Override at build time: `--dart-define=CLIPPY_RELAY_URL=wss://…`
 git clone https://github.com/alwinpaul1/clippy.git
 cd clippy
 flutter pub get
-flutter run                    # current device / desktop
+flutter run
 ```
 
-### Run a local relay
+### Local relay
 
 ```bash
-dart run server/bin/relay.dart   # :8080, in-memory history
+dart run server/bin/relay.dart
 flutter run --dart-define=CLIPPY_RELAY_URL=ws://localhost:8080
 ```
 
-Persist history across restarts:
+Optional durable history:
 
 ```bash
 DB_PATH=/path/to/clippy.json dart run server/bin/relay.dart
@@ -141,64 +138,26 @@ DB_PATH=/path/to/clippy.json dart run server/bin/relay.dart
 ### Tests
 
 ```bash
-flutter test                 # app: engine, crypto, store, queue, UI
-cd server && dart test       # relay: protocol, repository, durability
+flutter test
+cd server && dart test
 ```
-
-### Project layout (quick map)
-
-```
-lib/app/           UI, controllers, settings, updates
-lib/core/          crypto, pairing, sync, WebSocket store, update logic
-lib/platform/      tray, clipboard, updaters, Android FGS
-server/lib/        relay implementation
-server/web/        download page + staged /download artifacts (CI)
-.github/workflows  CI: analyze, test, build all platforms, deploy VPS
-```
-
----
-
-## Releasing
-
-1. Bump **SEMVER** in `pubspec.yaml` (`version: X.Y.Z+BUILD` — users only see `X.Y.Z`; always raise SEMVER for a release, and raise BUILD with it for Android).
-2. Set matching `"version"` and notes in `release.json`.
-3. Merge to `main` (PR). CI builds macOS / Windows / Android, writes `version.json` (with SHA-256), and deploys to the VPS when deploy secrets are set.
-
-See [CLAUDE.md](CLAUDE.md) for full release and deploy invariants (Android keystore, artifact names, VPS flags).
-
----
-
-## Code signing policy
-
-See **[CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md)**.
-
-Free Windows code signing for open-source releases is provided by
-[SignPath.io](https://about.signpath.io), certificate by
-[SignPath Foundation](https://signpath.org) (once approved).  
-Until then, Windows builds may be unsigned and SmartScreen may warn.
-
-More detail: [docs/windows-code-signing.md](docs/windows-code-signing.md).
 
 ---
 
 ## Security
 
 - Treat the pairing QR/key like a password for your clipboard room.
-- Anyone with the key can join the room and receive encrypted history (they still need the key to decrypt).
-- Report security issues privately to the maintainer if possible; do not open public issues with exploit details.
+- Anyone with the key can join the room and decrypt history (they need the key).
+- Prefer private reports for security issues when possible.
 
 ---
 
 ## Contributing
 
-Contributions are welcome.
-
 1. Fork and branch from `main`.
 2. Keep changes focused; match existing style.
-3. Run `flutter test` and, if you touch the relay, `cd server && dart test`.
-4. Open a PR with a clear description of *what* and *why*.
-
-Please use multi-factor authentication on GitHub if you have write access.
+3. Run the tests above for the areas you touch.
+4. Open a PR with a clear *what* and *why*.
 
 ---
 
@@ -214,5 +173,4 @@ Please use multi-factor authentication on GitHub if you have write access.
 |--|--|
 | Downloads | https://clippy.alwinpaul.me |
 | Source | https://github.com/alwinpaul1/clippy |
-| Update manifest | https://clippy.alwinpaul.me/version.json |
 | Maintainer | [Alwin Paul](https://github.com/alwinpaul1) |

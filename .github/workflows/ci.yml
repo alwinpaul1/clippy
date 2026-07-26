@@ -192,7 +192,7 @@ jobs:
           Remove-Item $pfx -Force
           Write-Host 'Clippy-Setup.exe signed and verified'
       # Free OSS path: SignPath Foundation (after apply + secrets). See
-      # CODE_SIGNING_POLICY.md and docs/windows-code-signing.md.
+      # docs/windows-code-signing.md.
       - name: Upload unsigned installer for SignPath
         id: upload-unsigned-windows
         uses: actions/upload-artifact@v7
