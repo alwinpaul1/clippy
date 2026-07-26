@@ -40,16 +40,19 @@
   .topbar .mark{width:22px; height:31px}
   .topbar .name{font-family:'Newsreader',serif; font-weight:500; font-size:22px; letter-spacing:-.01em}
   .topbar .spacer{flex:1}
-  /* "Get it" — Uiverse-style ripple CTA (by mi-series), in Clippy colors */
+  /* "Get it" — original solid ripple CTA. NOT liquid glass. */
   .topbar .gh{
     outline:0; display:inline-flex; align-items:center; justify-content:space-between;
-    background:var(--green); min-width:132px; border:0; border-radius:9px;
-    box-shadow:0 4px 12px rgba(31,28,21,.14); box-sizing:border-box;
+    background:var(--green) !important; min-width:132px; border:0; border-radius:9px;
+    box-shadow:0 4px 12px rgba(31,28,21,.14) !important; box-sizing:border-box;
     padding:12px 16px; color:#F4F1EA; font-size:12px; font-weight:600;
     letter-spacing:1.2px; text-transform:uppercase; overflow:hidden;
     cursor:pointer; text-decoration:none;
+    backdrop-filter:none !important; -webkit-backdrop-filter:none !important;
+    transform:none !important;
   }
   .topbar .gh:hover{opacity:.95}
+  .topbar .gh:active{transform:none !important}
   .topbar .gh .animation{border-radius:100%; animation:ripple 0.6s linear infinite}
   @keyframes ripple{
     0%{box-shadow:0 0 0 0 rgba(244,241,234,.1), 0 0 0 20px rgba(244,241,234,.1), 0 0 0 40px rgba(244,241,234,.1), 0 0 0 60px rgba(244,241,234,.1)}
@@ -69,21 +72,28 @@
     margin:0 auto 30px;
   }
 
-  /* Download CTA — deepika liquid-glass material (CSS dressing; optics via liquid-glass.js) */
+  /* Download CTA — deepika liquid glass (hero + Get card). Not the topbar Get it. */
   .cta-row{display:flex; flex-direction:column; align-items:center; gap:14px}
   .btn{
     display:inline-flex; align-items:center; justify-content:center; gap:11px;
     position:relative;
     color:#F4F1EA; text-decoration:none;
-    font-weight:500; font-size:16px; padding:16px 30px; border-radius:16px;
+    font-weight:500; font-size:16px; padding:16px 30px; border-radius:18px;
     border:0; cursor:pointer;
-    /* Translucent tint — keep alpha low so backdrop refraction reads */
-    background:linear-gradient(180deg, rgba(31,75,63,.48), rgba(23,58,49,.72));
+    /* Light-on-dark glass tint (deepika recipe, Clippy green) */
+    background:linear-gradient(180deg,
+      rgba(255,255,255,.18) 0%,
+      rgba(31,75,63,.42) 38%,
+      rgba(23,58,49,.62) 100%);
+    /* CSS frost base; liquid-glass.js upgrades to real refraction in Chromium */
+    backdrop-filter:blur(18px) saturate(1.8);
+    -webkit-backdrop-filter:blur(18px) saturate(1.8);
     box-shadow:
-      0 14px 36px rgba(31,75,63,.22),
+      0 16px 40px rgba(31,75,63,.24),
+      0 2px 0 rgba(255,255,255,.12) inset,
       inset 0 1px 1px rgba(255,255,255,.55),
-      inset 0 -8px 20px rgba(255,255,255,.08),
-      inset 0 0 0 1px rgba(255,255,255,.22);
+      inset 0 -10px 24px rgba(255,255,255,.08),
+      inset 0 0 0 1px rgba(255,255,255,.28);
     transition:
       transform 160ms cubic-bezier(0.23,1,0.32,1),
       box-shadow 200ms ease;
@@ -92,10 +102,11 @@
     .btn:hover{
       transform:translateY(-1px);
       box-shadow:
-        0 18px 42px rgba(31,75,63,.28),
+        0 20px 48px rgba(31,75,63,.30),
+        0 2px 0 rgba(255,255,255,.16) inset,
         inset 0 1px 1px rgba(255,255,255,.65),
-        inset 0 -8px 20px rgba(255,255,255,.10),
-        inset 0 0 0 1px rgba(255,255,255,.30);
+        inset 0 -10px 24px rgba(255,255,255,.10),
+        inset 0 0 0 1px rgba(255,255,255,.36);
     }
   }
   .btn:active{transform:scale(0.97)}
@@ -153,20 +164,25 @@
     position:relative;
     width:100%; max-width:440px;
     border:0; border-radius:28px; padding:28px 26px 26px;
-    background:linear-gradient(165deg, rgba(255,255,255,.40), rgba(255,255,255,.16));
+    /* deepika light glass dressing */
+    background:linear-gradient(165deg, rgba(255,255,255,.46), rgba(255,255,255,.16));
+    backdrop-filter:blur(22px) saturate(1.65);
+    -webkit-backdrop-filter:blur(22px) saturate(1.65);
     box-shadow:
-      0 22px 56px rgba(31,28,21,.10),
-      inset 0 1px 1px rgba(255,255,255,.78),
-      inset 0 -12px 30px rgba(255,255,255,.08),
-      inset 0 0 0 1px rgba(255,255,255,.45);
+      0 24px 60px rgba(31,28,21,.12),
+      inset 0 1px 1px rgba(255,255,255,.85),
+      inset 0 -12px 32px rgba(255,255,255,.10),
+      inset 0 0 0 1px rgba(255,255,255,.55);
   }
   .os-toggle{
     display:flex; width:100%; padding:4px; gap:2px;
     border-radius:16px;
-    background:linear-gradient(180deg, rgba(255,255,255,.32), rgba(255,255,255,.12));
+    background:linear-gradient(180deg, rgba(255,255,255,.40), rgba(255,255,255,.14));
+    backdrop-filter:blur(12px) saturate(1.4);
+    -webkit-backdrop-filter:blur(12px) saturate(1.4);
     box-shadow:
       inset 0 1px 2px rgba(31,28,21,.05),
-      inset 0 0 0 1px rgba(255,255,255,.40);
+      inset 0 0 0 1px rgba(255,255,255,.48);
   }
   .os-opt{
     display:inline-flex; align-items:center; justify-content:center; gap:8px;
@@ -187,12 +203,17 @@
   .os-opt:active{transform:scale(0.97)}
   .os-opt[aria-selected="true"]{
     color:#F4F1EA;
-    background:linear-gradient(180deg, rgba(31,75,63,.52), rgba(23,58,49,.78));
+    background:linear-gradient(180deg,
+      rgba(255,255,255,.16) 0%,
+      rgba(31,75,63,.50) 40%,
+      rgba(23,58,49,.72) 100%);
+    backdrop-filter:blur(12px) saturate(1.6);
+    -webkit-backdrop-filter:blur(12px) saturate(1.6);
     box-shadow:
       0 6px 18px rgba(31,75,63,.20),
-      inset 0 1px 1px rgba(255,255,255,.48),
-      inset 0 -6px 14px rgba(255,255,255,.06),
-      inset 0 0 0 1px rgba(255,255,255,.20);
+      inset 0 1px 1px rgba(255,255,255,.50),
+      inset 0 -6px 14px rgba(255,255,255,.08),
+      inset 0 0 0 1px rgba(255,255,255,.24);
   }
   .os-opt:focus-visible{outline:3px solid rgba(41,169,244,.45); outline-offset:2px}
   .os-req{
@@ -319,7 +340,7 @@
     </footer>
   </div>
 
-<script src="liquid-glass.js"></script>
+<script src="liquid-glass.js?v=3"></script>
 <script>
   var DL = {
     macos:{label:'Download for macOS', href:'/download/Clippy-macOS.dmg'},
@@ -412,18 +433,30 @@
     });
   })();
 
-  // deepika-builds/liquid-glass — cards + download buttons only (not topbar Get it).
-  // Chromium: real rim refraction. Safari/Firefox: frosted blur fallback.
+  // deepika liquid-glass — ONLY .get-card, .btn, .os-toggle (never .topbar .gh / Get it).
   (function initGlass(){
     function go(){
-      if(typeof liquidGlass !== 'function') return;
+      if(typeof liquidGlass !== 'function'){
+        console.warn('[clippy] liquid-glass.js not loaded');
+        return;
+      }
       var reduceTx = window.matchMedia &&
         window.matchMedia('(prefers-reduced-transparency: reduce)').matches;
       if(reduceTx) return;
 
-      // Cards: deepika-strength rim bulge so glass reads on cream.
+      // Get Clippy card
       Array.prototype.forEach.call(
-        document.querySelectorAll('.feature, .get-card'),
+        document.querySelectorAll('.get-card'),
+        function(el){
+          liquidGlass(el, {
+            scale: -140, chroma: 8, border: 0.055, mapBlur: 16,
+            blur: 2, saturate: 1.65, fallbackBlur: 24
+          });
+        }
+      );
+      // Feature cards
+      Array.prototype.forEach.call(
+        document.querySelectorAll('.feature'),
         function(el){
           liquidGlass(el, {
             scale: -120, chroma: 7, border: 0.06, mapBlur: 14,
@@ -431,39 +464,28 @@
           });
         }
       );
-      // Primary download CTAs only (not the topbar Get it).
+      // Download buttons (hero + inside get-card) — NOT Get it
       Array.prototype.forEach.call(
         document.querySelectorAll('.btn'),
         function(el){
           liquidGlass(el, {
-            scale: -130, chroma: 8, border: 0.08, mapBlur: 11,
-            blur: 1.5, saturate: 1.7, fallbackBlur: 14
+            scale: -150, chroma: 9, border: 0.07, mapBlur: 12,
+            blur: 1.5, saturate: 1.85, fallbackBlur: 18
           });
         }
       );
-      // Platform toggle tray.
+      // Platform toggle tray
       Array.prototype.forEach.call(
         document.querySelectorAll('.os-toggle'),
         function(el){
           liquidGlass(el, {
-            scale: -90, chroma: 5, border: 0.10, mapBlur: 10,
-            blur: 2, saturate: 1.5, fallbackBlur: 14
-          });
-        }
-      );
-      // Platform chips (selected green glass still refracts at the rim).
-      Array.prototype.forEach.call(
-        document.querySelectorAll('.os-opt'),
-        function(el){
-          liquidGlass(el, {
-            scale: -100, chroma: 6, border: 0.12, mapBlur: 9,
-            blur: 1.5, saturate: 1.55, fallbackBlur: 12
+            scale: -100, chroma: 6, border: 0.10, mapBlur: 11,
+            blur: 2, saturate: 1.55, fallbackBlur: 16
           });
         }
       );
     }
-    // Wait a frame so layout sizes are final (map needs real w×h).
-    function schedule(){ requestAnimationFrame(function(){ setTimeout(go, 0); }); }
+    function schedule(){ requestAnimationFrame(function(){ setTimeout(go, 40); }); }
     if(document.readyState === 'loading'){
       document.addEventListener('DOMContentLoaded', schedule);
     } else {
