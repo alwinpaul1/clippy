@@ -20,12 +20,20 @@
   *{box-sizing:border-box}
   html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
   body{
-    margin:0; background:var(--bg); color:var(--ink);
+    margin:0; color:var(--ink);
     font-family:'Instrument Sans',system-ui,sans-serif; line-height:1.5;
     -webkit-font-smoothing:antialiased;
+    /* Soft ambient fields so liquid-glass has something to bend (flat cream = invisible refraction). */
+    background:
+      radial-gradient(ellipse 70% 55% at 12% 22%, rgba(31,75,63,.11), transparent 58%),
+      radial-gradient(ellipse 65% 50% at 92% 38%, rgba(41,169,244,.09), transparent 55%),
+      radial-gradient(ellipse 55% 45% at 48% 78%, rgba(201,111,94,.06), transparent 55%),
+      radial-gradient(ellipse 40% 35% at 70% 12%, rgba(31,75,63,.06), transparent 50%),
+      var(--bg);
+    background-attachment:fixed;
   }
   a{color:inherit}
-  .wrap{max-width:1000px; margin:0 auto; padding:0 24px}
+  .wrap{max-width:1000px; margin:0 auto; padding:0 24px; position:relative; z-index:1}
 
   /* Top bar */
   .topbar{display:flex; align-items:center; gap:11px; padding:22px 0}
@@ -61,20 +69,21 @@
     margin:0 auto 30px;
   }
 
-  /* Download CTA — green liquid glass */
+  /* Download CTA — deepika liquid-glass material (CSS dressing; optics via liquid-glass.js) */
   .cta-row{display:flex; flex-direction:column; align-items:center; gap:14px}
   .btn{
     display:inline-flex; align-items:center; justify-content:center; gap:11px;
-    position:relative; isolation:isolate;
+    position:relative;
     color:#F4F1EA; text-decoration:none;
     font-weight:500; font-size:16px; padding:16px 30px; border-radius:16px;
     border:0; cursor:pointer;
-    background:linear-gradient(180deg, rgba(31,75,63,.70), rgba(23,58,49,.90));
+    /* Translucent tint — keep alpha low so backdrop refraction reads */
+    background:linear-gradient(180deg, rgba(31,75,63,.48), rgba(23,58,49,.72));
     box-shadow:
-      0 10px 28px rgba(31,75,63,.20),
-      inset 0 1px 1px rgba(255,255,255,.48),
-      inset 0 -8px 18px rgba(255,255,255,.06),
-      inset 0 0 0 1px rgba(255,255,255,.16);
+      0 14px 36px rgba(31,75,63,.22),
+      inset 0 1px 1px rgba(255,255,255,.55),
+      inset 0 -8px 20px rgba(255,255,255,.08),
+      inset 0 0 0 1px rgba(255,255,255,.22);
     transition:
       transform 160ms cubic-bezier(0.23,1,0.32,1),
       box-shadow 200ms ease;
@@ -83,46 +92,43 @@
     .btn:hover{
       transform:translateY(-1px);
       box-shadow:
-        0 14px 34px rgba(31,75,63,.26),
-        inset 0 1px 1px rgba(255,255,255,.55),
-        inset 0 -8px 18px rgba(255,255,255,.08),
-        inset 0 0 0 1px rgba(255,255,255,.22);
+        0 18px 42px rgba(31,75,63,.28),
+        inset 0 1px 1px rgba(255,255,255,.65),
+        inset 0 -8px 20px rgba(255,255,255,.10),
+        inset 0 0 0 1px rgba(255,255,255,.30);
     }
   }
   .btn:active{transform:scale(0.97)}
   .btn:focus-visible{outline:3px solid rgba(41,169,244,.5); outline-offset:2px}
   .btn svg{width:20px; height:20px; flex:none}
 
-  /* Feature tips — frosted glass cards */
+  /* Feature tips — deepika glass cards (no isolation: it blocks backdrop-filter) */
   .features{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:60px 0 72px}
   .feature{
-    position:relative; isolation:isolate;
-    border:0; border-radius:18px; padding:18px 18px 16px;
-    background:linear-gradient(165deg, rgba(255,255,255,.58), rgba(255,255,255,.28));
+    position:relative;
+    border:0; border-radius:22px; padding:18px 18px 16px;
+    background:linear-gradient(165deg, rgba(255,255,255,.38), rgba(255,255,255,.14));
     box-shadow:
-      0 12px 36px rgba(31,28,21,.07),
+      0 18px 48px rgba(31,28,21,.08),
       inset 0 1px 1px rgba(255,255,255,.72),
-      inset 0 -8px 20px rgba(255,255,255,.12),
-      inset 0 0 0 1px rgba(255,255,255,.45);
+      inset 0 -10px 28px rgba(255,255,255,.08),
+      inset 0 0 0 1px rgba(255,255,255,.42);
   }
   .feature .k{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--green); margin-bottom:8px}
   .feature h3{font-family:'Newsreader',serif; font-weight:500; font-size:18px; margin:0 0 5px; letter-spacing:-.01em}
   .feature p{margin:0; font-size:13.5px; color:var(--muted); line-height:1.5}
 
-  /* 3D tilt on feature cards only (mouse + fine pointer). */
+  /* Soft glare only — no 3D transform (transform breaks backdrop refraction). */
   @media (hover:hover) and (pointer:fine){
-    .features{perspective:1000px}
     .feature{
-      transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));
-      transform-style:preserve-3d;
-      transition:transform 130ms cubic-bezier(0.23,1,0.32,1), box-shadow 220ms ease;
-      will-change:transform;
+      transition:box-shadow 220ms ease, transform 160ms cubic-bezier(0.23,1,0.32,1);
     }
     .feature:hover{
+      transform:translateY(-2px);
       box-shadow:
-        0 22px 48px rgba(31,28,21,.12),
-        inset 0 1px 1px rgba(255,255,255,.8),
-        inset 0 -8px 20px rgba(255,255,255,.16),
+        0 24px 56px rgba(31,28,21,.12),
+        inset 0 1px 1px rgba(255,255,255,.85),
+        inset 0 -10px 28px rgba(255,255,255,.12),
         inset 0 0 0 1px rgba(255,255,255,.55);
     }
     .feature::after{
@@ -130,7 +136,7 @@
       background:radial-gradient(circle at var(--gx,50%) var(--gy,50%), rgba(255,255,255,.55), transparent 46%);
       opacity:0; transition:opacity 200ms ease;
     }
-    .feature:hover::after{opacity:.22}
+    .feature:hover::after{opacity:.28}
   }
   @media (prefers-reduced-motion:reduce){.feature{transform:none !important}}
 
@@ -144,30 +150,30 @@
   }
   .get-card{
     display:flex; flex-direction:column; align-items:center; gap:18px;
-    position:relative; isolation:isolate;
+    position:relative;
     width:100%; max-width:440px;
-    border:0; border-radius:22px; padding:28px 26px 26px;
-    background:linear-gradient(165deg, rgba(255,255,255,.62), rgba(255,255,255,.30));
+    border:0; border-radius:28px; padding:28px 26px 26px;
+    background:linear-gradient(165deg, rgba(255,255,255,.40), rgba(255,255,255,.16));
     box-shadow:
-      0 16px 44px rgba(31,28,21,.08),
+      0 22px 56px rgba(31,28,21,.10),
       inset 0 1px 1px rgba(255,255,255,.78),
-      inset 0 -10px 24px rgba(255,255,255,.12),
-      inset 0 0 0 1px rgba(255,255,255,.48);
+      inset 0 -12px 30px rgba(255,255,255,.08),
+      inset 0 0 0 1px rgba(255,255,255,.45);
   }
   .os-toggle{
     display:flex; width:100%; padding:4px; gap:2px;
-    border-radius:14px;
-    background:rgba(255,255,255,.28);
+    border-radius:16px;
+    background:linear-gradient(180deg, rgba(255,255,255,.32), rgba(255,255,255,.12));
     box-shadow:
-      inset 0 1px 2px rgba(31,28,21,.06),
-      inset 0 0 0 1px rgba(255,255,255,.35);
+      inset 0 1px 2px rgba(31,28,21,.05),
+      inset 0 0 0 1px rgba(255,255,255,.40);
   }
   .os-opt{
     display:inline-flex; align-items:center; justify-content:center; gap:8px;
     flex:1; border:0; background:transparent; cursor:pointer;
     font-family:'Instrument Sans',system-ui,sans-serif;
     font-weight:500; font-size:14.5px; color:var(--muted);
-    padding:11px 12px; border-radius:11px;
+    padding:11px 12px; border-radius:12px;
     transition:
       background 160ms cubic-bezier(0.23,1,0.32,1),
       color 160ms ease,
@@ -181,11 +187,12 @@
   .os-opt:active{transform:scale(0.97)}
   .os-opt[aria-selected="true"]{
     color:#F4F1EA;
-    background:linear-gradient(180deg, rgba(31,75,63,.74), rgba(23,58,49,.92));
+    background:linear-gradient(180deg, rgba(31,75,63,.52), rgba(23,58,49,.78));
     box-shadow:
-      0 4px 14px rgba(31,75,63,.22),
-      inset 0 1px 1px rgba(255,255,255,.40),
-      inset 0 0 0 1px rgba(255,255,255,.16);
+      0 6px 18px rgba(31,75,63,.20),
+      inset 0 1px 1px rgba(255,255,255,.48),
+      inset 0 -6px 14px rgba(255,255,255,.06),
+      inset 0 0 0 1px rgba(255,255,255,.20);
   }
   .os-opt:focus-visible{outline:3px solid rgba(41,169,244,.45); outline-offset:2px}
   .os-req{
@@ -388,32 +395,25 @@
     });
   });
 
-  // 3D tilt + cursor glare on feature cards. Mouse only; off for reduced motion.
+  // Cursor glare only on feature cards (no 3D transform — it kills backdrop refraction).
   (function(){
     if(!window.matchMedia) return;
     var fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
     var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if(!fine || reduce) return;
-    var MAX = 9;
     Array.prototype.forEach.call(document.querySelectorAll('.feature'), function(card){
       card.addEventListener('mousemove', function(e){
         var r = card.getBoundingClientRect();
         var px = (e.clientX - r.left) / r.width;
         var py = (e.clientY - r.top) / r.height;
-        card.style.setProperty('--ry', ((px - 0.5) * MAX).toFixed(2) + 'deg');
-        card.style.setProperty('--rx', ((0.5 - py) * MAX).toFixed(2) + 'deg');
         card.style.setProperty('--gx', (px * 100).toFixed(1) + '%');
         card.style.setProperty('--gy', (py * 100).toFixed(1) + '%');
-      });
-      card.addEventListener('mouseleave', function(){
-        card.style.setProperty('--rx','0deg');
-        card.style.setProperty('--ry','0deg');
       });
     });
   })();
 
-  // Apple liquid glass — buttons + cards only (deepika-builds/liquid-glass).
-  // Refraction in Chromium; frosted fallback in Safari/Firefox.
+  // deepika-builds/liquid-glass — cards + download buttons only (not topbar Get it).
+  // Chromium: real rim refraction. Safari/Firefox: frosted blur fallback.
   (function initGlass(){
     function go(){
       if(typeof liquidGlass !== 'function') return;
@@ -421,13 +421,13 @@
         window.matchMedia('(prefers-reduced-transparency: reduce)').matches;
       if(reduceTx) return;
 
-      // Cards: soft rim bulge, keep interior readable on cream bg.
+      // Cards: deepika-strength rim bulge so glass reads on cream.
       Array.prototype.forEach.call(
         document.querySelectorAll('.feature, .get-card'),
         function(el){
           liquidGlass(el, {
-            scale: -72, chroma: 4, border: 0.09, mapBlur: 14,
-            blur: 4, saturate: 1.45, fallbackBlur: 18
+            scale: -120, chroma: 7, border: 0.06, mapBlur: 14,
+            blur: 2, saturate: 1.55, fallbackBlur: 20
           });
         }
       );
@@ -436,26 +436,38 @@
         document.querySelectorAll('.btn'),
         function(el){
           liquidGlass(el, {
-            scale: -96, chroma: 5, border: 0.12, mapBlur: 10,
-            blur: 2, saturate: 1.55, fallbackBlur: 12
+            scale: -130, chroma: 8, border: 0.08, mapBlur: 11,
+            blur: 1.5, saturate: 1.7, fallbackBlur: 14
           });
         }
       );
-      // Selected platform chip + toggle track — small glass.
+      // Platform toggle tray.
       Array.prototype.forEach.call(
         document.querySelectorAll('.os-toggle'),
         function(el){
           liquidGlass(el, {
-            scale: -60, chroma: 3, border: 0.14, mapBlur: 10,
-            blur: 3, saturate: 1.35, fallbackBlur: 12
+            scale: -90, chroma: 5, border: 0.10, mapBlur: 10,
+            blur: 2, saturate: 1.5, fallbackBlur: 14
+          });
+        }
+      );
+      // Platform chips (selected green glass still refracts at the rim).
+      Array.prototype.forEach.call(
+        document.querySelectorAll('.os-opt'),
+        function(el){
+          liquidGlass(el, {
+            scale: -100, chroma: 6, border: 0.12, mapBlur: 9,
+            blur: 1.5, saturate: 1.55, fallbackBlur: 12
           });
         }
       );
     }
+    // Wait a frame so layout sizes are final (map needs real w×h).
+    function schedule(){ requestAnimationFrame(function(){ setTimeout(go, 0); }); }
     if(document.readyState === 'loading'){
-      document.addEventListener('DOMContentLoaded', function(){ setTimeout(go, 0); });
+      document.addEventListener('DOMContentLoaded', schedule);
     } else {
-      setTimeout(go, 0);
+      schedule();
     }
   })();
 </script>
