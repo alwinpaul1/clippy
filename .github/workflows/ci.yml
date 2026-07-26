@@ -241,6 +241,8 @@ jobs:
             exit 0
           fi
           USER="${VPS_USER:-root}"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
           install -m 600 /dev/null ~/.ssh/vps_key
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/vps_key
           # shellcheck disable=SC2029
