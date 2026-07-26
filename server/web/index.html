@@ -32,32 +32,21 @@
   .topbar .mark{width:22px; height:31px}
   .topbar .name{font-family:'Newsreader',serif; font-weight:500; font-size:22px; letter-spacing:-.01em}
   .topbar .spacer{flex:1}
-  /* "Get it" — green liquid-glass pill (Apple material + press feedback) */
+  /* "Get it" — Uiverse-style ripple CTA (by mi-series), in Clippy colors */
   .topbar .gh{
-    outline:0; display:inline-flex; align-items:center; justify-content:center;
-    position:relative; isolation:isolate;
-    min-width:120px; border:0; border-radius:999px;
-    box-sizing:border-box; padding:11px 18px;
-    color:#F4F1EA; font-size:12px; font-weight:600;
-    letter-spacing:1.2px; text-transform:uppercase;
+    outline:0; display:inline-flex; align-items:center; justify-content:space-between;
+    background:var(--green); min-width:132px; border:0; border-radius:9px;
+    box-shadow:0 4px 12px rgba(31,28,21,.14); box-sizing:border-box;
+    padding:12px 16px; color:#F4F1EA; font-size:12px; font-weight:600;
+    letter-spacing:1.2px; text-transform:uppercase; overflow:hidden;
     cursor:pointer; text-decoration:none;
-    /* Glass dressing — optics via liquid-glass.js */
-    background:linear-gradient(180deg, rgba(31,75,63,.72), rgba(23,58,49,.88));
-    box-shadow:
-      0 8px 22px rgba(31,75,63,.22),
-      inset 0 1px 1px rgba(255,255,255,.42),
-      inset 0 -6px 14px rgba(255,255,255,.06),
-      inset 0 0 0 1px rgba(255,255,255,.18);
-    transition:transform 160ms cubic-bezier(0.23,1,0.32,1), box-shadow 200ms ease;
   }
-  .topbar .gh:hover{box-shadow:
-    0 12px 28px rgba(31,75,63,.28),
-    inset 0 1px 1px rgba(255,255,255,.5),
-    inset 0 -6px 14px rgba(255,255,255,.08),
-    inset 0 0 0 1px rgba(255,255,255,.24)}
-  .topbar .gh:active{transform:scale(0.97)}
-  .topbar .gh:focus-visible{outline:3px solid rgba(41,169,244,.5); outline-offset:2px}
-  .topbar .gh .animation{display:none}
+  .topbar .gh:hover{opacity:.95}
+  .topbar .gh .animation{border-radius:100%; animation:ripple 0.6s linear infinite}
+  @keyframes ripple{
+    0%{box-shadow:0 0 0 0 rgba(244,241,234,.1), 0 0 0 20px rgba(244,241,234,.1), 0 0 0 40px rgba(244,241,234,.1), 0 0 0 60px rgba(244,241,234,.1)}
+    100%{box-shadow:0 0 0 20px rgba(244,241,234,.1), 0 0 0 40px rgba(244,241,234,.1), 0 0 0 60px rgba(244,241,234,.1), 0 0 0 80px rgba(244,241,234,0)}
+  }
 
   /* Hero */
   .hero{padding:36px 0 20px; text-align:center}
@@ -212,7 +201,7 @@
       box-shadow:0 2px 14px rgba(31,28,21,.06);
       border:1px solid var(--border);
     }
-    .btn,.topbar .gh,.os-opt[aria-selected="true"]{
+    .btn,.os-opt[aria-selected="true"]{
       background:var(--green);
       box-shadow:0 4px 14px rgba(31,75,63,.18);
     }
@@ -243,8 +232,8 @@
   }
   @media (prefers-reduced-motion:reduce){
     .mascot .body,.mascot .eyes,
-    .topbar .mark .body,.topbar .mark .eyes{animation:none}
-    .btn,.topbar .gh,.os-opt,.feature{transition:none}
+    .topbar .mark .body,.topbar .mark .eyes,.topbar .gh .animation{animation:none}
+    .btn,.os-opt,.feature{transition:none}
   }
 </style>
 </head>
@@ -254,7 +243,7 @@
       <svg class="mark" viewBox="0 0 60 84" aria-hidden="true"><g class="body"><path d="M18,24 V58 A12,12 0 0 0 42,58 V18 A8,8 0 0 0 26,18 V56 A4,4 0 0 0 34,56 V26" fill="none" stroke="#1E1C15" stroke-width="7" stroke-linecap="round"/><circle cx="24" cy="8" r="6.5" fill="#F4F1EA" stroke="#1E1C15" stroke-width="2"/><circle cx="38" cy="8" r="6.5" fill="#F4F1EA" stroke="#1E1C15" stroke-width="2"/><g class="eyes"><circle cx="25.5" cy="9" r="3" fill="#1E1C15"/><circle cx="39.5" cy="9" r="3" fill="#1E1C15"/></g></g></svg>
       <span class="name">Clippy</span>
       <span class="spacer"></span>
-      <a class="gh" href="#get">Get it</a>
+      <a class="gh" href="#get">Get it<span class="animation"></span></a>
     </header>
 
     <section class="hero">
@@ -442,9 +431,9 @@
           });
         }
       );
-      // Primary CTAs: slightly tighter glass.
+      // Primary download CTAs only (not the topbar Get it).
       Array.prototype.forEach.call(
-        document.querySelectorAll('.btn, .topbar .gh'),
+        document.querySelectorAll('.btn'),
         function(el){
           liquidGlass(el, {
             scale: -96, chroma: 5, border: 0.12, mapBlur: 10,
