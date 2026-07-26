@@ -313,6 +313,14 @@ Future<void> _handleRequest(HttpRequest req) async {
     await req.response.close();
     return;
   }
+  // Allow-listed static assets for the download page (e.g. liquid-glass.js).
+  if (req.uri.path.startsWith('/')) {
+    final name = req.uri.pathSegments.length == 1 ? req.uri.pathSegments.first : '';
+    if (_webAssets.containsKey(name)) {
+      await _serveWebAsset(req, name);
+      return;
+    }
+  }
   if (req.uri.path.startsWith('/download/')) {
     await _serveDownload(req);
     return;
@@ -321,21 +329,22 @@ Future<void> _handleRequest(HttpRequest req) async {
     await _serveVersion(req);
     return;
   }
-  // Allow-listed static assets for the download page (e.g. liquid-glass.js).
-  if (req.uri.path == '/liquid-glass.js') {
-    await _serveWebAsset(req, 'liquid-glass.js', 'application/javascript');
-    return;
-  }
   req.response.statusCode = HttpStatus.notFound;
   await req.response.close();
 }
 
-/// Serve a file from the web/ root (allow-listed callers only — no path traversal).
-Future<void> _serveWebAsset(
-  HttpRequest req,
-  String name,
-  String mime,
-) async {
+/// Public static files next to index.html (no path traversal).
+const _webAssets = {
+  'liquid-glass.js': 'application/javascript',
+};
+
+Future<void> _serveWebAsset(HttpRequest req, String name) async {
+  final mime = _webAssets[name];
+  if (mime == null) {
+    req.response.statusCode = HttpStatus.notFound;
+    await req.response.close();
+    return;
+  }
   for (final dir in [
     'web',
     '/app/web',
@@ -346,8 +355,8 @@ Future<void> _serveWebAsset(
       final parts = mime.split('/');
       req.response
         ..statusCode = HttpStatus.ok
-        ..headers.contentType = ContentType(parts[0], parts[1])
-        ..headers.set('Cache-Control', 'public, max-age=86400')
+        ..headers.contentType = ContentType(parts[0], parts[1], charset: 'utf-8')
+        ..headers.set(HttpHeaders.cacheControlHeader, 'public, max-age=3600')
         ..add(await file.readAsBytes());
       await req.response.close();
       return;
