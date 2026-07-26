@@ -17,7 +17,7 @@ OV-level signing for **qualifying open-source** projects.
 |-------------|----------------|
 | Public GitHub repo | Yes (`alwinpaul1/clippy`) |
 | OSI-approved license | **MIT** (`LICENSE`) |
-| Code signing policy page | `CODE_SIGNING_POLICY.md` (+ link from README) |
+| Code signing policy | Maintainer docs only (not public) |
 | GitHub Actions build of installer | Yes (`build-windows` job) |
 | CI hook for SignPath | Yes (optional secrets) |
 
