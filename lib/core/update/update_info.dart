@@ -76,4 +76,8 @@ class UpdateInfo {
   /// A "bug update" has no new features — the changelog shows only
   /// improvements and fixes.
   bool get isBugUpdate => features.isEmpty;
+
+  /// User-facing label including build so a same-semver re-release (e.g.
+  /// `1.0.33+36` while the app is on `1.0.33+35`) is visibly different.
+  String get displayVersion => '$version+$build';
 }

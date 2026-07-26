@@ -7,7 +7,8 @@
       "In-app updates and sync work for any network — no VPN required for users"
     ],
     "fixes": [
-      "Update check retries briefly on DNS/network blips and shows a clearer error if it still fails"
+      "Update check retries briefly on DNS/network blips and shows a clearer error if it still fails",
+      "Update banner and sheet show the full version+build so build-only releases are obvious"
     ]
   }
 }
