@@ -13,79 +13,54 @@
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..500&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#F4F1EA; --ink:#1E1C15; --green:#1F4B3F;
-    --green-hover:#173A31; --muted:#7A7466; --muted2:#A39C8B;
-    --border:rgba(31,28,21,.10); --border-strong:rgba(31,28,21,.16);
-    --ease-out:cubic-bezier(0.23, 1, 0.32, 1);
-    --ease-in-out:cubic-bezier(0.77, 0, 0.175, 1);
-    --glass-radius:22px;
+    --bg:#F4F1EA; --surface:#FFFFFF; --ink:#1E1C15; --green:#1F4B3F;
+    --green-hover:#173A31; --muted:#7A7466; --muted2:#A39C8B; --border:#E3DED2;
+    --border-strong:#CFC9BA; --blue:#29A9F4;
   }
   *{box-sizing:border-box}
   html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
   body{
-    margin:0; color:var(--ink);
+    margin:0; background:var(--bg); color:var(--ink);
     font-family:'Instrument Sans',system-ui,sans-serif; line-height:1.5;
     -webkit-font-smoothing:antialiased;
-    background:var(--bg);
-    min-height:100vh;
-    overflow-x:hidden;
-  }
-  /* Soft orbs so glass has something to refract (Apple depth / ambient). */
-  body::before{
-    content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
-    background:
-      radial-gradient(900px 520px at 12% -8%, rgba(31,75,63,.22), transparent 58%),
-      radial-gradient(720px 480px at 92% 8%, rgba(41,169,244,.16), transparent 55%),
-      radial-gradient(640px 420px at 70% 92%, rgba(201,111,94,.12), transparent 55%),
-      radial-gradient(500px 360px at 18% 78%, rgba(163,156,139,.18), transparent 50%),
-      var(--bg);
   }
   a{color:inherit}
-  .wrap{position:relative; z-index:1; max-width:1000px; margin:0 auto; padding:0 24px}
+  .wrap{max-width:1000px; margin:0 auto; padding:0 24px}
 
-  /* —— Glass material dressing (liquid-glass.js owns refraction) —— */
-  .glass{
-    border-radius:var(--glass-radius);
-    background:linear-gradient(165deg,
-      rgba(255,255,255,.52) 0%,
-      rgba(255,255,255,.28) 100%);
-    box-shadow:
-      0 18px 48px rgba(31,28,21,.08),
-      0 2px 8px rgba(31,28,21,.04),
-      inset 0 1px 1px rgba(255,255,255,.72),
-      inset 0 -10px 24px rgba(255,255,255,.08),
-      inset 0 0 0 1px rgba(255,255,255,.55);
-    /* backdrop-filter applied by liquid-glass.js (or fallback) */
-  }
-  .glass-sm{border-radius:16px}
-
-  /* Top bar — floating glass chrome */
-  .topbar{
-    position:sticky; top:12px; z-index:20;
-    display:flex; align-items:center; gap:11px;
-    margin:12px 0 8px; padding:10px 12px 10px 14px;
-  }
-  .topbar .mark{width:22px; height:31px; flex:none}
-  .topbar .name{
-    font-family:'Newsreader',serif; font-weight:500; font-size:20px;
-    letter-spacing:-.01em;
-  }
+  /* Top bar */
+  .topbar{display:flex; align-items:center; gap:11px; padding:22px 0}
+  .topbar .mark{width:22px; height:31px}
+  .topbar .name{font-family:'Newsreader',serif; font-weight:500; font-size:22px; letter-spacing:-.01em}
   .topbar .spacer{flex:1}
+  /* "Get it" — green liquid-glass pill (Apple material + press feedback) */
   .topbar .gh{
     outline:0; display:inline-flex; align-items:center; justify-content:center;
-    background:var(--green); border:0; border-radius:999px;
-    box-shadow:0 4px 14px rgba(31,75,63,.22);
-    padding:10px 18px; color:#F4F1EA; font-size:12px; font-weight:600;
-    letter-spacing:1.1px; text-transform:uppercase;
+    position:relative; isolation:isolate;
+    min-width:120px; border:0; border-radius:999px;
+    box-sizing:border-box; padding:11px 18px;
+    color:#F4F1EA; font-size:12px; font-weight:600;
+    letter-spacing:1.2px; text-transform:uppercase;
     cursor:pointer; text-decoration:none;
-    transition:transform 140ms var(--ease-out), background 160ms ease, box-shadow 160ms ease;
+    /* Glass dressing — optics via liquid-glass.js */
+    background:linear-gradient(180deg, rgba(31,75,63,.72), rgba(23,58,49,.88));
+    box-shadow:
+      0 8px 22px rgba(31,75,63,.22),
+      inset 0 1px 1px rgba(255,255,255,.42),
+      inset 0 -6px 14px rgba(255,255,255,.06),
+      inset 0 0 0 1px rgba(255,255,255,.18);
+    transition:transform 160ms cubic-bezier(0.23,1,0.32,1), box-shadow 200ms ease;
   }
-  .topbar .gh:hover{background:var(--green-hover); box-shadow:0 6px 18px rgba(31,75,63,.28)}
-  .topbar .gh:active{transform:scale(.97)}
-  .topbar .gh .animation{display:none} /* was noisy; press scale is enough */
+  .topbar .gh:hover{box-shadow:
+    0 12px 28px rgba(31,75,63,.28),
+    inset 0 1px 1px rgba(255,255,255,.5),
+    inset 0 -6px 14px rgba(255,255,255,.08),
+    inset 0 0 0 1px rgba(255,255,255,.24)}
+  .topbar .gh:active{transform:scale(0.97)}
+  .topbar .gh:focus-visible{outline:3px solid rgba(41,169,244,.5); outline-offset:2px}
+  .topbar .gh .animation{display:none}
 
   /* Hero */
-  .hero{padding:28px 0 12px; text-align:center}
+  .hero{padding:36px 0 20px; text-align:center}
   .hero .mascot{width:132px; height:auto; margin:0 auto 26px; display:block}
   .hero h1{
     font-family:'Newsreader',serif; font-weight:500; letter-spacing:-.02em;
@@ -97,120 +72,153 @@
     margin:0 auto 30px;
   }
 
-  /* Download CTA */
+  /* Download CTA — green liquid glass */
   .cta-row{display:flex; flex-direction:column; align-items:center; gap:14px}
   .btn{
     display:inline-flex; align-items:center; justify-content:center; gap:11px;
-    background:var(--green); color:#F4F1EA; text-decoration:none;
-    font-weight:500; font-size:16px; padding:16px 30px; border-radius:999px;
-    border:1px solid rgba(255,255,255,.08);
+    position:relative; isolation:isolate;
+    color:#F4F1EA; text-decoration:none;
+    font-weight:500; font-size:16px; padding:16px 30px; border-radius:16px;
+    border:0; cursor:pointer;
+    background:linear-gradient(180deg, rgba(31,75,63,.70), rgba(23,58,49,.90));
     box-shadow:
-      0 8px 24px rgba(31,75,63,.22),
-      inset 0 1px 0 rgba(255,255,255,.12);
-    transition:transform 140ms var(--ease-out), background 160ms ease, box-shadow 160ms ease;
+      0 10px 28px rgba(31,75,63,.20),
+      inset 0 1px 1px rgba(255,255,255,.48),
+      inset 0 -8px 18px rgba(255,255,255,.06),
+      inset 0 0 0 1px rgba(255,255,255,.16);
+    transition:
+      transform 160ms cubic-bezier(0.23,1,0.32,1),
+      box-shadow 200ms ease;
   }
-  .btn:hover{
-    background:var(--green-hover);
-    box-shadow:0 12px 28px rgba(31,75,63,.28), inset 0 1px 0 rgba(255,255,255,.12);
+  @media (hover:hover) and (pointer:fine){
+    .btn:hover{
+      transform:translateY(-1px);
+      box-shadow:
+        0 14px 34px rgba(31,75,63,.26),
+        inset 0 1px 1px rgba(255,255,255,.55),
+        inset 0 -8px 18px rgba(255,255,255,.08),
+        inset 0 0 0 1px rgba(255,255,255,.22);
+    }
   }
-  .btn:active{transform:scale(.97)}
+  .btn:active{transform:scale(0.97)}
   .btn:focus-visible{outline:3px solid rgba(41,169,244,.5); outline-offset:2px}
   .btn svg{width:20px; height:20px; flex:none}
 
-  /* Feature tips — glass cards */
-  .features{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:56px 0 64px}
+  /* Feature tips — frosted glass cards */
+  .features{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:60px 0 72px}
   .feature{
-    position:relative;
-    padding:18px 18px 16px;
-    transition:transform 180ms var(--ease-out), box-shadow 200ms ease;
+    position:relative; isolation:isolate;
+    border:0; border-radius:18px; padding:18px 18px 16px;
+    background:linear-gradient(165deg, rgba(255,255,255,.58), rgba(255,255,255,.28));
+    box-shadow:
+      0 12px 36px rgba(31,28,21,.07),
+      inset 0 1px 1px rgba(255,255,255,.72),
+      inset 0 -8px 20px rgba(255,255,255,.12),
+      inset 0 0 0 1px rgba(255,255,255,.45);
   }
-  .feature .k{
-    font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em;
-    text-transform:uppercase; color:var(--green); margin-bottom:8px;
-  }
-  .feature h3{
-    font-family:'Newsreader',serif; font-weight:500; font-size:18px;
-    margin:0 0 5px; letter-spacing:-.01em;
-  }
+  .feature .k{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--green); margin-bottom:8px}
+  .feature h3{font-family:'Newsreader',serif; font-weight:500; font-size:18px; margin:0 0 5px; letter-spacing:-.01em}
   .feature p{margin:0; font-size:13.5px; color:var(--muted); line-height:1.5}
 
+  /* 3D tilt on feature cards only (mouse + fine pointer). */
   @media (hover:hover) and (pointer:fine){
     .features{perspective:1000px}
     .feature{
       transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));
       transform-style:preserve-3d;
+      transition:transform 130ms cubic-bezier(0.23,1,0.32,1), box-shadow 220ms ease;
       will-change:transform;
     }
     .feature:hover{
       box-shadow:
-        0 22px 50px rgba(31,28,21,.12),
+        0 22px 48px rgba(31,28,21,.12),
         inset 0 1px 1px rgba(255,255,255,.8),
-        inset 0 0 0 1px rgba(255,255,255,.6);
+        inset 0 -8px 20px rgba(255,255,255,.16),
+        inset 0 0 0 1px rgba(255,255,255,.55);
     }
     .feature::after{
       content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
-      background:radial-gradient(circle at var(--gx,50%) var(--gy,50%), rgba(255,255,255,.55), transparent 48%);
-      opacity:0; transition:opacity .2s ease;
+      background:radial-gradient(circle at var(--gx,50%) var(--gy,50%), rgba(255,255,255,.55), transparent 46%);
+      opacity:0; transition:opacity 200ms ease;
     }
-    .feature:hover::after{opacity:.32}
+    .feature:hover::after{opacity:.22}
   }
   @media (prefers-reduced-motion:reduce){.feature{transform:none !important}}
 
-  /* Platform picker — single glass card */
-  .platforms-h{text-align:center; margin:0 0 24px; scroll-margin-top:88px}
-  .platforms-h h2{
-    font-family:'Newsreader',serif; font-weight:500; font-size:30px;
-    margin:0 0 6px; letter-spacing:-.01em;
-  }
+  /* Platform picker: one glass card with toggle + download */
+  .platforms-h{text-align:center; margin:0 0 28px; scroll-margin-top:24px}
+  .platforms-h h2{font-family:'Newsreader',serif; font-weight:500; font-size:30px; margin:0 0 6px; letter-spacing:-.01em}
   .platforms-h p{margin:0; color:var(--muted); font-size:15px}
-  .get-dl{display:flex; justify-content:center; margin:0 0 72px}
+  .get-dl{
+    display:flex; justify-content:center;
+    margin:0 0 72px;
+  }
   .get-card{
     display:flex; flex-direction:column; align-items:center; gap:18px;
+    position:relative; isolation:isolate;
     width:100%; max-width:440px;
-    padding:26px 24px 24px;
+    border:0; border-radius:22px; padding:28px 26px 26px;
+    background:linear-gradient(165deg, rgba(255,255,255,.62), rgba(255,255,255,.30));
+    box-shadow:
+      0 16px 44px rgba(31,28,21,.08),
+      inset 0 1px 1px rgba(255,255,255,.78),
+      inset 0 -10px 24px rgba(255,255,255,.12),
+      inset 0 0 0 1px rgba(255,255,255,.48);
   }
-
-  /* Segmented control with sliding pill */
   .os-toggle{
-    position:relative; display:flex; width:100%; padding:4px; gap:0;
-    background:rgba(255,255,255,.35);
-    border:1px solid rgba(255,255,255,.45);
+    display:flex; width:100%; padding:4px; gap:2px;
     border-radius:14px;
-    box-shadow:inset 0 1px 2px rgba(31,28,21,.04);
-  }
-  .os-pill{
-    position:absolute; top:4px; bottom:4px; left:4px;
-    width:calc((100% - 8px) / 3);
-    border-radius:11px; background:var(--green);
-    box-shadow:0 2px 10px rgba(31,75,63,.22);
-    transition:transform 220ms var(--ease-out);
-    pointer-events:none; z-index:0;
+    background:rgba(255,255,255,.28);
+    box-shadow:
+      inset 0 1px 2px rgba(31,28,21,.06),
+      inset 0 0 0 1px rgba(255,255,255,.35);
   }
   .os-opt{
-    position:relative; z-index:1;
     display:inline-flex; align-items:center; justify-content:center; gap:8px;
     flex:1; border:0; background:transparent; cursor:pointer;
     font-family:'Instrument Sans',system-ui,sans-serif;
     font-weight:500; font-size:14.5px; color:var(--muted);
     padding:11px 12px; border-radius:11px;
-    transition:color 180ms ease;
+    transition:
+      background 160ms cubic-bezier(0.23,1,0.32,1),
+      color 160ms ease,
+      transform 160ms cubic-bezier(0.23,1,0.32,1),
+      box-shadow 160ms ease;
   }
   .os-opt svg{width:16px; height:16px; flex:none}
-  .os-opt:hover{color:var(--ink)}
-  .os-opt[aria-selected="true"]{color:#F4F1EA}
+  @media (hover:hover) and (pointer:fine){
+    .os-opt:hover{color:var(--ink)}
+  }
+  .os-opt:active{transform:scale(0.97)}
+  .os-opt[aria-selected="true"]{
+    color:#F4F1EA;
+    background:linear-gradient(180deg, rgba(31,75,63,.74), rgba(23,58,49,.92));
+    box-shadow:
+      0 4px 14px rgba(31,75,63,.22),
+      inset 0 1px 1px rgba(255,255,255,.40),
+      inset 0 0 0 1px rgba(255,255,255,.16);
+  }
   .os-opt:focus-visible{outline:3px solid rgba(41,169,244,.45); outline-offset:2px}
-  .os-opt:active{transform:scale(.98)}
   .os-req{
     font-family:'IBM Plex Mono',monospace; font-size:12px;
     color:var(--muted2); margin:0; min-height:1.2em; text-align:center;
-    transition:opacity 160ms ease;
   }
-  .get-card .btn{width:100%; max-width:100%; border-radius:14px}
+  .get-card .btn{width:100%; max-width:100%}
 
-  footer{
-    border-top:1px solid var(--border); padding:28px 0 44px;
-    color:var(--muted2); font-size:13px; text-align:center;
+  /* Reduced transparency: solid-ish materials, no fake blur dependence */
+  @media (prefers-reduced-transparency:reduce){
+    .feature,.get-card{
+      background:var(--surface);
+      box-shadow:0 2px 14px rgba(31,28,21,.06);
+      border:1px solid var(--border);
+    }
+    .btn,.topbar .gh,.os-opt[aria-selected="true"]{
+      background:var(--green);
+      box-shadow:0 4px 14px rgba(31,75,63,.18);
+    }
   }
+
+  footer{border-top:1px solid var(--border); padding:28px 0 44px; color:var(--muted2); font-size:13px; text-align:center}
   footer a{color:var(--muted); text-decoration:none; border-bottom:1px solid var(--border-strong)}
   footer .credit{margin-top:10px}
   footer .credit .heart{color:#C96F5E}
@@ -223,6 +231,7 @@
   @keyframes blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
   .mascot .body{transform-origin:50% 72%; transform-box:fill-box; animation:bob 5.5s ease-in-out infinite}
   .mascot .eyes{transform-origin:center; transform-box:fill-box; animation:blink 4.2s linear infinite}
+  /* The tiny top-bar clip lives too (gentler bob so it doesn't jitter). */
   @keyframes bobSmall{0%,100%{transform:translateY(0) rotate(0)}45%{transform:translateY(-1.5px) rotate(-2deg)}}
   .topbar .mark .body{transform-origin:50% 72%; transform-box:fill-box; animation:bobSmall 5.5s ease-in-out infinite}
   .topbar .mark .eyes{transform-origin:center; transform-box:fill-box; animation:blink 4.2s linear infinite}
@@ -231,28 +240,17 @@
     .features{grid-template-columns:1fr}
     .get-card{padding:22px 16px 18px; max-width:100%}
     .os-opt{padding:11px 8px; font-size:13.5px; gap:6px}
-    .topbar{top:8px; margin-top:8px}
   }
   @media (prefers-reduced-motion:reduce){
     .mascot .body,.mascot .eyes,
     .topbar .mark .body,.topbar .mark .eyes{animation:none}
-    .btn,.os-opt,.os-pill,.topbar .gh{transition:none}
-  }
-  /* Solid surfaces when transparency is reduced (Apple a11y). */
-  @media (prefers-reduced-transparency:reduce){
-    .glass,.glass-sm{
-      background:#fff !important;
-      box-shadow:0 2px 12px rgba(31,28,21,.06), inset 0 0 0 1px var(--border) !important;
-      -webkit-backdrop-filter:none !important;
-      backdrop-filter:none !important;
-    }
-    body::before{background:var(--bg)}
+    .btn,.topbar .gh,.os-opt,.feature{transition:none}
   }
 </style>
 </head>
 <body>
   <div class="wrap">
-    <header class="topbar glass glass-sm">
+    <header class="topbar">
       <svg class="mark" viewBox="0 0 60 84" aria-hidden="true"><g class="body"><path d="M18,24 V58 A12,12 0 0 0 42,58 V18 A8,8 0 0 0 26,18 V56 A4,4 0 0 0 34,56 V26" fill="none" stroke="#1E1C15" stroke-width="7" stroke-linecap="round"/><circle cx="24" cy="8" r="6.5" fill="#F4F1EA" stroke="#1E1C15" stroke-width="2"/><circle cx="38" cy="8" r="6.5" fill="#F4F1EA" stroke="#1E1C15" stroke-width="2"/><g class="eyes"><circle cx="25.5" cy="9" r="3" fill="#1E1C15"/><circle cx="39.5" cy="9" r="3" fill="#1E1C15"/></g></g></svg>
       <span class="name">Clippy</span>
       <span class="spacer"></span>
@@ -280,9 +278,9 @@
     </section>
 
     <section class="features">
-      <div class="feature glass glass-sm"><div class="k">Instant</div><h3>The latest copy, always here</h3><p>Copy on any paired device and it lands on this one's clipboard, ready to paste.</p></div>
-      <div class="feature glass glass-sm"><div class="k">Private</div><h3>End-to-end encrypted</h3><p>Clips are sealed with AES-256 before they leave your device. The relay only sees ciphertext.</p></div>
-      <div class="feature glass glass-sm"><div class="k">Simple</div><h3>Pair with a QR code</h3><p>Scan once to link a device. No sign-up, no email, no password to forget.</p></div>
+      <div class="feature"><div class="k">Instant</div><h3>The latest copy, always here</h3><p>Copy on any paired device and it lands on this one's clipboard, ready to paste.</p></div>
+      <div class="feature"><div class="k">Private</div><h3>End-to-end encrypted</h3><p>Clips are sealed with AES-256 before they leave your device. The relay only sees ciphertext.</p></div>
+      <div class="feature"><div class="k">Simple</div><h3>Pair with a QR code</h3><p>Scan once to link a device. No sign-up, no email, no password to forget.</p></div>
     </section>
 
     <div class="platforms-h" id="get">
@@ -290,9 +288,8 @@
       <p>Pick your platform — pair them and they share one clipboard.</p>
     </div>
     <section class="get-dl" id="cards" aria-label="Download Clippy">
-      <div class="get-card glass" id="getCard">
+      <div class="get-card">
         <div class="os-toggle" role="tablist" aria-label="Platform">
-          <span class="os-pill" id="osPill" aria-hidden="true"></span>
           <button type="button" class="os-opt" role="tab" data-os="macos" id="tab-macos" aria-selected="false">
             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.5 3c.1 1-.3 2-.9 2.7-.6.8-1.6 1.4-2.6 1.3-.1-1 .4-2 .9-2.6.6-.8 1.7-1.3 2.6-1.4zM19 17.2c-.5 1.1-.7 1.6-1.3 2.6-.9 1.3-2.1 3-3.6 3-1.4 0-1.7-.9-3.6-.9-1.8 0-2.2.9-3.6.9-1.5 0-2.7-1.5-3.5-2.8C1.1 16.9.8 12.6 2.3 10.4c1-1.5 2.6-2.4 4.1-2.4 1.5 0 2.5 1 3.7 1 1.2 0 1.9-1 3.7-1 1.3 0 2.7.7 3.7 2-3.2 1.8-2.7 6.4 1.8 7.2z"/></svg>
             macOS
@@ -326,7 +323,7 @@
     </footer>
   </div>
 
-<script src="/liquid-glass.js"></script>
+<script src="liquid-glass.js"></script>
 <script>
   var DL = {
     macos:{label:'Download for macOS', href:'/download/Clippy-macOS.dmg'},
@@ -344,26 +341,21 @@
     windows:'<svg viewBox="0 0 24 24" fill="#F4F1EA" width="20" height="20"><path d="M3 5.5l7.5-1v7.2H3zM11.3 4.4L21 3v9.7h-9.7zM3 12.5h7.5v7.2L3 18.6zM11.3 12.5H21V21l-9.7-1.3z"/></svg>'
   };
   var ORDER = ['macos','android','windows'];
-  var reduceTransparency = window.matchMedia && window.matchMedia('(prefers-reduced-transparency: reduce)').matches;
 
   function detectOS(){
     var ua=navigator.userAgent;
+    // Client hints survive "Desktop site" spoofing better than the UA string.
     var uad=navigator.userAgentData;
     var p=(uad&&uad.platform)||navigator.platform||'';
     var touch=navigator.maxTouchPoints>1;
     if(/Android/i.test(p)||/Android/i.test(ua)) return 'android';
+    // iPadOS masquerades as Mac but has touch.
     if(/iPhone|iPad|iPod/i.test(ua)||(/Mac/i.test(p)&&touch)) return 'ios';
     if(/Win/i.test(p)||/Windows/i.test(ua)) return 'windows';
     if(/Mac/i.test(p)||/Mac OS X/i.test(ua)) return 'macos';
+    // Phone in "Desktop site" mode: reports Linux but is a small touch screen.
     if(touch&&Math.min(screen.width,screen.height)<900) return 'android';
     return 'other';
-  }
-
-  function movePill(key){
-    var i = ORDER.indexOf(key);
-    if(i < 0) return;
-    var pill = document.getElementById('osPill');
-    if(pill) pill.style.transform = 'translateX(' + (i * 100) + '%)';
   }
 
   function selectOS(key){
@@ -374,17 +366,12 @@
       b.setAttribute('aria-selected', on ? 'true' : 'false');
       b.tabIndex = on ? 0 : -1;
     });
-    movePill(key);
-    var req = document.getElementById('osReq');
-    req.style.opacity = '0';
-    window.setTimeout(function(){
-      req.textContent = REQS[key] || '';
-      req.style.opacity = '1';
-    }, 80);
+    document.getElementById('osReq').textContent = REQS[key] || '';
     var getBtn = document.getElementById('getBtn');
     getBtn.href = d.href;
     document.getElementById('getIcon').innerHTML = ICON[key];
     document.getElementById('getLabel').textContent = d.label;
+    // Keep hero CTA in sync with the selected platform.
     var primary = document.getElementById('primaryBtn');
     primary.href = d.href;
     document.getElementById('primaryIcon').innerHTML = ICON[key];
@@ -412,25 +399,13 @@
     });
   });
 
-  // Apple-style liquid glass (deepika-builds/liquid-glass). Skip if reduced transparency.
-  if(typeof liquidGlass === 'function' && !reduceTransparency){
-    var glassOpts = { scale: -80, chroma: 4, blur: 4, saturate: 1.4, fallbackBlur: 18, border: 0.08 };
-    try {
-      liquidGlass(document.querySelector('.topbar'), Object.assign({}, glassOpts, { scale: -60 }));
-      liquidGlass(document.getElementById('getCard'), glassOpts);
-      Array.prototype.forEach.call(document.querySelectorAll('.feature'), function(el){
-        liquidGlass(el, Object.assign({}, glassOpts, { scale: -70 }));
-      });
-    } catch (e) { /* glass is progressive enhancement */ }
-  }
-
-  // 3D tilt on feature cards. Mouse only; off for reduced motion.
+  // 3D tilt + cursor glare on feature cards. Mouse only; off for reduced motion.
   (function(){
     if(!window.matchMedia) return;
     var fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
     var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if(!fine || reduce) return;
-    var MAX = 7;
+    var MAX = 9;
     Array.prototype.forEach.call(document.querySelectorAll('.feature'), function(card){
       card.addEventListener('mousemove', function(e){
         var r = card.getBoundingClientRect();
@@ -446,6 +421,53 @@
         card.style.setProperty('--ry','0deg');
       });
     });
+  })();
+
+  // Apple liquid glass — buttons + cards only (deepika-builds/liquid-glass).
+  // Refraction in Chromium; frosted fallback in Safari/Firefox.
+  (function initGlass(){
+    function go(){
+      if(typeof liquidGlass !== 'function') return;
+      var reduceTx = window.matchMedia &&
+        window.matchMedia('(prefers-reduced-transparency: reduce)').matches;
+      if(reduceTx) return;
+
+      // Cards: soft rim bulge, keep interior readable on cream bg.
+      Array.prototype.forEach.call(
+        document.querySelectorAll('.feature, .get-card'),
+        function(el){
+          liquidGlass(el, {
+            scale: -72, chroma: 4, border: 0.09, mapBlur: 14,
+            blur: 4, saturate: 1.45, fallbackBlur: 18
+          });
+        }
+      );
+      // Primary CTAs: slightly tighter glass.
+      Array.prototype.forEach.call(
+        document.querySelectorAll('.btn, .topbar .gh'),
+        function(el){
+          liquidGlass(el, {
+            scale: -96, chroma: 5, border: 0.12, mapBlur: 10,
+            blur: 2, saturate: 1.55, fallbackBlur: 12
+          });
+        }
+      );
+      // Selected platform chip + toggle track — small glass.
+      Array.prototype.forEach.call(
+        document.querySelectorAll('.os-toggle'),
+        function(el){
+          liquidGlass(el, {
+            scale: -60, chroma: 3, border: 0.14, mapBlur: 10,
+            blur: 3, saturate: 1.35, fallbackBlur: 12
+          });
+        }
+      );
+    }
+    if(document.readyState === 'loading'){
+      document.addEventListener('DOMContentLoaded', function(){ setTimeout(go, 0); });
+    } else {
+      setTimeout(go, 0);
+    }
   })();
 </script>
 </body>
