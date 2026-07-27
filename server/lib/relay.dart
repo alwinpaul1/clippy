@@ -335,6 +335,8 @@ const _webAssets = {
   'og.png': 'image/png',
   'apple-touch-icon.png': 'image/png',
   'favicon-32.png': 'image/png',
+  // Google Search Console site verification (keep permanently).
+  'googlec1e15c16fccdc2a5.html': 'text/html; charset=utf-8',
 };
 
 Future<bool> _serveWebAsset(HttpRequest req) async {
