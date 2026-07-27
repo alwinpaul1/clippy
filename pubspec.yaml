@@ -80,10 +80,12 @@ flutter:
   uses-material-design: true
 
   assets:
-    # System-tray / menu-bar icons (desktop background running).
+    # System-tray / menu-bar icons (static fallbacks + bounce/wink frames).
     - assets/icon/tray_template.png
     - assets/icon/tray_template_blink.png
     - assets/icon/tray_icon.ico
+    - assets/icon/tray_icon_blink.ico
+    - assets/icon/tray_anim/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

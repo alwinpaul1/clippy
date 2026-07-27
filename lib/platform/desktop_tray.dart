@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:tray_manager/tray_manager.dart';
@@ -11,6 +12,10 @@ import 'package:window_manager/window_manager.dart';
 /// quitting, and a menu-bar (macOS) / system-tray (Windows) icon stays put so
 /// you can reopen it or quit for real. The clipboard sync lives in the main
 /// isolate, which stays running as long as the process does. No-op off desktop.
+///
+/// The tray icon bounces and winks like the download-page mascot:
+/// - bob: 5.5s ease-in-out, peak at 45% (translate + slight rotate)
+/// - blink: 4.2s linear, closed eyes around 95% of the cycle
 class DesktopTray with TrayListener, WindowListener {
   DesktopTray._();
   static final DesktopTray instance = DesktopTray._();
@@ -18,13 +23,16 @@ class DesktopTray with TrayListener, WindowListener {
   static bool get isDesktop =>
       !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
 
-  // Animated menu-bar icon: while Clippy runs hidden in the background, it winks
-  // every few seconds (like the in-app mascot) so you can see it's alive.
-  // macOS only — Windows tray icons don't take a template PNG the same way.
-  static String get _openIcon =>
-      Platform.isWindows ? 'assets/icon/tray_icon.ico' : 'assets/icon/tray_template.png';
-  static const _blinkIcon = 'assets/icon/tray_template_blink.png';
-  Timer? _wink;
+  // Pre-rendered bounce samples (amount 0..1) × open/blink — see
+  // assets/icon/tray_anim/. Matches website keyframes in server/web/index.html.
+  static const _bobFrames = 9;
+  static const _bobMs = 5500;
+  static const _blinkMs = 4200;
+  static const _tickMs = 90; // ~11 fps; enough for a soft bob without thrashing
+
+  Timer? _anim;
+  String? _lastIcon;
+  bool _setting = false;
 
   Future<void> init() async {
     if (!isDesktop) return;
@@ -44,10 +52,7 @@ class DesktopTray with TrayListener, WindowListener {
     windowManager.addListener(this);
 
     trayManager.addListener(this);
-    await trayManager.setIcon(
-      _openIcon,
-      isTemplate: Platform.isMacOS, // adapt to light/dark menu bar
-    );
+    await _setIcon(_framePath(0, closed: false));
     await trayManager.setToolTip('Clippy — clipboard sync');
     await trayManager.setContextMenu(
       Menu(items: [
@@ -56,31 +61,64 @@ class DesktopTray with TrayListener, WindowListener {
         MenuItem(key: 'quit', label: 'Quit Clippy'),
       ]),
     );
+
+    _startAnim();
   }
 
   Future<void> _show() async {
-    _stopWink();
     await windowManager.show();
     await windowManager.focus();
   }
 
-  // Periodic wink while backgrounded: swap to the closed-eyes frame briefly,
-  // then back. macOS menu bar only.
-  void _startWink() {
-    if (!Platform.isMacOS || _wink != null) return;
-    _wink = Timer.periodic(const Duration(milliseconds: 4200), (_) async {
-      await trayManager.setIcon(_blinkIcon, isTemplate: true);
-      await Future<void>.delayed(const Duration(milliseconds: 160));
-      await trayManager.setIcon(_openIcon, isTemplate: true);
+  /// Bounce amount 0..1 for bob-cycle progress t∈[0,1], peak at 45% (CSS).
+  static double _bobAmount(double t) {
+    double ease(double u) => 0.5 - 0.5 * math.cos(math.pi * u.clamp(0.0, 1.0));
+    if (t <= 0.45) return ease(t / 0.45);
+    return 1.0 - ease((t - 0.45) / 0.55);
+  }
+
+  static String _framePath(int bobIndex, {required bool closed}) {
+    final i = bobIndex.clamp(0, _bobFrames - 1);
+    final tag = closed ? 'blink' : 'open';
+    if (Platform.isWindows) {
+      return 'assets/icon/tray_anim/win_${i.toString().padLeft(2, '0')}_$tag.ico';
+    }
+    return 'assets/icon/tray_anim/mac_${i.toString().padLeft(2, '0')}_$tag.png';
+  }
+
+  Future<void> _setIcon(String path) async {
+    if (path == _lastIcon) return;
+    _lastIcon = path;
+    await trayManager.setIcon(path, isTemplate: Platform.isMacOS);
+  }
+
+  void _startAnim() {
+    if (!Platform.isMacOS && !Platform.isWindows) return;
+    if (_anim != null) return;
+    final started = DateTime.now().millisecondsSinceEpoch;
+    _anim = Timer.periodic(const Duration(milliseconds: _tickMs), (_) async {
+      if (_setting) return;
+      _setting = true;
+      try {
+        final now = DateTime.now().millisecondsSinceEpoch - started;
+        final bobT = (now % _bobMs) / _bobMs;
+        final blinkT = (now % _blinkMs) / _blinkMs;
+        final amount = _bobAmount(bobT);
+        final frame = (amount * (_bobFrames - 1)).round();
+        // Website: scaleY(.1) at 95% of the 4.2s blink cycle (~92–98% closed).
+        final closed = blinkT >= 0.92 && blinkT <= 0.98;
+        await _setIcon(_framePath(frame, closed: closed));
+      } catch (_) {
+        // Icon swap can fail mid-quit; ignore.
+      } finally {
+        _setting = false;
+      }
     });
   }
 
-  void _stopWink() {
-    _wink?.cancel();
-    _wink = null;
-    if (Platform.isMacOS) {
-      trayManager.setIcon(_openIcon, isTemplate: true);
-    }
+  void _stopAnim() {
+    _anim?.cancel();
+    _anim = null;
   }
 
   // --- window close -> hide, don't quit ---
@@ -88,7 +126,6 @@ class DesktopTray with TrayListener, WindowListener {
   void onWindowClose() async {
     if (await windowManager.isPreventClose()) {
       await windowManager.hide();
-      _startWink(); // now running in the background — show it's alive
     }
   }
 
@@ -109,6 +146,7 @@ class DesktopTray with TrayListener, WindowListener {
         // applicationShouldTerminate (which now cancels Cmd+Q / Dock-Quit to
         // keep syncing in the menu bar). Nothing to flush — sync state is
         // server-authoritative and prefs are written on change.
+        _stopAnim();
         await trayManager.destroy();
         exit(0);
     }
