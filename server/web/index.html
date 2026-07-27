@@ -81,84 +81,104 @@
   .btn:focus-visible{outline:3px solid rgba(41,169,244,.5); outline-offset:2px}
   .btn svg{width:20px; height:20px; flex:none}
 
-  /* Feature tips — solid white cards + 3D tilt + pointer spotlight */
-  .features{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:60px 0 72px}
-  .feature{
+  /* Frosted glass cards over drifting color blobs (Clippy palette) */
+  .features{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin:60px 0 72px}
+  .feature,.get-card{
     position:relative;
-    background:var(--surface); border:1px solid var(--border);
-    border-radius:16px; padding:18px 18px 16px;
-    box-shadow:0 2px 14px rgba(31,28,21,.04);
-    --mx:50%; --my:50%;
+    border-radius:22px;
     overflow:hidden;
+    border:1px solid rgba(255,255,255,.55);
+    background:rgba(255,255,255,.28);
+    box-shadow:0 18px 44px -18px rgba(31,28,21,.28);
     transform-style:preserve-3d;
     will-change:transform;
   }
-  .feature .k{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--green); margin-bottom:8px}
-  .feature h3{font-family:'Newsreader',serif; font-weight:500; font-size:18px; margin:0 0 5px; letter-spacing:-.01em}
+  .feature{min-height:168px}
+  .get-card{width:100%; max-width:460px}
+
+  .card-blobs{position:absolute; inset:-22%; z-index:0; pointer-events:none}
+  .card-blob{
+    position:absolute; border-radius:50%;
+    filter:blur(18px); opacity:.88;
+    animation:card-blob-drift 10s cubic-bezier(.65,0,.35,1) infinite alternate;
+  }
+  .card-blob--1{
+    width:140px; height:140px; top:0; left:0;
+    background:rgba(31,75,63,.55);
+  }
+  .card-blob--2{
+    width:160px; height:160px; bottom:-10%; right:-6%;
+    background:rgba(41,169,244,.42);
+    animation-delay:-3.2s;
+  }
+  .card-blob--3{
+    width:110px; height:110px; top:42%; left:38%;
+    background:rgba(201,111,94,.38);
+    animation-delay:-6.4s;
+  }
+  .feature:nth-child(2) .card-blob--1{background:rgba(41,169,244,.48)}
+  .feature:nth-child(2) .card-blob--2{background:rgba(31,75,63,.50)}
+  .feature:nth-child(2) .card-blob--3{background:rgba(124,92,255,.32)}
+  .feature:nth-child(3) .card-blob--1{background:rgba(201,111,94,.42)}
+  .feature:nth-child(3) .card-blob--2{background:rgba(31,75,63,.48)}
+  .feature:nth-child(3) .card-blob--3{background:rgba(41,169,244,.36)}
+  @keyframes card-blob-drift{
+    0%{transform:translate(0,0) scale(1)}
+    100%{transform:translate(22px,-18px) scale(1.16)}
+  }
+
+  .card-panel{
+    position:relative; z-index:2;
+    height:100%; min-height:inherit;
+    margin:10px; padding:18px 18px 16px;
+    border-radius:14px;
+    background:rgba(255,255,255,.52);
+    backdrop-filter:blur(16px) saturate(140%);
+    -webkit-backdrop-filter:blur(16px) saturate(140%);
+    border:1px solid rgba(255,255,255,.55);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.72),
+      0 10px 28px -16px rgba(31,28,21,.22);
+    transition:transform 280ms cubic-bezier(.22,1,.36,1);
+  }
+  .get-card .card-panel{
+    display:flex; flex-direction:column; align-items:center; gap:18px;
+    margin:12px; padding:24px 22px 22px;
+  }
+  .feature .k{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--green); margin-bottom:8px;
+  }
+  .feature h3{
+    font-family:'Newsreader',serif; font-weight:500; font-size:18px;
+    margin:0 0 5px; letter-spacing:-.01em;
+  }
   .feature p{margin:0; font-size:13.5px; color:var(--muted); line-height:1.5}
 
-  /* 3D tilt (card-7 style) + spotlight rim. Desktop only. Solid cards, not glass. */
+  /* 3D tilt + panel lift on hover (desktop) */
   @media (hover:hover) and (pointer:fine){
     .features,.get-dl{perspective:1000px}
     .feature,.get-card{
-      transition:
-        box-shadow 180ms ease,
-        border-color 180ms ease,
-        transform 0.4s ease-in-out;
+      transition:box-shadow 200ms ease, transform 0.4s ease-in-out;
     }
     .feature.is-tilting,.get-card.is-tilting{
-      transition:
-        box-shadow 180ms ease,
-        border-color 180ms ease,
-        transform 0.1s ease-out;
+      transition:box-shadow 200ms ease, transform 0.1s ease-out;
     }
     .feature:hover,.get-card:hover{
-      border-color:transparent;
-      box-shadow:
-        0 18px 40px rgba(31,28,21,.12),
-        0 0 0 1px rgba(31,75,63,.08);
+      box-shadow:0 24px 52px -18px rgba(31,28,21,.34);
       z-index:2;
     }
-    /* Soft green wash under the cursor */
-    .feature::after,.get-card::after{
-      content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:0;
-      background:radial-gradient(
-        220px circle at var(--mx) var(--my),
-        rgba(31,75,63,.10),
-        transparent 55%
-      );
-      opacity:0; transition:opacity 160ms ease;
+    .feature:hover .card-panel,.get-card:hover .card-panel{
+      transform:translateY(-3px) scale(1.015);
     }
-    .feature:hover::after,.get-card:hover::after{opacity:1}
-    /* Bright rim that follows the pointer */
-    .feature::before,.get-card::before{
-      content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:1;
-      padding:1.5px;
-      background:radial-gradient(
-        180px circle at var(--mx) var(--my),
-        rgba(31,75,63,.75),
-        rgba(41,169,244,.35) 35%,
-        transparent 60%
-      );
-      -webkit-mask:
-        linear-gradient(#000 0 0) content-box,
-        linear-gradient(#000 0 0);
-      -webkit-mask-composite:xor;
-      mask:
-        linear-gradient(#000 0 0) content-box,
-        linear-gradient(#000 0 0);
-      mask-composite:exclude;
-      opacity:0; transition:opacity 160ms ease;
-    }
-    .feature:hover::before,.get-card:hover::before{opacity:1}
-    .feature > *,.get-card > *{position:relative; z-index:2}
   }
   @media (prefers-reduced-motion:reduce){
     .feature,.get-card{transform:none !important}
-    .feature::before,.feature::after,.get-card::before,.get-card::after{display:none}
+    .card-blob{animation:none}
+    .card-panel{transition:none}
   }
 
-  /* Platform picker: solid card with toggle + download */
+  /* Platform picker inside frosted get-card */
   .platforms-h{text-align:center; margin:0 0 28px; scroll-margin-top:24px}
   .platforms-h h2{font-family:'Newsreader',serif; font-weight:500; font-size:30px; margin:0 0 6px; letter-spacing:-.01em}
   .platforms-h p{margin:0; color:var(--muted); font-size:15px}
@@ -166,22 +186,10 @@
     display:flex; justify-content:center;
     margin:0 0 72px;
   }
-  .get-card{
-    display:flex; flex-direction:column; align-items:center; gap:18px;
-    position:relative;
-    width:100%; max-width:440px;
-    background:var(--surface); border:1px solid var(--border);
-    border-radius:20px; padding:28px 26px 26px;
-    box-shadow:0 4px 24px rgba(31,28,21,.06);
-    --mx:50%; --my:50%;
-    overflow:hidden;
-    transform-style:preserve-3d;
-    will-change:transform;
-  }
   .os-toggle{
     display:flex; width:100%; padding:4px; gap:2px;
     border-radius:14px;
-    background:var(--bg); border:1px solid var(--border);
+    background:rgba(244,241,234,.72); border:1px solid rgba(227,222,210,.9);
   }
   .os-opt{
     display:inline-flex; align-items:center; justify-content:center; gap:8px;
@@ -226,13 +234,14 @@
 
   @media (max-width:720px){
     .features{grid-template-columns:1fr}
-    .get-card{padding:22px 16px 18px; max-width:100%}
+    .get-card{max-width:100%}
+    .get-card .card-panel{padding:18px 16px 16px}
     .os-opt{padding:11px 8px; font-size:13.5px; gap:6px}
   }
   @media (prefers-reduced-motion:reduce){
     .mascot .body,.mascot .eyes,
     .topbar .mark .body,.topbar .mark .eyes,.topbar .gh .animation{animation:none}
-    .btn,.os-opt,.feature{transition:none}
+    .btn,.os-opt,.feature,.get-card{transition:none}
   }
 </style>
 </head>
@@ -266,9 +275,42 @@
     </section>
 
     <section class="features">
-      <div class="feature"><div class="k">Instant</div><h3>The latest copy, always here</h3><p>Copy on any paired device and it lands on this one's clipboard, ready to paste.</p></div>
-      <div class="feature"><div class="k">Private</div><h3>End-to-end encrypted</h3><p>Clips are sealed with AES-256 before they leave your device. The relay only sees ciphertext.</p></div>
-      <div class="feature"><div class="k">Simple</div><h3>Pair with a QR code</h3><p>Scan once to link a device. No sign-up, no email, no password to forget.</p></div>
+      <div class="feature">
+        <div class="card-blobs" aria-hidden="true">
+          <span class="card-blob card-blob--1"></span>
+          <span class="card-blob card-blob--2"></span>
+          <span class="card-blob card-blob--3"></span>
+        </div>
+        <div class="card-panel">
+          <div class="k">Instant</div>
+          <h3>The latest copy, always here</h3>
+          <p>Copy on any paired device and it lands on this one's clipboard, ready to paste.</p>
+        </div>
+      </div>
+      <div class="feature">
+        <div class="card-blobs" aria-hidden="true">
+          <span class="card-blob card-blob--1"></span>
+          <span class="card-blob card-blob--2"></span>
+          <span class="card-blob card-blob--3"></span>
+        </div>
+        <div class="card-panel">
+          <div class="k">Private</div>
+          <h3>End-to-end encrypted</h3>
+          <p>Clips are sealed with AES-256 before they leave your device. The relay only sees ciphertext.</p>
+        </div>
+      </div>
+      <div class="feature">
+        <div class="card-blobs" aria-hidden="true">
+          <span class="card-blob card-blob--1"></span>
+          <span class="card-blob card-blob--2"></span>
+          <span class="card-blob card-blob--3"></span>
+        </div>
+        <div class="card-panel">
+          <div class="k">Simple</div>
+          <h3>Pair with a QR code</h3>
+          <p>Scan once to link a device. No sign-up, no email, no password to forget.</p>
+        </div>
+      </div>
     </section>
 
     <div class="platforms-h" id="get">
@@ -277,25 +319,32 @@
     </div>
     <section class="get-dl" id="cards" aria-label="Download Clippy">
       <div class="get-card">
-        <div class="os-toggle" role="tablist" aria-label="Platform">
-          <button type="button" class="os-opt" role="tab" data-os="macos" id="tab-macos" aria-selected="false">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.5 3c.1 1-.3 2-.9 2.7-.6.8-1.6 1.4-2.6 1.3-.1-1 .4-2 .9-2.6.6-.8 1.7-1.3 2.6-1.4zM19 17.2c-.5 1.1-.7 1.6-1.3 2.6-.9 1.3-2.1 3-3.6 3-1.4 0-1.7-.9-3.6-.9-1.8 0-2.2.9-3.6.9-1.5 0-2.7-1.5-3.5-2.8C1.1 16.9.8 12.6 2.3 10.4c1-1.5 2.6-2.4 4.1-2.4 1.5 0 2.5 1 3.7 1 1.2 0 1.9-1 3.7-1 1.3 0 2.7.7 3.7 2-3.2 1.8-2.7 6.4 1.8 7.2z"/></svg>
-            macOS
-          </button>
-          <button type="button" class="os-opt" role="tab" data-os="android" id="tab-android" aria-selected="false">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.6 9.5l1.4-2.4a.4.4 0 10-.7-.4l-1.4 2.5A8.7 8.7 0 0012 8c-1.8 0-3.4.5-4.9 1.2L5.7 6.7a.4.4 0 10-.7.4l1.4 2.4A8 8 0 002 16h20a8 8 0 00-4.4-6.5zM7.5 13.8a1 1 0 110-2 1 1 0 010 2zm9 0a1 1 0 110-2 1 1 0 010 2z"/></svg>
-            Android
-          </button>
-          <button type="button" class="os-opt" role="tab" data-os="windows" id="tab-windows" aria-selected="false">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.5l7.5-1v7.2H3zM11.3 4.4L21 3v9.7h-9.7zM3 12.5h7.5v7.2L3 18.6zM11.3 12.5H21V21l-9.7-1.3z"/></svg>
-            Windows
-          </button>
+        <div class="card-blobs" aria-hidden="true">
+          <span class="card-blob card-blob--1"></span>
+          <span class="card-blob card-blob--2"></span>
+          <span class="card-blob card-blob--3"></span>
         </div>
-        <p class="os-req" id="osReq"></p>
-        <a class="btn" id="getBtn" href="/download/Clippy-macOS.dmg">
-          <span id="getIcon"></span>
-          <span id="getLabel">Download for macOS</span>
-        </a>
+        <div class="card-panel">
+          <div class="os-toggle" role="tablist" aria-label="Platform">
+            <button type="button" class="os-opt" role="tab" data-os="macos" id="tab-macos" aria-selected="false">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.5 3c.1 1-.3 2-.9 2.7-.6.8-1.6 1.4-2.6 1.3-.1-1 .4-2 .9-2.6.6-.8 1.7-1.3 2.6-1.4zM19 17.2c-.5 1.1-.7 1.6-1.3 2.6-.9 1.3-2.1 3-3.6 3-1.4 0-1.7-.9-3.6-.9-1.8 0-2.2.9-3.6.9-1.5 0-2.7-1.5-3.5-2.8C1.1 16.9.8 12.6 2.3 10.4c1-1.5 2.6-2.4 4.1-2.4 1.5 0 2.5 1 3.7 1 1.2 0 1.9-1 3.7-1 1.3 0 2.7.7 3.7 2-3.2 1.8-2.7 6.4 1.8 7.2z"/></svg>
+              macOS
+            </button>
+            <button type="button" class="os-opt" role="tab" data-os="android" id="tab-android" aria-selected="false">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.6 9.5l1.4-2.4a.4.4 0 10-.7-.4l-1.4 2.5A8.7 8.7 0 0012 8c-1.8 0-3.4.5-4.9 1.2L5.7 6.7a.4.4 0 10-.7.4l1.4 2.4A8 8 0 002 16h20a8 8 0 00-4.4-6.5zM7.5 13.8a1 1 0 110-2 1 1 0 010 2zm9 0a1 1 0 110-2 1 1 0 010 2z"/></svg>
+              Android
+            </button>
+            <button type="button" class="os-opt" role="tab" data-os="windows" id="tab-windows" aria-selected="false">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.5l7.5-1v7.2H3zM11.3 4.4L21 3v9.7h-9.7zM3 12.5h7.5v7.2L3 18.6zM11.3 12.5H21V21l-9.7-1.3z"/></svg>
+              Windows
+            </button>
+          </div>
+          <p class="os-req" id="osReq"></p>
+          <a class="btn" id="getBtn" href="/download/Clippy-macOS.dmg">
+            <span id="getIcon"></span>
+            <span id="getLabel">Download for macOS</span>
+          </a>
+        </div>
       </div>
     </section>
 
@@ -386,13 +435,19 @@
     });
   });
 
-  // 3D tilt + spotlight on all cards (InteractiveProductCard / card-7 style).
+  // 3D tilt on frosted cards + pause blobs when tab is hidden.
   (function(){
+    var blobs = document.querySelectorAll('.card-blob');
+    document.addEventListener('visibilitychange', function(){
+      var s = document.hidden ? 'paused' : 'running';
+      Array.prototype.forEach.call(blobs, function(b){ b.style.animationPlayState = s; });
+    });
+
     if(!window.matchMedia) return;
     var fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
     var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if(!fine || reduce) return;
-    var MAX = 8; // degrees — matches card-7
+    var MAX = 8;
     Array.prototype.forEach.call(
       document.querySelectorAll('.feature, .get-card'),
       function(card){
@@ -400,14 +455,12 @@
           var r = card.getBoundingClientRect();
           var px = (e.clientX - r.left) / r.width;
           var py = (e.clientY - r.top) / r.height;
-          card.style.setProperty('--mx', (px * 100).toFixed(2) + '%');
-          card.style.setProperty('--my', (py * 100).toFixed(2) + '%');
           var rotateY = (px - 0.5) * 2 * MAX;
           var rotateX = (0.5 - py) * 2 * MAX;
           card.classList.add('is-tilting');
           card.style.transform =
             'perspective(1000px) rotateX(' + rotateX.toFixed(2) + 'deg) rotateY(' +
-            rotateY.toFixed(2) + 'deg) scale3d(1.04, 1.04, 1.04)';
+            rotateY.toFixed(2) + 'deg) scale3d(1.03, 1.03, 1.03)';
         });
         card.addEventListener('pointerleave', function(){
           card.classList.remove('is-tilting');
