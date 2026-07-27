@@ -319,6 +319,8 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          # Optional: GA4 Measurement ID (G-XXXXXXXX). Empty = analytics off.
+          GA_MEASUREMENT_ID: ${{ secrets.GA_MEASUREMENT_ID }}
         run: |
           if [ -z "$VPS_SSH_KEY" ] || [ -z "$VPS_HOST" ]; then
             echo "::notice::VPS_SSH_KEY / VPS_HOST not set — skipping remote deploy."
@@ -334,17 +336,23 @@ jobs:
           # shellcheck disable=SC2029
           rsync -az -e "ssh -i ~/.ssh/vps_key -o StrictHostKeyChecking=accept-new" \
             server/ "${USER}@${VPS_HOST}:/opt/clippy/relay/"
+          # Pass GA id through only when set (pattern-validated server-side too).
+          GA_ENV=""
+          if [ -n "${GA_MEASUREMENT_ID:-}" ]; then
+            GA_ENV="-e GA_MEASUREMENT_ID=${GA_MEASUREMENT_ID}"
+          fi
           ssh -i ~/.ssh/vps_key -o StrictHostKeyChecking=accept-new "${USER}@${VPS_HOST}" \
-            'set -e
+            "set -e
              cd /opt/clippy/relay
              docker build -t clippy-relay:prod -f Dockerfile .
              docker rm -f clippy-relay 2>/dev/null || true
              docker run -d --name clippy-relay --restart unless-stopped \
                -p 127.0.0.1:8088:8080 \
                -e PORT=8080 -e DB_PATH=/data/clippy.json \
+               ${GA_ENV} \
                -v /opt/clippy/data:/data \
                --stop-timeout 15 \
-               clippy-relay:prod'
+               clippy-relay:prod"
           EXPECT=$(grep -E '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//' | tr -d '[:space:]')
           URL="https://clippy.alwinpaul.me/version.json"
           echo "Waiting for relay to serve $EXPECT ..."

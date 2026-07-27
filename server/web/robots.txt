@@ -1,0 +1,9 @@
+# Clippy — https://clippy.alwinpaul.me/
+User-agent: *
+Allow: /
+
+# Download binaries are fine to index as links; crawlers rarely need the files.
+Disallow: /health
+Disallow: /version.json
+
+Sitemap: https://clippy.alwinpaul.me/sitemap.xml

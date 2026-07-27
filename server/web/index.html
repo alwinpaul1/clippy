@@ -3,11 +3,94 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Clippy — your clipboard, everywhere</title>
+<title>Clippy — sync clipboard across Mac, Android &amp; Windows</title>
+<meta name="description" content="Copy on one device, paste on another. Clippy syncs your clipboard across macOS, Android, and Windows — end-to-end AES-256 encrypted, paired with a QR code. Free, no account.">
+<meta name="keywords" content="clipboard sync, cross device clipboard, mac android clipboard, encrypted clipboard, QR pair clipboard, Clippy app">
+<meta name="author" content="Alwin Paul">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="theme-color" content="#1F4B3F">
+<meta name="color-scheme" content="light">
+<link rel="canonical" href="https://clippy.alwinpaul.me/">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Crect width='96' height='96' rx='20' fill='%23F4F1EA'/%3E%3Cg transform='translate(18 8)'%3E%3Cpath d='M18,24 V58 A12,12 0 0 0 42,58 V18 A8,8 0 0 0 26,18 V56 A4,4 0 0 0 34,56 V26' fill='none' stroke='%231F4B3F' stroke-width='7' stroke-linecap='round'/%3E%3Ccircle cx='24' cy='8' r='6.5' fill='%23fff' stroke='%231F4B3F' stroke-width='2'/%3E%3Ccircle cx='38' cy='8' r='6.5' fill='%23fff' stroke='%231F4B3F' stroke-width='2'/%3E%3Ccircle cx='25.5' cy='9' r='3' fill='%231F4B3F'/%3E%3Ccircle cx='39.5' cy='9' r='3' fill='%231F4B3F'/%3E%3C/g%3E%3C/svg%3E">
-<meta name="description" content="Copy on one device, paste on another. Clippy syncs your clipboard across Mac and Android — end-to-end encrypted, paired with a QR code.">
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Clippy">
+<meta property="og:locale" content="en_US">
+<meta property="og:url" content="https://clippy.alwinpaul.me/">
 <meta property="og:title" content="Clippy — your clipboard, everywhere">
-<meta property="og:description" content="Copy here. Paste there. A tiny, end-to-end-encrypted clipboard that follows you across devices.">
+<meta property="og:description" content="Copy here. Paste there. End-to-end encrypted clipboard sync for Mac, Android, and Windows. Pair with a QR — no account.">
+<meta property="og:image" content="https://clippy.alwinpaul.me/og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Clippy — your clipboard, everywhere">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Clippy — your clipboard, everywhere">
+<meta name="twitter:description" content="Copy here. Paste there. End-to-end encrypted clipboard sync for Mac, Android, and Windows.">
+<meta name="twitter:image" content="https://clippy.alwinpaul.me/og.png">
+<meta name="twitter:image:alt" content="Clippy — your clipboard, everywhere">
+
+<!-- JSON-LD SoftwareApplication -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Clippy",
+  "applicationCategory": "UtilitiesApplication",
+  "operatingSystem": "macOS, Android, Windows",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "description": "Cross-device clipboard sync with end-to-end AES-256 encryption. Pair devices with a QR code — no account required.",
+  "url": "https://clippy.alwinpaul.me/",
+  "image": "https://clippy.alwinpaul.me/og.png",
+  "author": {
+    "@type": "Person",
+    "name": "Alwin Paul",
+    "url": "https://www.instagram.com/alwin_p_v"
+  },
+  "downloadUrl": [
+    "https://clippy.alwinpaul.me/download/Clippy-macOS.dmg",
+    "https://clippy.alwinpaul.me/download/Clippy-Android.apk",
+    "https://clippy.alwinpaul.me/download/Clippy-Setup.exe"
+  ]
+}
+</script>
+
+<!--
+  Google Analytics 4
+  1. Create a GA4 property at https://analytics.google.com
+  2. Admin → Data streams → Web → set URL https://clippy.alwinpaul.me
+  3. Copy Measurement ID (G-XXXXXXXX)
+  4. Either set env GA_MEASUREMENT_ID on the VPS container, or replace
+     the placeholder below. Leave empty / placeholder to disable tracking.
+-->
+<script>
+  window.CLIPPY_GA_ID = 'GA_MEASUREMENT_ID_PLACEHOLDER';
+</script>
+<script>
+(function () {
+  var id = window.CLIPPY_GA_ID;
+  if (!id || id.indexOf('PLACEHOLDER') !== -1 || id.indexOf('G-') !== 0) return;
+  var s = document.createElement('script');
+  s.async = true;
+  s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id);
+  document.head.appendChild(s);
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){ dataLayer.push(arguments); }
+  window.gtag = gtag;
+  gtag('js', new Date());
+  gtag('config', id, { anonymize_ip: true, send_page_view: true });
+})();
+</script>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..500&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
