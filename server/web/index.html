@@ -72,7 +72,12 @@
     margin:0 auto 30px;
   }
 
-  /* Download CTA — deepika liquid glass (hero + Get card). Not the topbar Get it. */
+  /*
+   * deepika liquid-glass material dressing ONLY.
+   * Do NOT set backdrop-filter here — liquid-glass.js owns the optics.
+   * Recipe: https://github.com/deepika-builds/liquid-glass
+   * Opaque fills kill the material; keep alpha low.
+   */
   .cta-row{display:flex; flex-direction:column; align-items:center; gap:14px}
   .btn{
     display:inline-flex; align-items:center; justify-content:center; gap:11px;
@@ -80,20 +85,14 @@
     color:#F4F1EA; text-decoration:none;
     font-weight:500; font-size:16px; padding:16px 30px; border-radius:18px;
     border:0; cursor:pointer;
-    /* Light-on-dark glass tint (deepika recipe, Clippy green) */
+    /* deepika-style translucent tint (Clippy green) */
     background:linear-gradient(180deg,
-      rgba(255,255,255,.18) 0%,
-      rgba(31,75,63,.42) 38%,
-      rgba(23,58,49,.62) 100%);
-    /* CSS frost base; liquid-glass.js upgrades to real refraction in Chromium */
-    backdrop-filter:blur(18px) saturate(1.8);
-    -webkit-backdrop-filter:blur(18px) saturate(1.8);
+      rgba(31,75,63,.28), rgba(23,58,49,.48));
     box-shadow:
-      0 16px 40px rgba(31,75,63,.24),
-      0 2px 0 rgba(255,255,255,.12) inset,
-      inset 0 1px 1px rgba(255,255,255,.55),
-      inset 0 -10px 24px rgba(255,255,255,.08),
-      inset 0 0 0 1px rgba(255,255,255,.28);
+      0 24px 60px rgba(31,75,63,.22),
+      inset 0 1px 1px rgba(255,255,255,.50),
+      inset 0 -8px 20px rgba(255,255,255,.06),
+      inset 0 0 0 1px rgba(255,255,255,.18);
     transition:
       transform 160ms cubic-bezier(0.23,1,0.32,1),
       box-shadow 200ms ease;
@@ -102,87 +101,85 @@
     .btn:hover{
       transform:translateY(-1px);
       box-shadow:
-        0 20px 48px rgba(31,75,63,.30),
-        0 2px 0 rgba(255,255,255,.16) inset,
-        inset 0 1px 1px rgba(255,255,255,.65),
-        inset 0 -10px 24px rgba(255,255,255,.10),
-        inset 0 0 0 1px rgba(255,255,255,.36);
+        0 28px 64px rgba(31,75,63,.28),
+        inset 0 1px 1px rgba(255,255,255,.60),
+        inset 0 -8px 20px rgba(255,255,255,.08),
+        inset 0 0 0 1px rgba(255,255,255,.24);
     }
   }
   .btn:active{transform:scale(0.97)}
   .btn:focus-visible{outline:3px solid rgba(41,169,244,.5); outline-offset:2px}
   .btn svg{width:20px; height:20px; flex:none}
 
-  /* Feature tips — deepika glass cards (no isolation: it blocks backdrop-filter) */
+  /* Feature tips — deepika glass dressing */
   .features{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:60px 0 72px}
   .feature{
     position:relative;
     border:0; border-radius:22px; padding:18px 18px 16px;
-    background:linear-gradient(165deg, rgba(255,255,255,.38), rgba(255,255,255,.14));
+    background:linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.10));
     box-shadow:
-      0 18px 48px rgba(31,28,21,.08),
-      inset 0 1px 1px rgba(255,255,255,.72),
-      inset 0 -10px 28px rgba(255,255,255,.08),
-      inset 0 0 0 1px rgba(255,255,255,.42);
+      0 24px 60px rgba(31,28,21,.10),
+      inset 0 1px 1px rgba(255,255,255,.55),
+      inset 0 -8px 20px rgba(255,255,255,.06),
+      inset 0 0 0 1px rgba(255,255,255,.28);
   }
   .feature .k{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--green); margin-bottom:8px}
   .feature h3{font-family:'Newsreader',serif; font-weight:500; font-size:18px; margin:0 0 5px; letter-spacing:-.01em}
   .feature p{margin:0; font-size:13.5px; color:var(--muted); line-height:1.5}
 
-  /* Soft glare only — no 3D transform (transform breaks backdrop refraction). */
   @media (hover:hover) and (pointer:fine){
-    .feature{
-      transition:box-shadow 220ms ease, transform 160ms cubic-bezier(0.23,1,0.32,1);
-    }
+    .feature{transition:box-shadow 220ms ease, transform 160ms cubic-bezier(0.23,1,0.32,1)}
     .feature:hover{
       transform:translateY(-2px);
       box-shadow:
-        0 24px 56px rgba(31,28,21,.12),
-        inset 0 1px 1px rgba(255,255,255,.85),
-        inset 0 -10px 28px rgba(255,255,255,.12),
-        inset 0 0 0 1px rgba(255,255,255,.55);
+        0 28px 64px rgba(31,28,21,.14),
+        inset 0 1px 1px rgba(255,255,255,.65),
+        inset 0 -8px 20px rgba(255,255,255,.08),
+        inset 0 0 0 1px rgba(255,255,255,.36);
     }
-    .feature::after{
-      content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
-      background:radial-gradient(circle at var(--gx,50%) var(--gy,50%), rgba(255,255,255,.55), transparent 46%);
-      opacity:0; transition:opacity 200ms ease;
-    }
-    .feature:hover::after{opacity:.28}
   }
   @media (prefers-reduced-motion:reduce){.feature{transform:none !important}}
 
-  /* Platform picker: one glass card with toggle + download */
+  /* Platform picker — one deepika glass panel (toggle/inner chips are CSS only) */
   .platforms-h{text-align:center; margin:0 0 28px; scroll-margin-top:24px}
   .platforms-h h2{font-family:'Newsreader',serif; font-weight:500; font-size:30px; margin:0 0 6px; letter-spacing:-.01em}
   .platforms-h p{margin:0; color:var(--muted); font-size:15px}
   .get-dl{
     display:flex; justify-content:center;
-    margin:0 0 72px;
+    margin:0 0 72px; position:relative;
+  }
+  /* Busy field behind the glass so rim refraction has something to bend */
+  .get-dl::before{
+    content:''; position:absolute; left:50%; top:50%;
+    width:min(520px, 92vw); height:280px; transform:translate(-50%,-50%);
+    border-radius:40% 60% 55% 45% / 50% 40% 60% 50%;
+    background:
+      radial-gradient(circle at 30% 40%, rgba(31,75,63,.18), transparent 55%),
+      radial-gradient(circle at 75% 60%, rgba(41,169,244,.14), transparent 50%),
+      radial-gradient(circle at 50% 80%, rgba(201,111,94,.10), transparent 45%);
+    filter:blur(2px); pointer-events:none; z-index:0;
   }
   .get-card{
     display:flex; flex-direction:column; align-items:center; gap:18px;
-    position:relative;
+    position:relative; z-index:1;
     width:100%; max-width:440px;
     border:0; border-radius:28px; padding:28px 26px 26px;
-    /* deepika light glass dressing */
-    background:linear-gradient(165deg, rgba(255,255,255,.46), rgba(255,255,255,.16));
-    backdrop-filter:blur(22px) saturate(1.65);
-    -webkit-backdrop-filter:blur(22px) saturate(1.65);
+    /* exact deepika recipe, light-theme tint */
+    background:linear-gradient(180deg,
+      rgba(255,255,255,.22), rgba(255,255,255,.10));
     box-shadow:
-      0 24px 60px rgba(31,28,21,.12),
-      inset 0 1px 1px rgba(255,255,255,.85),
-      inset 0 -12px 32px rgba(255,255,255,.10),
-      inset 0 0 0 1px rgba(255,255,255,.55);
+      0 24px 60px rgba(31,28,21,.14),
+      inset 0 1px 1px rgba(255,255,255,.55),
+      inset 0 -8px 20px rgba(255,255,255,.06),
+      inset 0 0 0 1px rgba(255,255,255,.28);
   }
   .os-toggle{
     display:flex; width:100%; padding:4px; gap:2px;
     border-radius:16px;
-    background:linear-gradient(180deg, rgba(255,255,255,.40), rgba(255,255,255,.14));
-    backdrop-filter:blur(12px) saturate(1.4);
-    -webkit-backdrop-filter:blur(12px) saturate(1.4);
+    background:rgba(255,255,255,.14);
     box-shadow:
-      inset 0 1px 2px rgba(31,28,21,.05),
-      inset 0 0 0 1px rgba(255,255,255,.48);
+      inset 0 1px 2px rgba(31,28,21,.06),
+      inset 0 0 0 1px rgba(255,255,255,.28);
   }
   .os-opt{
     display:inline-flex; align-items:center; justify-content:center; gap:8px;
@@ -203,17 +200,11 @@
   .os-opt:active{transform:scale(0.97)}
   .os-opt[aria-selected="true"]{
     color:#F4F1EA;
-    background:linear-gradient(180deg,
-      rgba(255,255,255,.16) 0%,
-      rgba(31,75,63,.50) 40%,
-      rgba(23,58,49,.72) 100%);
-    backdrop-filter:blur(12px) saturate(1.6);
-    -webkit-backdrop-filter:blur(12px) saturate(1.6);
+    background:linear-gradient(180deg, rgba(31,75,63,.45), rgba(23,58,49,.62));
     box-shadow:
-      0 6px 18px rgba(31,75,63,.20),
-      inset 0 1px 1px rgba(255,255,255,.50),
-      inset 0 -6px 14px rgba(255,255,255,.08),
-      inset 0 0 0 1px rgba(255,255,255,.24);
+      0 6px 18px rgba(31,75,63,.18),
+      inset 0 1px 1px rgba(255,255,255,.40),
+      inset 0 0 0 1px rgba(255,255,255,.16);
   }
   .os-opt:focus-visible{outline:3px solid rgba(41,169,244,.45); outline-offset:2px}
   .os-req{
@@ -222,13 +213,13 @@
   }
   .get-card .btn{width:100%; max-width:100%}
 
-  /* Reduced transparency: solid-ish materials, no fake blur dependence */
   @media (prefers-reduced-transparency:reduce){
     .feature,.get-card{
       background:var(--surface);
       box-shadow:0 2px 14px rgba(31,28,21,.06);
       border:1px solid var(--border);
     }
+    .get-dl::before{display:none}
     .btn,.os-opt[aria-selected="true"]{
       background:var(--green);
       box-shadow:0 4px 14px rgba(31,75,63,.18);
@@ -340,7 +331,7 @@
     </footer>
   </div>
 
-<script src="liquid-glass.js?v=3"></script>
+<script src="liquid-glass.js?v=4"></script>
 <script>
   var DL = {
     macos:{label:'Download for macOS', href:'/download/Clippy-macOS.dmg'},
@@ -416,76 +407,49 @@
     });
   });
 
-  // Cursor glare only on feature cards (no 3D transform — it kills backdrop refraction).
-  (function(){
-    if(!window.matchMedia) return;
-    var fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if(!fine || reduce) return;
-    Array.prototype.forEach.call(document.querySelectorAll('.feature'), function(card){
-      card.addEventListener('mousemove', function(e){
-        var r = card.getBoundingClientRect();
-        var px = (e.clientX - r.left) / r.width;
-        var py = (e.clientY - r.top) / r.height;
-        card.style.setProperty('--gx', (px * 100).toFixed(1) + '%');
-        card.style.setProperty('--gy', (py * 100).toFixed(1) + '%');
-      });
-    });
-  })();
-
-  // deepika liquid-glass — ONLY .get-card, .btn, .os-toggle (never .topbar .gh / Get it).
+  /*
+   * deepika-builds/liquid-glass — Quick start pattern.
+   * Module owns optics. CSS owns material dressing only.
+   * Never glass .topbar .gh (Get it stays solid).
+   * No nested glass on .os-toggle/.os-opt (inside .get-card).
+   */
   (function initGlass(){
     function go(){
       if(typeof liquidGlass !== 'function'){
-        console.warn('[clippy] liquid-glass.js not loaded');
+        console.warn('[clippy] liquid-glass.js missing');
         return;
       }
-      var reduceTx = window.matchMedia &&
-        window.matchMedia('(prefers-reduced-transparency: reduce)').matches;
-      if(reduceTx) return;
+      if(window.matchMedia &&
+         window.matchMedia('(prefers-reduced-transparency: reduce)').matches){
+        return;
+      }
 
-      // Get Clippy card
+      // Defaults match deepika README (scale -112, chroma 6, …)
+      var cardOpts = {
+        scale: -112, chroma: 6, border: 0.07, mapBlur: 12,
+        blur: 3, saturate: 1.5, fallbackBlur: 16
+      };
+      var btnOpts = {
+        scale: -120, chroma: 6, border: 0.08, mapBlur: 10,
+        blur: 2, saturate: 1.6, fallbackBlur: 14
+      };
+
       Array.prototype.forEach.call(
-        document.querySelectorAll('.get-card'),
-        function(el){
-          liquidGlass(el, {
-            scale: -140, chroma: 8, border: 0.055, mapBlur: 16,
-            blur: 2, saturate: 1.65, fallbackBlur: 24
-          });
-        }
+        document.querySelectorAll('.get-card, .feature'),
+        function(el){ liquidGlass(el, cardOpts); }
       );
-      // Feature cards
+      // Hero + download CTA only — class "btn", never topbar .gh
       Array.prototype.forEach.call(
-        document.querySelectorAll('.feature'),
-        function(el){
-          liquidGlass(el, {
-            scale: -120, chroma: 7, border: 0.06, mapBlur: 14,
-            blur: 2, saturate: 1.55, fallbackBlur: 20
-          });
-        }
-      );
-      // Download buttons (hero + inside get-card) — NOT Get it
-      Array.prototype.forEach.call(
-        document.querySelectorAll('.btn'),
-        function(el){
-          liquidGlass(el, {
-            scale: -150, chroma: 9, border: 0.07, mapBlur: 12,
-            blur: 1.5, saturate: 1.85, fallbackBlur: 18
-          });
-        }
-      );
-      // Platform toggle tray
-      Array.prototype.forEach.call(
-        document.querySelectorAll('.os-toggle'),
-        function(el){
-          liquidGlass(el, {
-            scale: -100, chroma: 6, border: 0.10, mapBlur: 11,
-            blur: 2, saturate: 1.55, fallbackBlur: 16
-          });
-        }
+        document.querySelectorAll('a.btn'),
+        function(el){ liquidGlass(el, btnOpts); }
       );
     }
-    function schedule(){ requestAnimationFrame(function(){ setTimeout(go, 40); }); }
+    // Layout must be final so the displacement map has real w×h
+    function schedule(){
+      requestAnimationFrame(function(){
+        requestAnimationFrame(go);
+      });
+    }
     if(document.readyState === 'loading'){
       document.addEventListener('DOMContentLoaded', schedule);
     } else {
