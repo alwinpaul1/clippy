@@ -441,30 +441,29 @@
   }
 
   /**
-   * Unique events only (no duplicates):
+   * Unique analytics only:
    * - page_view (gtag config) — visits
-   * - select_platform — user changed OS tab (not auto-detect)
-   * - download — one event per install click; break down by `platform`
-   * Session source/medium/country come free on every event.
+   * - download — one install click; break down by `platform` (macos|android|windows)
+   * Do NOT fire file_download / download_* — Enhanced Measurement must have
+   * "File downloads" OFF or GA will double-count .dmg/.apk/.exe clicks.
    */
   function trackDownload(platform, href, label, placement){
     var file = (href || '').split('/').pop() || '';
     var ext = file.indexOf('.') >= 0 ? file.split('.').pop() : '';
     var abs = href && href.indexOf('http') === 0 ? href : (location.origin + href);
     track('event', 'download', {
-      platform: platform,           // macos | android | windows
+      platform: platform,
       file_name: file,
       file_extension: ext,
       link_url: abs,
       link_text: label || '',
-      placement: placement || 'unknown', // hero | get_card
+      placement: placement || 'unknown',
       transport_type: 'beacon'
     });
   }
 
-  function selectOS(key, opts){
+  function selectOS(key){
     if(!DL[key]) return;
-    var prev = selectedOS;
     selectedOS = key;
     var d = DL[key];
     Array.prototype.forEach.call(document.querySelectorAll('.os-opt'), function(b){
@@ -478,29 +477,20 @@
     getBtn.setAttribute('data-platform', key);
     document.getElementById('getIcon').innerHTML = ICON[key];
     document.getElementById('getLabel').textContent = d.label;
-    // Keep hero CTA in sync with the selected platform.
     var primary = document.getElementById('primaryBtn');
     primary.href = d.href;
     primary.setAttribute('data-platform', key);
     document.getElementById('primaryIcon').innerHTML = ICON[key];
     document.getElementById('primaryLabel').textContent = d.label;
-    // Only when the user actually switches platform (not page-load detect).
-    if(opts && opts.track && prev !== key){
-      track('event', 'select_platform', {
-        platform: key,
-        previous_platform: prev,
-        method: opts.method || 'click'
-      });
-    }
   }
 
   var os = detectOS();
   var primaryOS = (os==='macos'||os==='android'||os==='windows') ? os : 'macos';
-  selectOS(primaryOS); // silent autodetect — no event
+  selectOS(primaryOS);
 
   Array.prototype.forEach.call(document.querySelectorAll('.os-opt'), function(b){
     b.addEventListener('click', function(){
-      selectOS(b.getAttribute('data-os'), {track:true, method:'click'});
+      selectOS(b.getAttribute('data-os'));
     });
     b.addEventListener('keydown', function(e){
       var i = ORDER.indexOf(b.getAttribute('data-os'));
@@ -512,12 +502,12 @@
       if(e.key === 'End') next = ORDER.length - 1;
       if(next < 0) return;
       e.preventDefault();
-      selectOS(ORDER[next], {track:true, method:'keyboard'});
+      selectOS(ORDER[next]);
       document.querySelector('.os-opt[data-os="'+ORDER[next]+'"]').focus();
     });
   });
 
-  // One download event per click (hero + Get Clippy share the same event name).
+  // One download event per click only.
   function onDownloadClick(placement){
     return function(){
       var platform = selectedOS;
