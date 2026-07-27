@@ -87,7 +87,12 @@
   function gtag(){ dataLayer.push(arguments); }
   window.gtag = gtag;
   gtag('js', new Date());
-  gtag('config', id, { anonymize_ip: true, send_page_view: true });
+  // send_page_view: true — source/medium/country attach automatically to later events.
+  gtag('config', id, {
+    send_page_view: true,
+    // Makes download events show up in DebugView while testing.
+    debug_mode: /[?&]ga_debug=1(?:&|$)/.test(location.search)
+  });
 })();
 </script>
 
@@ -428,8 +433,52 @@
     return 'other';
   }
 
-  function selectOS(key){
+  /** Current platform on the download buttons (macos | android | windows). */
+  var selectedOS = 'macos';
+
+  /** Safe gtag wrapper — no-ops when GA is off. */
+  function track(){
+    if(typeof window.gtag !== 'function') return;
+    window.gtag.apply(window, arguments);
+  }
+
+  /**
+   * Download + platform analytics.
+   * - `download` — custom event with platform (filter in Explorations)
+   * - `file_download` — GA4 recommended event (file name / extension)
+   * Session source/medium/country are attached automatically by GA4.
+   */
+  function trackDownload(platform, href, label, placement){
+    var file = (href || '').split('/').pop() || '';
+    var ext = file.indexOf('.') >= 0 ? file.split('.').pop() : '';
+    var abs = href && href.indexOf('http') === 0 ? href : (location.origin + href);
+    var payload = {
+      platform: platform,           // macos | android | windows
+      file_name: file,
+      file_extension: ext,
+      link_url: abs,
+      link_text: label || '',
+      placement: placement || 'unknown', // hero | get_card
+      // beacon so the hit isn't lost if the browser navigates to the file
+      transport_type: 'beacon'
+    };
+    track('event', 'download', payload);
+    track('event', 'file_download', payload);
+    // Per-platform events — easy cards in GA (download_macos, …)
+    track('event', 'download_' + platform, payload);
+  }
+
+  function trackPlatformSelect(platform, method){
+    track('event', 'select_platform', {
+      platform: platform,
+      method: method || 'click' // click | keyboard | autodetect
+    });
+  }
+
+  function selectOS(key, opts){
     if(!DL[key]) return;
+    var prev = selectedOS;
+    selectedOS = key;
     var d = DL[key];
     Array.prototype.forEach.call(document.querySelectorAll('.os-opt'), function(b){
       var on = b.getAttribute('data-os') === key;
@@ -439,21 +488,29 @@
     document.getElementById('osReq').textContent = REQS[key] || '';
     var getBtn = document.getElementById('getBtn');
     getBtn.href = d.href;
+    getBtn.setAttribute('data-platform', key);
     document.getElementById('getIcon').innerHTML = ICON[key];
     document.getElementById('getLabel').textContent = d.label;
     // Keep hero CTA in sync with the selected platform.
     var primary = document.getElementById('primaryBtn');
     primary.href = d.href;
+    primary.setAttribute('data-platform', key);
     document.getElementById('primaryIcon').innerHTML = ICON[key];
     document.getElementById('primaryLabel').textContent = d.label;
+    if(opts && opts.track && prev !== key){
+      trackPlatformSelect(key, opts.method || 'click');
+    }
   }
 
   var os = detectOS();
   var primaryOS = (os==='macos'||os==='android'||os==='windows') ? os : 'macos';
   selectOS(primaryOS);
+  trackPlatformSelect(primaryOS, 'autodetect');
 
   Array.prototype.forEach.call(document.querySelectorAll('.os-opt'), function(b){
-    b.addEventListener('click', function(){ selectOS(b.getAttribute('data-os')); });
+    b.addEventListener('click', function(){
+      selectOS(b.getAttribute('data-os'), {track:true, method:'click'});
+    });
     b.addEventListener('keydown', function(e){
       var i = ORDER.indexOf(b.getAttribute('data-os'));
       if(i < 0) return;
@@ -464,10 +521,24 @@
       if(e.key === 'End') next = ORDER.length - 1;
       if(next < 0) return;
       e.preventDefault();
-      selectOS(ORDER[next]);
+      selectOS(ORDER[next], {track:true, method:'keyboard'});
       document.querySelector('.os-opt[data-os="'+ORDER[next]+'"]').focus();
     });
   });
+
+  // Download clicks (hero + Get Clippy card)
+  function onDownloadClick(placement){
+    return function(e){
+      var platform = selectedOS;
+      var d = DL[platform];
+      if(!d) return;
+      trackDownload(platform, d.href, d.label, placement);
+    };
+  }
+  var getBtnEl = document.getElementById('getBtn');
+  var primaryBtnEl = document.getElementById('primaryBtn');
+  if(getBtnEl) getBtnEl.addEventListener('click', onDownloadClick('get_card'));
+  if(primaryBtnEl) primaryBtnEl.addEventListener('click', onDownloadClick('hero'));
 
   // 3D tilt + spotlight on all cards (InteractiveProductCard / card-7 style).
   (function(){
