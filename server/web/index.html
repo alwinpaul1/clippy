@@ -42,7 +42,8 @@
   .topbar .spacer{flex:1}
   /* "Get it" — original solid ripple CTA. NOT liquid glass. */
   .topbar .gh{
-    outline:0; display:inline-flex; align-items:center; justify-content:space-between;
+    outline:0; display:inline-flex; align-items:center; justify-content:center;
+    position:relative;
     background:var(--green) !important; min-width:132px; border:0; border-radius:9px;
     box-shadow:0 4px 12px rgba(31,28,21,.14) !important; box-sizing:border-box;
     padding:12px 16px; color:#F4F1EA; font-size:12px; font-weight:600;
@@ -53,7 +54,12 @@
   }
   .topbar .gh:hover{opacity:.95}
   .topbar .gh:active{transform:none !important}
-  .topbar .gh .animation{border-radius:100%; animation:ripple 0.6s linear infinite}
+  /* Ripple sits centered; zero size so it never shows as a side slab */
+  .topbar .gh .animation{
+    position:absolute; left:50%; top:50%; width:0; height:0;
+    border-radius:100%; pointer-events:none;
+    animation:ripple 0.6s linear infinite;
+  }
   @keyframes ripple{
     0%{box-shadow:0 0 0 0 rgba(244,241,234,.1), 0 0 0 20px rgba(244,241,234,.1), 0 0 0 40px rgba(244,241,234,.1), 0 0 0 60px rgba(244,241,234,.1)}
     100%{box-shadow:0 0 0 20px rgba(244,241,234,.1), 0 0 0 40px rgba(244,241,234,.1), 0 0 0 60px rgba(244,241,234,.1), 0 0 0 80px rgba(244,241,234,0)}
@@ -85,14 +91,14 @@
     color:#F4F1EA; text-decoration:none;
     font-weight:500; font-size:16px; padding:16px 30px; border-radius:18px;
     border:0; cursor:pointer;
-    /* deepika-style translucent tint (Clippy green) */
+    /* deepika-style translucent tint (Clippy green) — legible but not opaque */
     background:linear-gradient(180deg,
-      rgba(31,75,63,.28), rgba(23,58,49,.48));
+      rgba(31,75,63,.42), rgba(23,58,49,.62));
     box-shadow:
-      0 24px 60px rgba(31,75,63,.22),
+      0 24px 60px rgba(31,75,63,.24),
       inset 0 1px 1px rgba(255,255,255,.50),
       inset 0 -8px 20px rgba(255,255,255,.06),
-      inset 0 0 0 1px rgba(255,255,255,.18);
+      inset 0 0 0 1px rgba(255,255,255,.20);
     transition:
       transform 160ms cubic-bezier(0.23,1,0.32,1),
       box-shadow 200ms ease;
@@ -331,7 +337,7 @@
     </footer>
   </div>
 
-<script src="liquid-glass.js?v=4"></script>
+<script src="liquid-glass.js?v=5"></script>
 <script>
   var DL = {
     macos:{label:'Download for macOS', href:'/download/Clippy-macOS.dmg'},
