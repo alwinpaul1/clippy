@@ -76,16 +76,20 @@
   function gtag(){ dataLayer.push(arguments); }
   window.gtag = gtag;
   gtag('js', new Date());
-  // Single-page site: always report one stable title + clean homepage URL
-  // (ignore query strings / accidental document.title changes from tooling).
+  // Single landing page only — never use document.title (debug tools polluted it).
   var CLIPPY_PAGE_TITLE = 'Clippy — sync clipboard across Mac, Android & Windows';
-  var CLIPPY_PAGE_LOCATION = location.origin + '/';
+  var CLIPPY_PAGE_LOCATION = 'https://clippy.alwinpaul.me/';
+  gtag('set', {
+    page_title: CLIPPY_PAGE_TITLE,
+    page_location: CLIPPY_PAGE_LOCATION,
+    page_path: '/'
+  });
   gtag('config', 'G-TF84T5QG24', {
     send_page_view: true,
     cookie_domain: 'auto',
+    page_title: CLIPPY_PAGE_TITLE,
     page_location: CLIPPY_PAGE_LOCATION,
     page_path: '/',
-    page_title: CLIPPY_PAGE_TITLE,
     debug_mode: /[?&]ga_debug=1(?:&|$)/.test(location.search)
   });
 </script>
