@@ -437,35 +437,24 @@
   }
 
   /**
-   * Download + platform analytics.
-   * - `download` — custom event with platform (filter in Explorations)
-   * - `file_download` — GA4 recommended event (file name / extension)
-   * Session source/medium/country are attached automatically by GA4.
+   * Unique events only (no duplicates):
+   * - page_view (gtag config) — visits
+   * - select_platform — user changed OS tab (not auto-detect)
+   * - download — one event per install click; break down by `platform`
+   * Session source/medium/country come free on every event.
    */
   function trackDownload(platform, href, label, placement){
     var file = (href || '').split('/').pop() || '';
     var ext = file.indexOf('.') >= 0 ? file.split('.').pop() : '';
     var abs = href && href.indexOf('http') === 0 ? href : (location.origin + href);
-    var payload = {
+    track('event', 'download', {
       platform: platform,           // macos | android | windows
       file_name: file,
       file_extension: ext,
       link_url: abs,
       link_text: label || '',
       placement: placement || 'unknown', // hero | get_card
-      // beacon so the hit isn't lost if the browser navigates to the file
       transport_type: 'beacon'
-    };
-    track('event', 'download', payload);
-    track('event', 'file_download', payload);
-    // Per-platform events — easy cards in GA (download_macos, …)
-    track('event', 'download_' + platform, payload);
-  }
-
-  function trackPlatformSelect(platform, method){
-    track('event', 'select_platform', {
-      platform: platform,
-      method: method || 'click' // click | keyboard | autodetect
     });
   }
 
@@ -491,15 +480,19 @@
     primary.setAttribute('data-platform', key);
     document.getElementById('primaryIcon').innerHTML = ICON[key];
     document.getElementById('primaryLabel').textContent = d.label;
+    // Only when the user actually switches platform (not page-load detect).
     if(opts && opts.track && prev !== key){
-      trackPlatformSelect(key, opts.method || 'click');
+      track('event', 'select_platform', {
+        platform: key,
+        previous_platform: prev,
+        method: opts.method || 'click'
+      });
     }
   }
 
   var os = detectOS();
   var primaryOS = (os==='macos'||os==='android'||os==='windows') ? os : 'macos';
-  selectOS(primaryOS);
-  trackPlatformSelect(primaryOS, 'autodetect');
+  selectOS(primaryOS); // silent autodetect — no event
 
   Array.prototype.forEach.call(document.querySelectorAll('.os-opt'), function(b){
     b.addEventListener('click', function(){
@@ -520,9 +513,9 @@
     });
   });
 
-  // Download clicks (hero + Get Clippy card)
+  // One download event per click (hero + Get Clippy share the same event name).
   function onDownloadClick(placement){
-    return function(e){
+    return function(){
       var platform = selectedOS;
       var d = DL[platform];
       if(!d) return;
