@@ -81,38 +81,68 @@
   .btn:focus-visible{outline:3px solid rgba(41,169,244,.5); outline-offset:2px}
   .btn svg{width:20px; height:20px; flex:none}
 
-  /* Feature tips — solid white cards */
+  /* Feature tips — solid white cards + pointer spotlight */
   .features{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:60px 0 72px}
   .feature{
     position:relative;
     background:var(--surface); border:1px solid var(--border);
     border-radius:16px; padding:18px 18px 16px;
     box-shadow:0 2px 14px rgba(31,28,21,.04);
+    --mx:50%; --my:50%;
+    overflow:hidden;
   }
   .feature .k{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--green); margin-bottom:8px}
   .feature h3{font-family:'Newsreader',serif; font-weight:500; font-size:18px; margin:0 0 5px; letter-spacing:-.01em}
   .feature p{margin:0; font-size:13.5px; color:var(--muted); line-height:1.5}
 
-  /* Soft tilt on feature cards (mouse + fine pointer). */
+  /* Spotlight rim + soft fill (mouse only). Solid cards, not glass. */
   @media (hover:hover) and (pointer:fine){
-    .features{perspective:1000px}
-    .feature{
-      transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));
-      transform-style:preserve-3d;
-      transition:transform 130ms ease-out, box-shadow 180ms ease;
-      will-change:transform;
+    .feature,.get-card{
+      transition:box-shadow 180ms ease, border-color 180ms ease;
     }
-    .feature:hover{
-      box-shadow:0 10px 28px rgba(31,28,21,.08);
+    .feature:hover,.get-card:hover{
+      border-color:transparent;
+      box-shadow:
+        0 10px 28px rgba(31,28,21,.08),
+        0 0 0 1px rgba(31,75,63,.08);
     }
-    .feature::after{
-      content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
-      background:radial-gradient(circle at var(--gx,50%) var(--gy,50%), rgba(255,255,255,.7), transparent 46%);
+    /* Soft green wash under the cursor */
+    .feature::after,.get-card::after{
+      content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:0;
+      background:radial-gradient(
+        220px circle at var(--mx) var(--my),
+        rgba(31,75,63,.10),
+        transparent 55%
+      );
       opacity:0; transition:opacity 160ms ease;
     }
-    .feature:hover::after{opacity:.35}
+    .feature:hover::after,.get-card:hover::after{opacity:1}
+    /* Bright rim that follows the pointer (spotlight-card style) */
+    .feature::before,.get-card::before{
+      content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:1;
+      padding:1.5px;
+      background:radial-gradient(
+        180px circle at var(--mx) var(--my),
+        rgba(31,75,63,.75),
+        rgba(41,169,244,.35) 35%,
+        transparent 60%
+      );
+      -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      -webkit-mask-composite:xor;
+      mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      mask-composite:exclude;
+      opacity:0; transition:opacity 160ms ease;
+    }
+    .feature:hover::before,.get-card:hover::before{opacity:1}
+    .feature > *,.get-card > *{position:relative; z-index:2}
   }
-  @media (prefers-reduced-motion:reduce){.feature{transform:none !important}}
+  @media (prefers-reduced-motion:reduce){
+    .feature::before,.feature::after,.get-card::before,.get-card::after{display:none}
+  }
 
   /* Platform picker: solid card with toggle + download */
   .platforms-h{text-align:center; margin:0 0 28px; scroll-margin-top:24px}
@@ -124,10 +154,13 @@
   }
   .get-card{
     display:flex; flex-direction:column; align-items:center; gap:18px;
+    position:relative;
     width:100%; max-width:440px;
     background:var(--surface); border:1px solid var(--border);
     border-radius:20px; padding:28px 26px 26px;
     box-shadow:0 4px 24px rgba(31,28,21,.06);
+    --mx:50%; --my:50%;
+    overflow:hidden;
   }
   .os-toggle{
     display:flex; width:100%; padding:4px; gap:2px;
@@ -337,28 +370,24 @@
     });
   });
 
-  // 3D tilt + cursor glare on feature cards. Mouse only; off for reduced motion.
+  // Spotlight rim follows the pointer on feature + get cards (desktop only).
   (function(){
     if(!window.matchMedia) return;
     var fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
     var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if(!fine || reduce) return;
-    var MAX = 9;
-    Array.prototype.forEach.call(document.querySelectorAll('.feature'), function(card){
-      card.addEventListener('mousemove', function(e){
-        var r = card.getBoundingClientRect();
-        var px = (e.clientX - r.left) / r.width;
-        var py = (e.clientY - r.top) / r.height;
-        card.style.setProperty('--ry', ((px - 0.5) * MAX).toFixed(2) + 'deg');
-        card.style.setProperty('--rx', ((0.5 - py) * MAX).toFixed(2) + 'deg');
-        card.style.setProperty('--gx', (px * 100).toFixed(1) + '%');
-        card.style.setProperty('--gy', (py * 100).toFixed(1) + '%');
-      });
-      card.addEventListener('mouseleave', function(){
-        card.style.setProperty('--rx','0deg');
-        card.style.setProperty('--ry','0deg');
-      });
-    });
+    Array.prototype.forEach.call(
+      document.querySelectorAll('.feature, .get-card'),
+      function(card){
+        card.addEventListener('pointermove', function(e){
+          var r = card.getBoundingClientRect();
+          var x = ((e.clientX - r.left) / r.width) * 100;
+          var y = ((e.clientY - r.top) / r.height) * 100;
+          card.style.setProperty('--mx', x.toFixed(2) + '%');
+          card.style.setProperty('--my', y.toFixed(2) + '%');
+        });
+      }
+    );
   })();
 
 </script>
