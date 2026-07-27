@@ -51,27 +51,25 @@ void main() {
     expect(r.recent('room'), isEmpty);
   });
 
-  // Writes are debounced (persistDelay) — tests use a zero delay and yield one
-  // event-loop turn so the coalescing Timer fires before re-reading the file.
-  Future<void> flushPersist() =>
-      Future<void>.delayed(const Duration(milliseconds: 20));
-
+  // Persist uses Isolate.run — a fixed sleep is flaky on CI. Always await
+  // flush() so the file is durable before the next constructor re-reads it.
   test('File repository persists removes and clears across restart', () async {
     final dir = await Directory.systemTemp.createTemp('clippy_relay_rm');
     final path = '${dir.path}/clippy.json';
     try {
-      FileClipRepository(path, persistDelay: Duration.zero)
+      final writer = FileClipRepository(path, persistDelay: Duration.zero)
         ..add('room', clip('a'))
         ..add('room', clip('b'))
         ..remove('room', {'h:a'});
-      await flushPersist();
+      await writer.flush();
       expect(
         FileClipRepository(path).recent('room').map((c) => c['hash']).toList(),
         ['h:b'],
       );
 
-      FileClipRepository(path, persistDelay: Duration.zero).clear('room');
-      await flushPersist();
+      final clearer =
+          FileClipRepository(path, persistDelay: Duration.zero)..clear('room');
+      await clearer.flush();
       expect(FileClipRepository(path).recent('room'), isEmpty);
     } finally {
       await dir.delete(recursive: true);
@@ -83,10 +81,10 @@ void main() {
     final dir = await Directory.systemTemp.createTemp('clippy_relay_test');
     final path = '${dir.path}/clippy.json';
     try {
-      FileClipRepository(path, persistDelay: Duration.zero)
+      final writer = FileClipRepository(path, persistDelay: Duration.zero)
         ..add('room', clip('one'))
         ..add('room', clip('two'));
-      await flushPersist();
+      await writer.flush();
 
       final restarted = FileClipRepository(path);
       expect(restarted.recent('room').map((c) => c['hash']).toList(),
@@ -116,12 +114,14 @@ void main() {
     final path = '${dir.path}/clippy.json';
     try {
       // Simulate a file where one room was cleared to empty (its key lingered)
-      // while another still holds clips.
-      FileClipRepository(path, persistDelay: Duration.zero)
+      // while another still holds clips. clear() flushes immediately, so the
+      // empty list is on disk before we read the raw JSON below.
+      final writer = FileClipRepository(path, persistDelay: Duration.zero)
         ..add('live', clip('keep'))
-        ..add('dead', clip('gone'))
-        ..clear('dead'); // leaves 'dead' present but empty on disk
-      await flushPersist();
+        ..add('dead', clip('gone'));
+      await writer.flush();
+      writer.clear('dead'); // leaves 'dead' present but empty on disk
+      await writer.flush();
       // Precondition read the raw file (a fresh repo would already sweep it).
       final onDisk = jsonDecode(File(path).readAsStringSync()) as Map;
       expect(onDisk.containsKey('dead'), isTrue);
