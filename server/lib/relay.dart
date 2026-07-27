@@ -313,14 +313,6 @@ Future<void> _handleRequest(HttpRequest req) async {
     await req.response.close();
     return;
   }
-  // Allow-listed static assets for the download page (e.g. liquid-glass.js).
-  if (req.uri.path.startsWith('/')) {
-    final name = req.uri.pathSegments.length == 1 ? req.uri.pathSegments.first : '';
-    if (_webAssets.containsKey(name)) {
-      await _serveWebAsset(req, name);
-      return;
-    }
-  }
   if (req.uri.path.startsWith('/download/')) {
     await _serveDownload(req);
     return;
@@ -328,39 +320,6 @@ Future<void> _handleRequest(HttpRequest req) async {
   if (req.uri.path == '/version.json') {
     await _serveVersion(req);
     return;
-  }
-  req.response.statusCode = HttpStatus.notFound;
-  await req.response.close();
-}
-
-/// Public static files next to index.html (no path traversal).
-const _webAssets = {
-  'liquid-glass.js': 'application/javascript',
-};
-
-Future<void> _serveWebAsset(HttpRequest req, String name) async {
-  final mime = _webAssets[name];
-  if (mime == null) {
-    req.response.statusCode = HttpStatus.notFound;
-    await req.response.close();
-    return;
-  }
-  for (final dir in [
-    'web',
-    '/app/web',
-    '${File(Platform.resolvedExecutable).parent.parent.path}/web',
-  ]) {
-    final file = File('$dir/$name');
-    if (file.existsSync()) {
-      final parts = mime.split('/');
-      req.response
-        ..statusCode = HttpStatus.ok
-        ..headers.contentType = ContentType(parts[0], parts[1], charset: 'utf-8')
-        ..headers.set(HttpHeaders.cacheControlHeader, 'public, max-age=3600')
-        ..add(await file.readAsBytes());
-      await req.response.close();
-      return;
-    }
   }
   req.response.statusCode = HttpStatus.notFound;
   await req.response.close();
