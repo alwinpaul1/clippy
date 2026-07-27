@@ -443,9 +443,12 @@ String _downloadPage() {
       final file = File('$dir/index.html');
       if (file.existsSync()) {
         var html = file.readAsStringSync();
+        // Optional override of the default Measurement ID baked into index.html.
         final ga = Platform.environment['GA_MEASUREMENT_ID']?.trim() ?? '';
         if (ga.isNotEmpty && RegExp(r'^G-[A-Z0-9]+$').hasMatch(ga)) {
-          html = html.replaceAll('GA_MEASUREMENT_ID_PLACEHOLDER', ga);
+          html = html
+              .replaceAll('G-TF84T5QG24', ga)
+              .replaceAll('GA_MEASUREMENT_ID_PLACEHOLDER', ga);
         }
         return _downloadPageCache = html;
       }

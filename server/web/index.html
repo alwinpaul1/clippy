@@ -65,35 +65,24 @@
 </script>
 
 <!--
-  Google Analytics 4
-  1. Create a GA4 property at https://analytics.google.com
-  2. Admin → Data streams → Web → set URL https://clippy.alwinpaul.me
-  3. Copy Measurement ID (G-XXXXXXXX)
-  4. Either set env GA_MEASUREMENT_ID on the VPS container, or replace
-     the placeholder below. Leave empty / placeholder to disable tracking.
+  Google Analytics 4 (Clippy property, web stream G-TF84T5QG24).
+  Optional: env GA_MEASUREMENT_ID on the relay overrides the id below.
 -->
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-TF84T5QG24"></script>
 <script>
-  window.CLIPPY_GA_ID = 'GA_MEASUREMENT_ID_PLACEHOLDER';
-</script>
-<script>
-(function () {
-  var id = window.CLIPPY_GA_ID;
-  if (!id || id.indexOf('PLACEHOLDER') !== -1 || id.indexOf('G-') !== 0) return;
-  var s = document.createElement('script');
-  s.async = true;
-  s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id);
-  document.head.appendChild(s);
+  window.CLIPPY_GA_ID = 'G-TF84T5QG24';
   window.dataLayer = window.dataLayer || [];
   function gtag(){ dataLayer.push(arguments); }
   window.gtag = gtag;
   gtag('js', new Date());
-  // send_page_view: true — source/medium/country attach automatically to later events.
-  gtag('config', id, {
+  gtag('config', 'G-TF84T5QG24', {
     send_page_view: true,
-    // Makes download events show up in DebugView while testing.
+    cookie_domain: 'auto',
+    page_location: location.href,
+    page_title: document.title,
     debug_mode: /[?&]ga_debug=1(?:&|$)/.test(location.search)
   });
-})();
 </script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
