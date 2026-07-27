@@ -20,41 +20,29 @@
   *{box-sizing:border-box}
   html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
   body{
-    margin:0; color:var(--ink);
+    margin:0; background:var(--bg); color:var(--ink);
     font-family:'Instrument Sans',system-ui,sans-serif; line-height:1.5;
     -webkit-font-smoothing:antialiased;
-    /* Soft ambient fields so liquid-glass has something to bend (flat cream = invisible refraction). */
-    background:
-      radial-gradient(ellipse 70% 55% at 12% 22%, rgba(31,75,63,.11), transparent 58%),
-      radial-gradient(ellipse 65% 50% at 92% 38%, rgba(41,169,244,.09), transparent 55%),
-      radial-gradient(ellipse 55% 45% at 48% 78%, rgba(201,111,94,.06), transparent 55%),
-      radial-gradient(ellipse 40% 35% at 70% 12%, rgba(31,75,63,.06), transparent 50%),
-      var(--bg);
-    background-attachment:fixed;
   }
   a{color:inherit}
-  .wrap{max-width:1000px; margin:0 auto; padding:0 24px; position:relative; z-index:1}
+  .wrap{max-width:1000px; margin:0 auto; padding:0 24px}
 
   /* Top bar */
   .topbar{display:flex; align-items:center; gap:11px; padding:22px 0}
   .topbar .mark{width:22px; height:31px}
   .topbar .name{font-family:'Newsreader',serif; font-weight:500; font-size:22px; letter-spacing:-.01em}
   .topbar .spacer{flex:1}
-  /* "Get it" — original solid ripple CTA. NOT liquid glass. */
+  /* "Get it" — solid Uiverse ripple CTA. Do NOT glass this. */
   .topbar .gh{
     outline:0; display:inline-flex; align-items:center; justify-content:center;
     position:relative;
-    background:var(--green) !important; min-width:132px; border:0; border-radius:9px;
-    box-shadow:0 4px 12px rgba(31,28,21,.14) !important; box-sizing:border-box;
+    background:var(--green); min-width:132px; border:0; border-radius:9px;
+    box-shadow:0 4px 12px rgba(31,28,21,.14); box-sizing:border-box;
     padding:12px 16px; color:#F4F1EA; font-size:12px; font-weight:600;
     letter-spacing:1.2px; text-transform:uppercase; overflow:hidden;
     cursor:pointer; text-decoration:none;
-    backdrop-filter:none !important; -webkit-backdrop-filter:none !important;
-    transform:none !important;
   }
   .topbar .gh:hover{opacity:.95}
-  .topbar .gh:active{transform:none !important}
-  /* Ripple sits centered; zero size so it never shows as a side slab */
   .topbar .gh .animation{
     position:absolute; left:50%; top:50%; width:0; height:0;
     border-radius:100%; pointer-events:none;
@@ -78,158 +66,183 @@
     margin:0 auto 30px;
   }
 
-  /*
-   * deepika liquid-glass material dressing ONLY.
-   * Do NOT set backdrop-filter here — liquid-glass.js owns the optics.
-   * Recipe: https://github.com/deepika-builds/liquid-glass
-   * Opaque fills kill the material; keep alpha low.
-   */
+  /* Download CTA — soft green glass pill (hero + Get card). Not topbar Get it. */
   .cta-row{display:flex; flex-direction:column; align-items:center; gap:14px}
   .btn{
     display:inline-flex; align-items:center; justify-content:center; gap:11px;
     position:relative;
-    color:#F4F1EA; text-decoration:none;
-    font-weight:500; font-size:16px; padding:16px 30px; border-radius:18px;
+    color:#F7F5EF; text-decoration:none;
+    font-weight:550; font-size:16.5px; letter-spacing:.01em;
+    padding:17px 34px; border-radius:999px;
     border:0; cursor:pointer;
-    /* deepika-style translucent tint (Clippy green) — legible but not opaque */
-    background:linear-gradient(180deg,
-      rgba(31,75,63,.42), rgba(23,58,49,.62));
+    background:
+      linear-gradient(180deg,
+        rgba(255,255,255,.28) 0%,
+        rgba(61,110,96,.55) 42%,
+        rgba(31,75,63,.78) 100%);
+    backdrop-filter:blur(20px) saturate(1.75);
+    -webkit-backdrop-filter:blur(20px) saturate(1.75);
     box-shadow:
-      0 24px 60px rgba(31,75,63,.24),
-      inset 0 1px 1px rgba(255,255,255,.50),
-      inset 0 -8px 20px rgba(255,255,255,.06),
-      inset 0 0 0 1px rgba(255,255,255,.20);
+      0 1px 0 rgba(255,255,255,.55) inset,
+      0 -10px 22px rgba(255,255,255,.08) inset,
+      inset 0 0 0 1px rgba(255,255,255,.32),
+      0 14px 36px rgba(31,75,63,.22),
+      0 4px 10px rgba(31,28,21,.08);
     transition:
       transform 160ms cubic-bezier(0.23,1,0.32,1),
-      box-shadow 200ms ease;
+      box-shadow 200ms ease,
+      filter 200ms ease;
   }
   @media (hover:hover) and (pointer:fine){
     .btn:hover{
-      transform:translateY(-1px);
+      transform:translateY(-1.5px);
+      filter:brightness(1.05);
       box-shadow:
-        0 28px 64px rgba(31,75,63,.28),
-        inset 0 1px 1px rgba(255,255,255,.60),
-        inset 0 -8px 20px rgba(255,255,255,.08),
-        inset 0 0 0 1px rgba(255,255,255,.24);
+        0 1px 0 rgba(255,255,255,.65) inset,
+        0 -10px 24px rgba(255,255,255,.10) inset,
+        inset 0 0 0 1px rgba(255,255,255,.40),
+        0 18px 44px rgba(31,75,63,.28),
+        0 6px 14px rgba(31,28,21,.10);
     }
   }
-  .btn:active{transform:scale(0.97)}
-  .btn:focus-visible{outline:3px solid rgba(41,169,244,.5); outline-offset:2px}
-  .btn svg{width:20px; height:20px; flex:none}
+  .btn:active{transform:scale(0.97); filter:brightness(.98)}
+  .btn:focus-visible{outline:3px solid rgba(41,169,244,.5); outline-offset:3px}
+  .btn svg{width:18px; height:18px; flex:none; opacity:.95}
 
-  /* Feature tips — deepika glass dressing */
+  /* Feature tips — frosted glass cards */
   .features{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:60px 0 72px}
   .feature{
     position:relative;
     border:0; border-radius:22px; padding:18px 18px 16px;
-    background:linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.10));
+    background:linear-gradient(165deg, rgba(255,255,255,.62), rgba(255,255,255,.28));
+    backdrop-filter:blur(18px) saturate(1.5);
+    -webkit-backdrop-filter:blur(18px) saturate(1.5);
     box-shadow:
-      0 24px 60px rgba(31,28,21,.10),
-      inset 0 1px 1px rgba(255,255,255,.55),
-      inset 0 -8px 20px rgba(255,255,255,.06),
-      inset 0 0 0 1px rgba(255,255,255,.28);
+      0 1px 0 rgba(255,255,255,.9) inset,
+      inset 0 0 0 1px rgba(255,255,255,.55),
+      0 16px 40px rgba(31,28,21,.07);
   }
   .feature .k{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--green); margin-bottom:8px}
   .feature h3{font-family:'Newsreader',serif; font-weight:500; font-size:18px; margin:0 0 5px; letter-spacing:-.01em}
   .feature p{margin:0; font-size:13.5px; color:var(--muted); line-height:1.5}
 
+  /* 3D tilt on feature cards only (mouse + fine pointer). */
   @media (hover:hover) and (pointer:fine){
-    .feature{transition:box-shadow 220ms ease, transform 160ms cubic-bezier(0.23,1,0.32,1)}
-    .feature:hover{
-      transform:translateY(-2px);
-      box-shadow:
-        0 28px 64px rgba(31,28,21,.14),
-        inset 0 1px 1px rgba(255,255,255,.65),
-        inset 0 -8px 20px rgba(255,255,255,.08),
-        inset 0 0 0 1px rgba(255,255,255,.36);
+    .features{perspective:1000px}
+    .feature{
+      transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));
+      transform-style:preserve-3d;
+      transition:transform 130ms cubic-bezier(0.23,1,0.32,1), box-shadow 220ms ease;
+      will-change:transform;
     }
+    .feature:hover{
+      box-shadow:
+        0 22px 48px rgba(31,28,21,.12),
+        inset 0 1px 1px rgba(255,255,255,.8),
+        inset 0 -8px 20px rgba(255,255,255,.16),
+        inset 0 0 0 1px rgba(255,255,255,.55);
+    }
+    .feature::after{
+      content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+      background:radial-gradient(circle at var(--gx,50%) var(--gy,50%), rgba(255,255,255,.55), transparent 46%);
+      opacity:0; transition:opacity 200ms ease;
+    }
+    .feature:hover::after{opacity:.22}
   }
   @media (prefers-reduced-motion:reduce){.feature{transform:none !important}}
 
-  /* Platform picker — one deepika glass panel (toggle/inner chips are CSS only) */
+  /* Platform picker: one frosted glass card with toggle + download */
   .platforms-h{text-align:center; margin:0 0 28px; scroll-margin-top:24px}
   .platforms-h h2{font-family:'Newsreader',serif; font-weight:500; font-size:30px; margin:0 0 6px; letter-spacing:-.01em}
   .platforms-h p{margin:0; color:var(--muted); font-size:15px}
   .get-dl{
     display:flex; justify-content:center;
-    margin:0 0 72px; position:relative;
-  }
-  /* Busy field behind the glass so rim refraction has something to bend */
-  .get-dl::before{
-    content:''; position:absolute; left:50%; top:50%;
-    width:min(520px, 92vw); height:280px; transform:translate(-50%,-50%);
-    border-radius:40% 60% 55% 45% / 50% 40% 60% 50%;
-    background:
-      radial-gradient(circle at 30% 40%, rgba(31,75,63,.18), transparent 55%),
-      radial-gradient(circle at 75% 60%, rgba(41,169,244,.14), transparent 50%),
-      radial-gradient(circle at 50% 80%, rgba(201,111,94,.10), transparent 45%);
-    filter:blur(2px); pointer-events:none; z-index:0;
+    margin:0 0 72px;
   }
   .get-card{
-    display:flex; flex-direction:column; align-items:center; gap:18px;
-    position:relative; z-index:1;
-    width:100%; max-width:440px;
-    border:0; border-radius:28px; padding:28px 26px 26px;
-    /* exact deepika recipe, light-theme tint */
-    background:linear-gradient(180deg,
-      rgba(255,255,255,.22), rgba(255,255,255,.10));
+    display:flex; flex-direction:column; align-items:center; gap:20px;
+    position:relative;
+    width:100%; max-width:460px;
+    border:0; border-radius:28px; padding:28px 24px 24px;
+    background:
+      linear-gradient(165deg,
+        rgba(255,255,255,.72) 0%,
+        rgba(255,255,255,.38) 55%,
+        rgba(255,255,255,.22) 100%);
+    backdrop-filter:blur(28px) saturate(1.7);
+    -webkit-backdrop-filter:blur(28px) saturate(1.7);
     box-shadow:
-      0 24px 60px rgba(31,28,21,.14),
-      inset 0 1px 1px rgba(255,255,255,.55),
-      inset 0 -8px 20px rgba(255,255,255,.06),
-      inset 0 0 0 1px rgba(255,255,255,.28);
+      0 1px 0 rgba(255,255,255,.95) inset,
+      0 -14px 36px rgba(255,255,255,.14) inset,
+      inset 0 0 0 1px rgba(255,255,255,.65),
+      0 28px 64px rgba(31,28,21,.10),
+      0 8px 20px rgba(31,28,21,.05);
   }
   .os-toggle{
-    display:flex; width:100%; padding:4px; gap:2px;
-    border-radius:16px;
-    background:rgba(255,255,255,.14);
+    display:flex; width:100%; padding:5px; gap:3px;
+    border-radius:999px;
+    background:
+      linear-gradient(180deg, rgba(244,241,234,.55), rgba(227,222,210,.42));
     box-shadow:
-      inset 0 1px 2px rgba(31,28,21,.06),
-      inset 0 0 0 1px rgba(255,255,255,.28);
+      inset 0 1px 3px rgba(31,28,21,.08),
+      inset 0 0 0 1px rgba(255,255,255,.55),
+      0 1px 0 rgba(255,255,255,.40);
   }
   .os-opt{
     display:inline-flex; align-items:center; justify-content:center; gap:8px;
     flex:1; border:0; background:transparent; cursor:pointer;
     font-family:'Instrument Sans',system-ui,sans-serif;
     font-weight:500; font-size:14.5px; color:var(--muted);
-    padding:11px 12px; border-radius:12px;
+    padding:12px 14px; border-radius:999px;
     transition:
-      background 160ms cubic-bezier(0.23,1,0.32,1),
+      background 180ms cubic-bezier(0.23,1,0.32,1),
       color 160ms ease,
       transform 160ms cubic-bezier(0.23,1,0.32,1),
-      box-shadow 160ms ease;
+      box-shadow 180ms ease,
+      filter 180ms ease;
   }
   .os-opt svg{width:16px; height:16px; flex:none}
   @media (hover:hover) and (pointer:fine){
-    .os-opt:hover{color:var(--ink)}
+    .os-opt:not([aria-selected="true"]):hover{
+      color:var(--ink);
+      background:rgba(255,255,255,.45);
+    }
   }
   .os-opt:active{transform:scale(0.97)}
   .os-opt[aria-selected="true"]{
-    color:#F4F1EA;
-    background:linear-gradient(180deg, rgba(31,75,63,.45), rgba(23,58,49,.62));
+    color:#F7F5EF;
+    background:
+      linear-gradient(180deg,
+        rgba(255,255,255,.22) 0%,
+        rgba(61,110,96,.58) 40%,
+        rgba(31,75,63,.88) 100%);
     box-shadow:
-      0 6px 18px rgba(31,75,63,.18),
-      inset 0 1px 1px rgba(255,255,255,.40),
-      inset 0 0 0 1px rgba(255,255,255,.16);
+      0 1px 0 rgba(255,255,255,.45) inset,
+      inset 0 0 0 1px rgba(255,255,255,.28),
+      0 6px 16px rgba(31,75,63,.22),
+      0 1px 3px rgba(31,28,21,.08);
   }
   .os-opt:focus-visible{outline:3px solid rgba(41,169,244,.45); outline-offset:2px}
   .os-req{
     font-family:'IBM Plex Mono',monospace; font-size:12px;
     color:var(--muted2); margin:0; min-height:1.2em; text-align:center;
   }
-  .get-card .btn{width:100%; max-width:100%}
+  .get-card .btn{width:100%; max-width:100%; padding:17px 22px}
 
+  /* Reduced transparency: solid materials */
   @media (prefers-reduced-transparency:reduce){
     .feature,.get-card{
       background:var(--surface);
+      backdrop-filter:none; -webkit-backdrop-filter:none;
       box-shadow:0 2px 14px rgba(31,28,21,.06);
       border:1px solid var(--border);
     }
-    .get-dl::before{display:none}
     .btn,.os-opt[aria-selected="true"]{
       background:var(--green);
-      box-shadow:0 4px 14px rgba(31,75,63,.18);
+      backdrop-filter:none; -webkit-backdrop-filter:none;
+      box-shadow:0 6px 18px rgba(31,75,63,.18);
     }
+    .os-toggle{background:var(--border); backdrop-filter:none}
   }
 
   footer{border-top:1px solid var(--border); padding:28px 0 44px; color:var(--muted2); font-size:13px; text-align:center}
@@ -337,7 +350,7 @@
     </footer>
   </div>
 
-<script src="liquid-glass.js?v=5"></script>
+<script src="liquid-glass.js"></script>
 <script>
   var DL = {
     macos:{label:'Download for macOS', href:'/download/Clippy-macOS.dmg'},
@@ -413,53 +426,71 @@
     });
   });
 
-  /*
-   * deepika-builds/liquid-glass — Quick start pattern.
-   * Module owns optics. CSS owns material dressing only.
-   * Never glass .topbar .gh (Get it stays solid).
-   * No nested glass on .os-toggle/.os-opt (inside .get-card).
-   */
+  // 3D tilt + cursor glare on feature cards. Mouse only; off for reduced motion.
+  (function(){
+    if(!window.matchMedia) return;
+    var fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(!fine || reduce) return;
+    var MAX = 9;
+    Array.prototype.forEach.call(document.querySelectorAll('.feature'), function(card){
+      card.addEventListener('mousemove', function(e){
+        var r = card.getBoundingClientRect();
+        var px = (e.clientX - r.left) / r.width;
+        var py = (e.clientY - r.top) / r.height;
+        card.style.setProperty('--ry', ((px - 0.5) * MAX).toFixed(2) + 'deg');
+        card.style.setProperty('--rx', ((0.5 - py) * MAX).toFixed(2) + 'deg');
+        card.style.setProperty('--gx', (px * 100).toFixed(1) + '%');
+        card.style.setProperty('--gy', (py * 100).toFixed(1) + '%');
+      });
+      card.addEventListener('mouseleave', function(){
+        card.style.setProperty('--rx','0deg');
+        card.style.setProperty('--ry','0deg');
+      });
+    });
+  })();
+
+  // Liquid glass on download cards/buttons only — NEVER .topbar .gh ("Get it").
   (function initGlass(){
     function go(){
-      if(typeof liquidGlass !== 'function'){
-        console.warn('[clippy] liquid-glass.js missing');
-        return;
-      }
-      if(window.matchMedia &&
-         window.matchMedia('(prefers-reduced-transparency: reduce)').matches){
-        return;
-      }
-
-      // Defaults match deepika README (scale -112, chroma 6, …)
-      var cardOpts = {
-        scale: -112, chroma: 6, border: 0.07, mapBlur: 12,
-        blur: 3, saturate: 1.5, fallbackBlur: 16
-      };
-      var btnOpts = {
-        scale: -120, chroma: 6, border: 0.08, mapBlur: 10,
-        blur: 2, saturate: 1.6, fallbackBlur: 14
-      };
+      if(typeof liquidGlass !== 'function') return;
+      var reduceTx = window.matchMedia &&
+        window.matchMedia('(prefers-reduced-transparency: reduce)').matches;
+      if(reduceTx) return;
 
       Array.prototype.forEach.call(
-        document.querySelectorAll('.get-card, .feature'),
-        function(el){ liquidGlass(el, cardOpts); }
+        document.querySelectorAll('.feature, .get-card'),
+        function(el){
+          liquidGlass(el, {
+            scale: -80, chroma: 5, border: 0.10, mapBlur: 16,
+            blur: 3, saturate: 1.55, fallbackBlur: 22
+          });
+        }
       );
-      // Hero + download CTA only — class "btn", never topbar .gh
       Array.prototype.forEach.call(
-        document.querySelectorAll('a.btn'),
-        function(el){ liquidGlass(el, btnOpts); }
+        document.querySelectorAll('.btn'),
+        function(el){
+          liquidGlass(el, {
+            scale: -110, chroma: 6, border: 0.14, mapBlur: 12,
+            blur: 2, saturate: 1.7, fallbackBlur: 16
+          });
+        }
       );
-    }
-    // Layout must be final so the displacement map has real w×h
-    function schedule(){
-      requestAnimationFrame(function(){
-        requestAnimationFrame(go);
-      });
+      // Toggle track only — selected chip is CSS glass so text stays sharp.
+      Array.prototype.forEach.call(
+        document.querySelectorAll('.os-toggle'),
+        function(el){
+          liquidGlass(el, {
+            scale: -55, chroma: 3, border: 0.12, mapBlur: 10,
+            blur: 2, saturate: 1.35, fallbackBlur: 12
+          });
+        }
+      );
     }
     if(document.readyState === 'loading'){
-      document.addEventListener('DOMContentLoaded', schedule);
+      document.addEventListener('DOMContentLoaded', function(){ setTimeout(go, 0); });
     } else {
-      schedule();
+      setTimeout(go, 0);
     }
   })();
 </script>
