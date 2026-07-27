@@ -81,7 +81,7 @@
   .btn:focus-visible{outline:3px solid rgba(41,169,244,.5); outline-offset:2px}
   .btn svg{width:20px; height:20px; flex:none}
 
-  /* Feature tips — solid white cards + pointer spotlight */
+  /* Feature tips — solid white cards + 3D tilt + pointer spotlight */
   .features{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:60px 0 72px}
   .feature{
     position:relative;
@@ -90,21 +90,34 @@
     box-shadow:0 2px 14px rgba(31,28,21,.04);
     --mx:50%; --my:50%;
     overflow:hidden;
+    transform-style:preserve-3d;
+    will-change:transform;
   }
   .feature .k{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--green); margin-bottom:8px}
   .feature h3{font-family:'Newsreader',serif; font-weight:500; font-size:18px; margin:0 0 5px; letter-spacing:-.01em}
   .feature p{margin:0; font-size:13.5px; color:var(--muted); line-height:1.5}
 
-  /* Spotlight rim + soft fill (mouse only). Solid cards, not glass. */
+  /* 3D tilt (card-7 style) + spotlight rim. Desktop only. Solid cards, not glass. */
   @media (hover:hover) and (pointer:fine){
+    .features,.get-dl{perspective:1000px}
     .feature,.get-card{
-      transition:box-shadow 180ms ease, border-color 180ms ease;
+      transition:
+        box-shadow 180ms ease,
+        border-color 180ms ease,
+        transform 0.4s ease-in-out;
+    }
+    .feature.is-tilting,.get-card.is-tilting{
+      transition:
+        box-shadow 180ms ease,
+        border-color 180ms ease,
+        transform 0.1s ease-out;
     }
     .feature:hover,.get-card:hover{
       border-color:transparent;
       box-shadow:
-        0 10px 28px rgba(31,28,21,.08),
+        0 18px 40px rgba(31,28,21,.12),
         0 0 0 1px rgba(31,75,63,.08);
+      z-index:2;
     }
     /* Soft green wash under the cursor */
     .feature::after,.get-card::after{
@@ -117,7 +130,7 @@
       opacity:0; transition:opacity 160ms ease;
     }
     .feature:hover::after,.get-card:hover::after{opacity:1}
-    /* Bright rim that follows the pointer (spotlight-card style) */
+    /* Bright rim that follows the pointer */
     .feature::before,.get-card::before{
       content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:1;
       padding:1.5px;
@@ -141,6 +154,7 @@
     .feature > *,.get-card > *{position:relative; z-index:2}
   }
   @media (prefers-reduced-motion:reduce){
+    .feature,.get-card{transform:none !important}
     .feature::before,.feature::after,.get-card::before,.get-card::after{display:none}
   }
 
@@ -161,6 +175,8 @@
     box-shadow:0 4px 24px rgba(31,28,21,.06);
     --mx:50%; --my:50%;
     overflow:hidden;
+    transform-style:preserve-3d;
+    will-change:transform;
   }
   .os-toggle{
     display:flex; width:100%; padding:4px; gap:2px;
@@ -370,21 +386,33 @@
     });
   });
 
-  // Spotlight rim follows the pointer on feature + get cards (desktop only).
+  // 3D tilt + spotlight on all cards (InteractiveProductCard / card-7 style).
   (function(){
     if(!window.matchMedia) return;
     var fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
     var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if(!fine || reduce) return;
+    var MAX = 8; // degrees — matches card-7
     Array.prototype.forEach.call(
       document.querySelectorAll('.feature, .get-card'),
       function(card){
         card.addEventListener('pointermove', function(e){
           var r = card.getBoundingClientRect();
-          var x = ((e.clientX - r.left) / r.width) * 100;
-          var y = ((e.clientY - r.top) / r.height) * 100;
-          card.style.setProperty('--mx', x.toFixed(2) + '%');
-          card.style.setProperty('--my', y.toFixed(2) + '%');
+          var px = (e.clientX - r.left) / r.width;
+          var py = (e.clientY - r.top) / r.height;
+          card.style.setProperty('--mx', (px * 100).toFixed(2) + '%');
+          card.style.setProperty('--my', (py * 100).toFixed(2) + '%');
+          var rotateY = (px - 0.5) * 2 * MAX;
+          var rotateX = (0.5 - py) * 2 * MAX;
+          card.classList.add('is-tilting');
+          card.style.transform =
+            'perspective(1000px) rotateX(' + rotateX.toFixed(2) + 'deg) rotateY(' +
+            rotateY.toFixed(2) + 'deg) scale3d(1.04, 1.04, 1.04)';
+        });
+        card.addEventListener('pointerleave', function(){
+          card.classList.remove('is-tilting');
+          card.style.transform =
+            'perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)';
         });
       }
     );
