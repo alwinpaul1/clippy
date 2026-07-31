@@ -92,6 +92,13 @@ class MainActivity : FlutterActivity() {
         )
         channel!!.setMethodCallHandler { call, result ->
             when (call.method) {
+                // Just Build.MODEL, the one field the clip label needs.
+                // device_info_plus populates its WHOLE AndroidDeviceInfo eagerly,
+                // which calls Build.getSerial() — denied since Android 10 and
+                // logged as a permission violation. A clipboard app that promises
+                // it never sees an identity should not be probing the device
+                // serial at all, even accidentally through a plugin.
+                "deviceModel" -> result.success(Build.MODEL)
                 "bgSyncStatus" -> {
                     // Match on ComponentName, not a raw string: enabling the
                     // service via the system Settings UI stores the FULL form

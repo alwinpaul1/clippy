@@ -1,10 +1,10 @@
 {
-  "version": "1.0.40",
+  "version": "1.0.41",
   "notes": {
     "features": [],
-    "improvements": [],
-    "fixes": [
-      "The background sync setup screen could keep showing a permission as not granted after you had just granted it"
-    ]
+    "improvements": [
+      "Naming this device no longer reads the device serial number"
+    ],
+    "fixes": []
   }
 }

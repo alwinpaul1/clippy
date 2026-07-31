@@ -23,6 +23,20 @@ abstract class ShareChannel {
     });
   }
 
+  /// `Build.MODEL` for this device (e.g. "SM-S918B"), or null off Android /
+  /// if the native side is unavailable. Deliberately narrower than
+  /// device_info_plus, which eagerly reads the device serial as well — see the
+  /// note on the native `deviceModel` handler.
+  static Future<String?> deviceModel() async {
+    try {
+      final m = await _channel.invokeMethod<String>('deviceModel');
+      final t = m?.trim();
+      return (t == null || t.isEmpty) ? null : t;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Deliver the text/image Clippy was cold-launched with (if any).
   static Future<void> initial({
     void Function(String text)? onText,
