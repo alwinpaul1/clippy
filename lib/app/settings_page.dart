@@ -6,20 +6,18 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../platform/share_channel.dart';
 import 'permission_help_sheet.dart';
 import 'theme.dart';
-import 'theme_controller.dart';
 import 'update_controller.dart';
 import 'update_sheet.dart';
 
-/// Settings (mockup turn 3c): appearance (Light / Dark / System) and group
-/// actions (add another device, unpair). Theme-aware.
+/// Settings: background sync, version / updates, and group actions (add
+/// another device, unpair). Clippy ships a single theme, so there is no
+/// appearance section.
 class SettingsPage extends StatelessWidget {
-  final ThemeController theme;
   final VoidCallback onAddDevice;
   final Future<void> Function() onUnpair;
 
   const SettingsPage({
     super.key,
-    required this.theme,
     required this.onAddDevice,
     required this.onUnpair,
   });
@@ -57,46 +55,6 @@ class SettingsPage extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
-                  _Label('APPEARANCE', c),
-                  const SizedBox(height: 4),
-                  ValueListenableBuilder<ThemeMode>(
-                    valueListenable: theme,
-                    builder: (context, mode, _) => _Card(
-                      c,
-                      children: [
-                        _ThemeRow(
-                          c,
-                          icon: Icons.light_mode_outlined,
-                          label: 'Light',
-                          selected: mode == ThemeMode.light,
-                          onTap: () => theme.set(ThemeMode.light),
-                        ),
-                        _Divider(c),
-                        _ThemeRow(
-                          c,
-                          icon: Icons.dark_mode_outlined,
-                          label: 'Dark',
-                          selected: mode == ThemeMode.dark,
-                          onTap: () => theme.set(ThemeMode.dark),
-                        ),
-                        _Divider(c),
-                        _ThemeRow(
-                          c,
-                          icon: Icons.desktop_windows_outlined,
-                          label: 'System',
-                          selected: mode == ThemeMode.system,
-                          onTap: () => theme.set(ThemeMode.system),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
-                    child: Text(
-                      "System follows your device's appearance automatically.",
-                      style: Ct.body(12, color: c.muted, height: 1.4),
-                    ),
-                  ),
                   if (defaultTargetPlatform == TargetPlatform.android) ...[
                     const SizedBox(height: 24),
                     _Label('BACKGROUND SYNC', c),
@@ -232,60 +190,6 @@ class _Divider extends StatelessWidget {
     padding: const EdgeInsets.symmetric(horizontal: 16),
     child: Container(height: 1, color: c.border.withValues(alpha: 0.6)),
   );
-}
-
-class _ThemeRow extends StatelessWidget {
-  final ClippyColors c;
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  const _ThemeRow(
-    this.c, {
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-        child: Row(
-          children: [
-            Icon(icon, size: 19, color: c.muted2),
-            const SizedBox(width: 14),
-            Expanded(child: Text(label, style: Ct.body(15, color: c.ink))),
-            _Radio(c, selected: selected),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Radio extends StatelessWidget {
-  final ClippyColors c;
-  final bool selected;
-  const _Radio(this.c, {required this.selected});
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 20,
-      height: 20,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: c.surface,
-        border: Border.all(
-          color: selected ? c.green : c.borderStrong,
-          width: selected ? 6 : 1.5,
-        ),
-      ),
-    );
-  }
 }
 
 class _ActionRow extends StatelessWidget {

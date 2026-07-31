@@ -105,8 +105,14 @@ class _PermissionHelpSheet extends StatelessWidget {
                   Navigator.of(context).pop();
                   await onOpenSettings();
                 },
+                // On-green foreground must follow the theme: dark mode's green
+                // is the *lighter* 0xFF8FBCA6, so the light cream Ck.bg would
+                // sit at ~1.3:1 on it. Same pattern used on green fills in
+                // home_page.dart.
                 child: Text('Open Settings',
-                    style: Ct.body(15, weight: FontWeight.w600, color: Ck.bg)),
+                    style: Ct.body(15,
+                        weight: FontWeight.w600,
+                        color: c.isDark ? c.bg : Ck.bg)),
               ),
             ),
             const SizedBox(height: 10),

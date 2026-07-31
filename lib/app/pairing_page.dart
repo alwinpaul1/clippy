@@ -46,13 +46,17 @@ class _PairingPageState extends State<PairingPage> {
     try {
       key = PairingKey.fromQrPayload(_controller.text.trim());
     } catch (_) {
+      final c = context.ck;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             'That does not look like a valid key.',
+            // The snack chip is dark in BOTH themes, so its label stays the
+            // fixed light cream. Using c.bg here would be dark-on-dark in dark
+            // mode — this is deliberately not migrated to the theme extension.
             style: Ct.body(13.5, color: Ck.bg),
           ),
-          backgroundColor: Ck.snack,
+          backgroundColor: c.snack,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
@@ -68,8 +72,9 @@ class _PairingPageState extends State<PairingPage> {
   @override
   Widget build(BuildContext context) {
     final key = _controller.text.trim();
+    final c = context.ck;
     return Scaffold(
-      backgroundColor: Ck.bg,
+      backgroundColor: c.bg,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Center(
@@ -81,14 +86,18 @@ class _PairingPageState extends State<PairingPage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Center(
-                      child: ClippyMark(height: 99, clipHex: '1F4B3F'),
+                    Center(
+                      // Alive here too — same bob + blink as the home header.
+                      child: AnimatedClippyMark(
+                        height: 99,
+                        clipHex: c.hex(c.green),
+                      ),
                     ),
                     const SizedBox(height: 22),
                     Text(
                       'Pair your devices',
                       textAlign: TextAlign.center,
-                      style: Ct.title(34),
+                      style: Ct.title(34, color: c.ink),
                     ),
                     const SizedBox(height: 10),
                     Text(
@@ -96,7 +105,7 @@ class _PairingPageState extends State<PairingPage> {
                       'it on the others. End-to-end encrypted — the server never '
                       'sees it.',
                       textAlign: TextAlign.center,
-                      style: Ct.body(14.5, color: Ck.muted2, height: 1.5),
+                      style: Ct.body(14.5, color: c.muted2, height: 1.5),
                     ),
                     const SizedBox(height: 22),
                     Row(
@@ -112,9 +121,10 @@ class _PairingPageState extends State<PairingPage> {
                                     SnackBar(
                                       content: Text(
                                         'Key copied',
+                                        // Dark chip in both themes — see _pair().
                                         style: Ct.body(13.5, color: Ck.bg),
                                       ),
-                                      backgroundColor: Ck.snack,
+                                      backgroundColor: c.snack,
                                       behavior: SnackBarBehavior.floating,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(10),
@@ -125,7 +135,7 @@ class _PairingPageState extends State<PairingPage> {
                           child: Icon(
                             Icons.content_copy_outlined,
                             size: 16,
-                            color: key.isEmpty ? Ck.muted : Ck.green,
+                            color: key.isEmpty ? c.muted : c.green,
                           ),
                         ),
                       ],
@@ -133,16 +143,16 @@ class _PairingPageState extends State<PairingPage> {
                     const SizedBox(height: 8),
                     Container(
                       decoration: BoxDecoration(
-                        color: Ck.surface,
-                        border: Border.all(color: Ck.border),
+                        color: c.surface,
+                        border: Border.all(color: c.border),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: TextField(
                         controller: _controller,
                         minLines: 1,
                         maxLines: 3,
-                        style: Ct.mono(12.5, color: Ck.ink),
-                        cursorColor: Ck.green,
+                        style: Ct.mono(12.5, color: c.ink),
+                        cursorColor: c.green,
                         decoration: InputDecoration(
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(
@@ -151,7 +161,12 @@ class _PairingPageState extends State<PairingPage> {
                           ),
                           border: InputBorder.none,
                           hintText: 'paste key…',
-                          hintStyle: Ct.mono(12.5, color: Ck.muted),
+                          // muted is only ~3:1 on the dark surface; muted2
+                          // clears AA there. Light mode keeps muted as before.
+                          hintStyle: Ct.mono(
+                            12.5,
+                            color: c.isDark ? c.muted2 : c.muted,
+                          ),
                         ),
                       ),
                     ),
@@ -161,8 +176,10 @@ class _PairingPageState extends State<PairingPage> {
                         child: Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
+                            // Stays true white in both themes — a QR needs a
+                            // real white quiet zone to scan reliably.
                             color: Colors.white,
-                            border: Border.all(color: Ck.border),
+                            border: Border.all(color: c.border),
                             borderRadius: BorderRadius.circular(14),
                           ),
                           child: QrImageView(data: key, size: 180),
@@ -172,7 +189,11 @@ class _PairingPageState extends State<PairingPage> {
                       Text(
                         'Scan this on your other device',
                         textAlign: TextAlign.center,
-                        style: Ct.body(12.5, color: Ck.muted),
+                        // Same reason as the key-field hint above.
+                        style: Ct.body(
+                          12.5,
+                          color: c.isDark ? c.muted2 : c.muted,
+                        ),
                       ),
                     ],
                     const SizedBox(height: 22),
@@ -224,8 +245,9 @@ class _OutlinedAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ck;
     return Material(
-      color: Ck.surface,
+      color: c.surface,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -233,17 +255,17 @@ class _OutlinedAction extends StatelessWidget {
         child: Ink(
           height: 48,
           decoration: BoxDecoration(
-            border: Border.all(color: Ck.borderStrong),
+            border: Border.all(color: c.borderStrong),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 17, color: Ck.green),
+              Icon(icon, size: 17, color: c.green),
               const SizedBox(width: 10),
               Text(
                 label,
-                style: Ct.body(14, weight: FontWeight.w500, color: Ck.ink),
+                style: Ct.body(14, weight: FontWeight.w500, color: c.ink),
               ),
             ],
           ),
@@ -265,8 +287,12 @@ class _FilledAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ck;
+    // Dark mode's green is the *lighter* 0xFF8FBCA6, so the on-green
+    // foreground has to flip to the dark background colour to stay legible.
+    final onGreen = c.isDark ? c.bg : Ck.bg;
     return Material(
-      color: Ck.green,
+      color: c.green,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -275,17 +301,17 @@ class _FilledAction extends StatelessWidget {
           height: 48,
           child: Center(
             child: busy
-                ? const SizedBox(
+                ? SizedBox(
                     height: 18,
                     width: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Ck.bg,
+                      color: onGreen,
                     ),
                   )
                 : Text(
                     label,
-                    style: Ct.body(14, weight: FontWeight.w500, color: Ck.bg),
+                    style: Ct.body(14, weight: FontWeight.w500, color: onGreen),
                   ),
           ),
         ),

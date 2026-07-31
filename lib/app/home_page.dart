@@ -16,7 +16,6 @@ import '../core/update/update_info.dart';
 import 'clip_controller.dart';
 import 'settings_page.dart';
 import 'theme.dart';
-import 'theme_controller.dart';
 import 'update_controller.dart';
 import 'update_sheet.dart';
 
@@ -26,14 +25,12 @@ import 'update_sheet.dart';
 class HomePage extends StatelessWidget {
   final ClipController controller;
   final PairingKey pairing;
-  final ThemeController theme;
   final Future<void> Function() onUnpair;
 
   const HomePage({
     super.key,
     required this.controller,
     required this.pairing,
-    required this.theme,
     required this.onUnpair,
   });
 
@@ -58,7 +55,6 @@ class HomePage extends StatelessWidget {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => SettingsPage(
-          theme: theme,
           onAddDevice: () => _showKey(context),
           onUnpair: onUnpair,
         ),

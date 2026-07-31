@@ -118,7 +118,6 @@
   .topbar .mark{width:22px; height:31px}
   .topbar .name{font-family:'Newsreader',serif; font-weight:500; font-size:22px; letter-spacing:-.01em}
   .topbar .spacer{flex:1}
-  /* "Get it" — Uiverse-style ripple CTA (by mi-series), in Clippy colors */
   .topbar .gh{
     outline:0; display:inline-flex; align-items:center; justify-content:center;
     position:relative;
@@ -129,6 +128,7 @@
     cursor:pointer; text-decoration:none;
   }
   .topbar .gh:hover{opacity:.95}
+  .topbar .gh:focus-visible{outline:3px solid rgba(41,169,244,.5); outline-offset:2px}
   .topbar .gh .animation{
     position:absolute; left:50%; top:50%; width:0; height:0;
     border-radius:100%; pointer-events:none;
@@ -151,8 +151,12 @@
     font-size:clamp(16px,2.4vw,19px); color:var(--muted); max-width:30em;
     margin:0 auto 30px;
   }
+  .hero .platforms-line{
+    font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em;
+    color:var(--muted2); margin:14px 0 0;
+  }
 
-  /* Download CTA — solid Clippy green */
+  /* Buttons */
   .cta-row{display:flex; flex-direction:column; align-items:center; gap:14px}
   .btn{
     display:inline-flex; align-items:center; justify-content:center; gap:11px;
@@ -166,131 +170,84 @@
   .btn:active{transform:translateY(0)}
   .btn:focus-visible{outline:3px solid rgba(41,169,244,.5); outline-offset:2px}
   .btn svg{width:20px; height:20px; flex:none}
+  /* Secondary: same shape, quieter — used by the two platforms that aren't yours */
+  .btn.ghost{
+    background:transparent; color:var(--green); box-shadow:none;
+    border:1px solid var(--border-strong); font-size:15px; padding:13px 22px;
+  }
+  .btn.ghost:hover{background:rgba(31,75,63,.05); border-color:var(--green); transform:none; box-shadow:none}
+  .btn.ghost svg{fill:var(--green)}
 
-  /* Feature tips — solid white cards + 3D tilt + pointer spotlight */
+  /* Section headings */
+  .sec-h{text-align:center; margin:0 0 28px; scroll-margin-top:24px}
+  .sec-h h2{font-family:'Newsreader',serif; font-weight:500; font-size:30px; margin:0 0 6px; letter-spacing:-.01em}
+  .sec-h p{margin:0; color:var(--muted); font-size:15px}
+
+  /* Feature tips */
   .features{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:60px 0 72px}
   .feature{
-    position:relative;
     background:var(--surface); border:1px solid var(--border);
     border-radius:16px; padding:18px 18px 16px;
     box-shadow:0 2px 14px rgba(31,28,21,.04);
-    --mx:50%; --my:50%;
-    overflow:hidden;
-    transform-style:preserve-3d;
-    will-change:transform;
+    transition:border-color .18s ease, box-shadow .18s ease;
   }
+  .feature:hover{border-color:var(--border-strong); box-shadow:0 6px 20px rgba(31,28,21,.07)}
   .feature .k{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--green); margin-bottom:8px}
   .feature h3{font-family:'Newsreader',serif; font-weight:500; font-size:18px; margin:0 0 5px; letter-spacing:-.01em}
   .feature p{margin:0; font-size:13.5px; color:var(--muted); line-height:1.5}
 
-  /* 3D tilt (card-7 style) + spotlight rim. Desktop only. Solid cards, not glass. */
-  @media (hover:hover) and (pointer:fine){
-    .features,.get-dl{perspective:1000px}
-    .feature,.get-card{
-      transition:
-        box-shadow 180ms ease,
-        border-color 180ms ease,
-        transform 0.4s ease-in-out;
-    }
-    .feature.is-tilting,.get-card.is-tilting{
-      transition:
-        box-shadow 180ms ease,
-        border-color 180ms ease,
-        transform 0.1s ease-out;
-    }
-    .feature:hover,.get-card:hover{
-      border-color:transparent;
-      box-shadow:
-        0 18px 40px rgba(31,28,21,.12),
-        0 0 0 1px rgba(31,75,63,.08);
-      z-index:2;
-    }
-    /* Soft green wash under the cursor */
-    .feature::after,.get-card::after{
-      content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:0;
-      background:radial-gradient(
-        220px circle at var(--mx) var(--my),
-        rgba(31,75,63,.10),
-        transparent 55%
-      );
-      opacity:0; transition:opacity 160ms ease;
-    }
-    .feature:hover::after,.get-card:hover::after{opacity:1}
-    /* Bright rim that follows the pointer */
-    .feature::before,.get-card::before{
-      content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:1;
-      padding:1.5px;
-      background:radial-gradient(
-        180px circle at var(--mx) var(--my),
-        rgba(31,75,63,.75),
-        rgba(41,169,244,.35) 35%,
-        transparent 60%
-      );
-      -webkit-mask:
-        linear-gradient(#000 0 0) content-box,
-        linear-gradient(#000 0 0);
-      -webkit-mask-composite:xor;
-      mask:
-        linear-gradient(#000 0 0) content-box,
-        linear-gradient(#000 0 0);
-      mask-composite:exclude;
-      opacity:0; transition:opacity 160ms ease;
-    }
-    .feature:hover::before,.get-card:hover::before{opacity:1}
-    .feature > *,.get-card > *{position:relative; z-index:2}
+  /* How it works — the pairing story the old page never told */
+  .steps{margin:0 0 76px}
+  .steps-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px}
+  .step{
+    position:relative; background:var(--surface); border:1px solid var(--border);
+    border-radius:16px; padding:22px 20px 20px;
   }
-  @media (prefers-reduced-motion:reduce){
-    .feature,.get-card{transform:none !important}
-    .feature::before,.feature::after,.get-card::before,.get-card::after{display:none}
+  .step .n{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:30px; height:30px; border-radius:50%;
+    background:var(--green); color:#F4F1EA;
+    font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:500;
+    margin-bottom:13px;
   }
+  .step h3{font-family:'Newsreader',serif; font-weight:500; font-size:18.5px; margin:0 0 6px; letter-spacing:-.01em}
+  .step p{margin:0; font-size:13.5px; color:var(--muted); line-height:1.55}
 
-  /* Platform picker: solid card with toggle + download */
-  .platforms-h{text-align:center; margin:0 0 28px; scroll-margin-top:24px}
-  .platforms-h h2{font-family:'Newsreader',serif; font-weight:500; font-size:30px; margin:0 0 6px; letter-spacing:-.01em}
-  .platforms-h p{margin:0; color:var(--muted); font-size:15px}
-  .get-dl{
-    display:flex; justify-content:center;
-    margin:0 0 72px;
-  }
-  .get-card{
-    display:flex; flex-direction:column; align-items:center; gap:18px;
-    position:relative;
-    width:100%; max-width:440px;
+  /* Platform cards — all three visible at once */
+  .platforms{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:0 0 20px; align-items:stretch}
+  .pcard{
+    display:flex; flex-direction:column; align-items:center; text-align:center;
     background:var(--surface); border:1px solid var(--border);
-    border-radius:20px; padding:28px 26px 26px;
+    border-radius:20px; padding:26px 20px 22px;
     box-shadow:0 4px 24px rgba(31,28,21,.06);
-    --mx:50%; --my:50%;
-    overflow:hidden;
-    transform-style:preserve-3d;
-    will-change:transform;
+    transition:border-color .18s ease, box-shadow .18s ease;
   }
-  .os-toggle{
-    display:flex; width:100%; padding:4px; gap:2px;
-    border-radius:14px;
-    background:var(--bg); border:1px solid var(--border);
+  .pcard:hover{border-color:var(--border-strong); box-shadow:0 8px 28px rgba(31,28,21,.09)}
+  .pcard.is-yours{border-color:var(--green); box-shadow:0 8px 30px rgba(31,75,63,.14)}
+  .pcard .glyph{width:38px; height:38px; margin-bottom:12px}
+  .pcard .glyph svg{width:100%; height:100%; fill:var(--green)}
+  .pcard h3{font-family:'Newsreader',serif; font-weight:500; font-size:21px; margin:0 0 4px; letter-spacing:-.01em}
+  .pcard .req{
+    font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--muted2);
+    margin:0 0 4px; line-height:1.45;
   }
-  .os-opt{
-    display:inline-flex; align-items:center; justify-content:center; gap:8px;
-    flex:1; border:0; background:transparent; cursor:pointer;
-    font-family:'Instrument Sans',system-ui,sans-serif;
-    font-weight:500; font-size:14.5px; color:var(--muted);
-    padding:11px 12px; border-radius:11px;
-    transition:background .15s ease, color .15s ease, box-shadow .15s ease;
+  .pcard .ver{
+    font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--muted2);
+    margin:0; min-height:1.2em;
   }
-  .os-opt svg{width:16px; height:16px; flex:none}
-  @media (hover:hover) and (pointer:fine){
-    .os-opt:not([aria-selected="true"]):hover{color:var(--ink)}
+  .pcard .yours-tag{
+    display:none;
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--green); margin:10px 0 0;
   }
-  .os-opt[aria-selected="true"]{
-    color:#F4F1EA; background:var(--green);
-    box-shadow:0 2px 10px rgba(31,75,63,.18);
+  .pcard.is-yours .yours-tag{display:block}
+  .pcard .spacer{flex:1; min-height:16px}
+  .pcard .btn{width:100%}
+
+  .dl-note{
+    text-align:center; color:var(--muted2); font-size:12.5px;
+    font-family:'IBM Plex Mono',monospace; margin:0 0 72px;
   }
-  .os-opt:focus-visible{outline:3px solid rgba(41,169,244,.45); outline-offset:2px}
-  .os-req{
-    font-family:'IBM Plex Mono',monospace; font-size:12px;
-    color:var(--muted2); margin:0; min-height:1.2em; text-align:center;
-  }
-  .get-card .btn{width:100%; max-width:100%}
 
   footer{border-top:1px solid var(--border); padding:28px 0 44px; color:var(--muted2); font-size:13px; text-align:center}
   footer a{color:var(--muted); text-decoration:none; border-bottom:1px solid var(--border-strong)}
@@ -310,15 +267,16 @@
   .topbar .mark .body{transform-origin:50% 72%; transform-box:fill-box; animation:bobSmall 5.5s ease-in-out infinite}
   .topbar .mark .eyes{transform-origin:center; transform-box:fill-box; animation:blink 4.2s linear infinite}
 
-  @media (max-width:720px){
-    .features{grid-template-columns:1fr}
-    .get-card{padding:22px 16px 18px; max-width:100%}
-    .os-opt{padding:11px 8px; font-size:13.5px; gap:6px}
+  @media (max-width:860px){
+    .features,.steps-grid,.platforms{grid-template-columns:1fr}
+    .pcard{padding:22px 18px 20px}
+    .steps{margin-bottom:56px}
   }
   @media (prefers-reduced-motion:reduce){
     .mascot .body,.mascot .eyes,
     .topbar .mark .body,.topbar .mark .eyes,.topbar .gh .animation{animation:none}
-    .btn,.os-opt,.feature{transition:none}
+    .btn,.feature,.pcard{transition:none}
+    .btn:hover{transform:none}
   }
 </style>
 </head>
@@ -349,6 +307,7 @@
           <span id="primaryLabel">Download Clippy</span>
         </a>
       </div>
+      <p class="platforms-line">macOS · Windows · Android — free, no account</p>
     </section>
 
     <section class="features">
@@ -357,33 +316,64 @@
       <div class="feature"><div class="k">Simple</div><h3>Pair with a QR code</h3><p>Scan once to link a device. No sign-up, no email, no password to forget.</p></div>
     </section>
 
-    <div class="platforms-h" id="get">
-      <h2>Get Clippy</h2>
-      <p>Pick your platform — pair them and they share one clipboard.</p>
-    </div>
-    <section class="get-dl" id="cards" aria-label="Download Clippy">
-      <div class="get-card">
-        <div class="os-toggle" role="tablist" aria-label="Platform">
-          <button type="button" class="os-opt" role="tab" data-os="macos" id="tab-macos" aria-selected="false">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.5 3c.1 1-.3 2-.9 2.7-.6.8-1.6 1.4-2.6 1.3-.1-1 .4-2 .9-2.6.6-.8 1.7-1.3 2.6-1.4zM19 17.2c-.5 1.1-.7 1.6-1.3 2.6-.9 1.3-2.1 3-3.6 3-1.4 0-1.7-.9-3.6-.9-1.8 0-2.2.9-3.6.9-1.5 0-2.7-1.5-3.5-2.8C1.1 16.9.8 12.6 2.3 10.4c1-1.5 2.6-2.4 4.1-2.4 1.5 0 2.5 1 3.7 1 1.2 0 1.9-1 3.7-1 1.3 0 2.7.7 3.7 2-3.2 1.8-2.7 6.4 1.8 7.2z"/></svg>
-            macOS
-          </button>
-          <button type="button" class="os-opt" role="tab" data-os="android" id="tab-android" aria-selected="false">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.6 9.5l1.4-2.4a.4.4 0 10-.7-.4l-1.4 2.5A8.7 8.7 0 0012 8c-1.8 0-3.4.5-4.9 1.2L5.7 6.7a.4.4 0 10-.7.4l1.4 2.4A8 8 0 002 16h20a8 8 0 00-4.4-6.5zM7.5 13.8a1 1 0 110-2 1 1 0 010 2zm9 0a1 1 0 110-2 1 1 0 010 2z"/></svg>
-            Android
-          </button>
-          <button type="button" class="os-opt" role="tab" data-os="windows" id="tab-windows" aria-selected="false">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.5l7.5-1v7.2H3zM11.3 4.4L21 3v9.7h-9.7zM3 12.5h7.5v7.2L3 18.6zM11.3 12.5H21V21l-9.7-1.3z"/></svg>
-            Windows
-          </button>
+    <section class="steps">
+      <div class="sec-h">
+        <h2>How it works</h2>
+        <p>Three steps, once. After that it just runs.</p>
+      </div>
+      <div class="steps-grid">
+        <div class="step">
+          <div class="n">1</div>
+          <h3>Install on two devices</h3>
+          <p>Grab Clippy for your Mac, PC, or Android phone — whichever pair you want to share a clipboard between.</p>
         </div>
-        <p class="os-req" id="osReq"></p>
-        <a class="btn" id="getBtn" href="/download/Clippy-macOS.dmg">
-          <span id="getIcon"></span>
-          <span id="getLabel">Download for macOS</span>
-        </a>
+        <div class="step">
+          <div class="n">2</div>
+          <h3>Scan the QR</h3>
+          <p>One device makes a group key and shows a QR code. Scan it on the other, or paste the key by hand. The key is generated on your device and never sent to the server.</p>
+        </div>
+        <div class="step">
+          <div class="n">3</div>
+          <h3>Copy anywhere, paste anywhere</h3>
+          <p>Whatever you copy shows up on your other devices, ready to paste. Recent clips stay browsable in the app so you can re-copy an older one.</p>
+        </div>
       </div>
     </section>
+
+    <div class="sec-h" id="get">
+      <h2>Get Clippy</h2>
+      <p>Install it on every device you want to share a clipboard with.</p>
+    </div>
+    <section class="platforms" aria-label="Download Clippy">
+      <div class="pcard" data-card="macos">
+        <div class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 3c.1 1-.3 2-.9 2.7-.6.8-1.6 1.4-2.6 1.3-.1-1 .4-2 .9-2.6.6-.8 1.7-1.3 2.6-1.4zM19 17.2c-.5 1.1-.7 1.6-1.3 2.6-.9 1.3-2.1 3-3.6 3-1.4 0-1.7-.9-3.6-.9-1.8 0-2.2.9-3.6.9-1.5 0-2.7-1.5-3.5-2.8C1.1 16.9.8 12.6 2.3 10.4c1-1.5 2.6-2.4 4.1-2.4 1.5 0 2.5 1 3.7 1 1.2 0 1.9-1 3.7-1 1.3 0 2.7.7 3.7 2-3.2 1.8-2.7 6.4 1.8 7.2z"/></svg></div>
+        <h3>macOS</h3>
+        <p class="req">Apple Silicon &amp; Intel · macOS 12+</p>
+        <p class="ver" data-ver></p>
+        <p class="yours-tag">Your platform</p>
+        <span class="spacer"></span>
+        <a class="btn ghost" data-dl="macos" href="/download/Clippy-macOS.dmg">Download .dmg</a>
+      </div>
+      <div class="pcard" data-card="android">
+        <div class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.6 9.5l1.4-2.4a.4.4 0 10-.7-.4l-1.4 2.5A8.7 8.7 0 0012 8c-1.8 0-3.4.5-4.9 1.2L5.7 6.7a.4.4 0 10-.7.4l1.4 2.4A8 8 0 002 16h20a8 8 0 00-4.4-6.5zM7.5 13.8a1 1 0 110-2 1 1 0 010 2zm9 0a1 1 0 110-2 1 1 0 010 2z"/></svg></div>
+        <h3>Android</h3>
+        <p class="req">Android 6+ · sideload APK</p>
+        <p class="ver" data-ver></p>
+        <p class="yours-tag">Your platform</p>
+        <span class="spacer"></span>
+        <a class="btn ghost" data-dl="android" href="/download/Clippy-Android.apk">Download .apk</a>
+      </div>
+      <div class="pcard" data-card="windows">
+        <div class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.5l7.5-1v7.2H3zM11.3 4.4L21 3v9.7h-9.7zM3 12.5h7.5v7.2L3 18.6zM11.3 12.5H21V21l-9.7-1.3z"/></svg></div>
+        <h3>Windows</h3>
+        <p class="req">Windows 10+ · 64-bit</p>
+        <p class="ver" data-ver></p>
+        <p class="yours-tag">Your platform</p>
+        <span class="spacer"></span>
+        <a class="btn ghost" data-dl="windows" href="/download/Clippy-Setup.exe">Download .exe</a>
+      </div>
+    </section>
+    <p class="dl-note">Pair them with a QR code — they share one clipboard.</p>
 
     <footer>
       Clippy · a small clipboard that follows you
@@ -403,17 +393,11 @@
     android:{label:'Download for Android', href:'/download/Clippy-Android.apk'},
     windows:{label:'Download for Windows', href:'/download/Clippy-Setup.exe'}
   };
-  var REQS = {
-    macos:'Apple Silicon & Intel · macOS 12+',
-    android:'Android 6+ · sideload APK',
-    windows:'Windows 10+ · 64-bit'
-  };
   var ICON = {
     macos:'<svg viewBox="0 0 24 24" fill="#F4F1EA" width="20" height="20"><path d="M16.5 3c.1 1-.3 2-.9 2.7-.6.8-1.6 1.4-2.6 1.3-.1-1 .4-2 .9-2.6.6-.8 1.7-1.3 2.6-1.4zM19 17.2c-.5 1.1-.7 1.6-1.3 2.6-.9 1.3-2.1 3-3.6 3-1.4 0-1.7-.9-3.6-.9-1.8 0-2.2.9-3.6.9-1.5 0-2.7-1.5-3.5-2.8C1.1 16.9.8 12.6 2.3 10.4c1-1.5 2.6-2.4 4.1-2.4 1.5 0 2.5 1 3.7 1 1.2 0 1.9-1 3.7-1 1.3 0 2.7.7 3.7 2-3.2 1.8-2.7 6.4 1.8 7.2z"/></svg>',
     android:'<svg viewBox="0 0 24 24" fill="#F4F1EA" width="20" height="20"><path d="M17.6 9.5l1.4-2.4a.4.4 0 10-.7-.4l-1.4 2.5A8.7 8.7 0 0012 8c-1.8 0-3.4.5-4.9 1.2L5.7 6.7a.4.4 0 10-.7.4l1.4 2.4A8 8 0 002 16h20a8 8 0 00-4.4-6.5zM7.5 13.8a1 1 0 110-2 1 1 0 010 2zm9 0a1 1 0 110-2 1 1 0 010 2z"/></svg>',
     windows:'<svg viewBox="0 0 24 24" fill="#F4F1EA" width="20" height="20"><path d="M3 5.5l7.5-1v7.2H3zM11.3 4.4L21 3v9.7h-9.7zM3 12.5h7.5v7.2L3 18.6zM11.3 12.5H21V21l-9.7-1.3z"/></svg>'
   };
-  var ORDER = ['macos','android','windows'];
 
   function detectOS(){
     var ua=navigator.userAgent;
@@ -430,9 +414,6 @@
     if(touch&&Math.min(screen.width,screen.height)<900) return 'android';
     return 'other';
   }
-
-  /** Current platform on the download buttons (macos | android | windows). */
-  var selectedOS = 'macos';
 
   /** Safe gtag wrapper — no-ops when GA is off. */
   function track(){
@@ -462,97 +443,64 @@
     });
   }
 
-  function selectOS(key){
-    if(!DL[key]) return;
-    selectedOS = key;
-    var d = DL[key];
-    Array.prototype.forEach.call(document.querySelectorAll('.os-opt'), function(b){
-      var on = b.getAttribute('data-os') === key;
-      b.setAttribute('aria-selected', on ? 'true' : 'false');
-      b.tabIndex = on ? 0 : -1;
-    });
-    document.getElementById('osReq').textContent = REQS[key] || '';
-    var getBtn = document.getElementById('getBtn');
-    getBtn.href = d.href;
-    getBtn.setAttribute('data-platform', key);
-    document.getElementById('getIcon').innerHTML = ICON[key];
-    document.getElementById('getLabel').textContent = d.label;
+  var detected = detectOS();
+  var isKnown = (detected === 'macos' || detected === 'android' || detected === 'windows');
+
+  // Hero button: point it at the visitor's platform when we actually know it.
+  // When we don't (iOS, Linux, anything unrecognised) it stays a jump to the
+  // full list rather than recommending a build that may be the wrong one.
+  (function(){
     var primary = document.getElementById('primaryBtn');
-    primary.href = d.href;
-    primary.setAttribute('data-platform', key);
-    document.getElementById('primaryIcon').innerHTML = ICON[key];
-    document.getElementById('primaryLabel').textContent = d.label;
+    if(!primary) return;
+    if(isKnown){
+      var d = DL[detected];
+      primary.href = d.href;
+      primary.setAttribute('data-platform', detected);
+      document.getElementById('primaryIcon').innerHTML = ICON[detected];
+      document.getElementById('primaryLabel').textContent = d.label;
+      primary.addEventListener('click', function(){
+        trackDownload(detected, d.href, d.label, 'hero');
+      });
+    } else {
+      document.getElementById('primaryLabel').textContent = 'Choose your platform';
+    }
+  })();
+
+  // Highlight the matching platform card, and promote its button to primary.
+  if(isKnown){
+    var card = document.querySelector('.pcard[data-card="'+detected+'"]');
+    if(card){
+      card.classList.add('is-yours');
+      var btn = card.querySelector('.btn');
+      if(btn) btn.classList.remove('ghost');
+    }
   }
 
-  var os = detectOS();
-  var primaryOS = (os==='macos'||os==='android'||os==='windows') ? os : 'macos';
-  selectOS(primaryOS);
-
-  Array.prototype.forEach.call(document.querySelectorAll('.os-opt'), function(b){
-    b.addEventListener('click', function(){
-      selectOS(b.getAttribute('data-os'));
-    });
-    b.addEventListener('keydown', function(e){
-      var i = ORDER.indexOf(b.getAttribute('data-os'));
-      if(i < 0) return;
-      var next = -1;
-      if(e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % ORDER.length;
-      if(e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (i - 1 + ORDER.length) % ORDER.length;
-      if(e.key === 'Home') next = 0;
-      if(e.key === 'End') next = ORDER.length - 1;
-      if(next < 0) return;
-      e.preventDefault();
-      selectOS(ORDER[next]);
-      document.querySelector('.os-opt[data-os="'+ORDER[next]+'"]').focus();
+  // Download clicks — one event each, platform read off the button itself.
+  Array.prototype.forEach.call(document.querySelectorAll('[data-dl]'), function(a){
+    a.addEventListener('click', function(){
+      var key = a.getAttribute('data-dl');
+      var d = DL[key];
+      if(!d) return;
+      trackDownload(key, d.href, a.textContent.trim(), 'get_card');
     });
   });
 
-  // One download event per click only.
-  function onDownloadClick(placement){
-    return function(){
-      var platform = selectedOS;
-      var d = DL[platform];
-      if(!d) return;
-      trackDownload(platform, d.href, d.label, placement);
-    };
-  }
-  var getBtnEl = document.getElementById('getBtn');
-  var primaryBtnEl = document.getElementById('primaryBtn');
-  if(getBtnEl) getBtnEl.addEventListener('click', onDownloadClick('get_card'));
-  if(primaryBtnEl) primaryBtnEl.addEventListener('click', onDownloadClick('hero'));
-
-  // 3D tilt + spotlight on all cards (InteractiveProductCard / card-7 style).
+  // Live version from the update manifest the relay already serves. Purely
+  // additive: if the fetch fails or the payload is unexpected, the lines stay
+  // empty rather than showing a placeholder or a stale hardcoded number.
   (function(){
-    if(!window.matchMedia) return;
-    var fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if(!fine || reduce) return;
-    var MAX = 8; // degrees — matches card-7
-    Array.prototype.forEach.call(
-      document.querySelectorAll('.feature, .get-card'),
-      function(card){
-        card.addEventListener('pointermove', function(e){
-          var r = card.getBoundingClientRect();
-          var px = (e.clientX - r.left) / r.width;
-          var py = (e.clientY - r.top) / r.height;
-          card.style.setProperty('--mx', (px * 100).toFixed(2) + '%');
-          card.style.setProperty('--my', (py * 100).toFixed(2) + '%');
-          var rotateY = (px - 0.5) * 2 * MAX;
-          var rotateX = (0.5 - py) * 2 * MAX;
-          card.classList.add('is-tilting');
-          card.style.transform =
-            'perspective(1000px) rotateX(' + rotateX.toFixed(2) + 'deg) rotateY(' +
-            rotateY.toFixed(2) + 'deg) scale3d(1.04, 1.04, 1.04)';
+    if(!window.fetch) return;
+    fetch('/version.json', {cache:'no-store'})
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        if(!j || typeof j.version !== 'string' || !j.version) return;
+        Array.prototype.forEach.call(document.querySelectorAll('[data-ver]'), function(el){
+          el.textContent = 'Version ' + j.version;
         });
-        card.addEventListener('pointerleave', function(){
-          card.classList.remove('is-tilting');
-          card.style.transform =
-            'perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)';
-        });
-      }
-    );
+      })
+      .catch(function(){ /* no version line — never a broken one */ });
   })();
-
 </script>
 </body>
 </html>
