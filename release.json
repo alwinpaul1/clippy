@@ -1,9 +1,9 @@
 {
-  "version": "1.0.41",
+  "version": "1.0.42",
   "notes": {
     "features": [],
     "improvements": [
-      "Naming this device no longer reads the device serial number"
+      "Background sync no longer reads the device serial number when naming this device"
     ],
     "fixes": []
   }
