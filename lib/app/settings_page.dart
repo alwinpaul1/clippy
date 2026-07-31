@@ -388,16 +388,39 @@ class _BgSyncCardState extends State<_BgSyncCard> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _refresh();
+    if (state == AppLifecycleState.resumed) _refreshUntilSettled();
   }
 
-  Future<void> _refresh() async {
+  /// Android publishes an accessibility grant asynchronously: the service has
+  /// to bind before AccessibilityManager reports it, which can land after we
+  /// have already resumed from the Settings screen. Reading once on resume can
+  /// therefore catch the OLD value, leaving this row on "1. Enable Clippy sync"
+  /// forever even though the grant succeeded — which reads to the user as "it
+  /// didn't work". Re-read a few times and stop as soon as something changes.
+  Future<void> _refreshUntilSettled() async {
+    const backoff = [
+      Duration.zero,
+      Duration(milliseconds: 250),
+      Duration(milliseconds: 600),
+      Duration(milliseconds: 1500),
+    ];
+    for (final delay in backoff) {
+      if (delay != Duration.zero) await Future<void>.delayed(delay);
+      if (!mounted) return;
+      if (await _refresh()) return; // settled
+    }
+  }
+
+  /// Returns true when the reported state differed from what is on screen.
+  Future<bool> _refresh() async {
     final s = await ShareChannel.bgSyncStatus();
-    if (!mounted) return;
+    if (!mounted) return false;
+    if (s.enabled == _enabled && s.overlay == _overlay) return false;
     setState(() {
       _enabled = s.enabled;
       _overlay = s.overlay;
     });
+    return true;
   }
 
   @override

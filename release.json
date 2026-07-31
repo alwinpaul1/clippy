@@ -1,10 +1,10 @@
 {
-  "version": "1.0.39",
+  "version": "1.0.40",
   "notes": {
     "features": [],
-    "improvements": [
-      "Tidied the download page hero on clippy.alwinpaul.me"
-    ],
-    "fixes": []
+    "improvements": [],
+    "fixes": [
+      "The background sync setup screen could keep showing a permission as not granted after you had just granted it"
+    ]
   }
 }
