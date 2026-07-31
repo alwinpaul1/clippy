@@ -1,9 +1,9 @@
 {
-  "version": "1.0.37",
+  "version": "1.0.38",
   "notes": {
     "features": [],
     "improvements": [
-      "The Light / Dark / System appearance setting is back in Settings"
+      "The download page at clippy.alwinpaul.me is back to its previous layout"
     ],
     "fixes": []
   }
