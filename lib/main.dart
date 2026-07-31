@@ -7,6 +7,7 @@ import 'app/clip_controller.dart';
 import 'app/home_page.dart';
 import 'app/pairing_page.dart';
 import 'app/theme.dart';
+import 'app/theme_controller.dart';
 import 'app/update_controller.dart';
 import 'core/pairing/pairing_key.dart';
 import 'platform/desktop_tray.dart';
@@ -19,41 +20,49 @@ Future<void> main() async {
   // Desktop: menu-bar / tray icon + hide-on-close so Clippy keeps syncing in
   // the background after its window is closed (no-op on mobile).
   await DesktopTray.instance.init();
-  runApp(const ClippyApp());
+  final theme = ThemeController();
+  await theme.load();
+  runApp(ClippyApp(theme: theme));
 }
 
 class ClippyApp extends StatelessWidget {
-  const ClippyApp({super.key});
+  final ThemeController theme;
+  const ClippyApp({super.key, required this.theme});
 
-  /// Clippy ships ONE theme — the warm cream/green light palette. There is no
-  /// Light/Dark/System setting: the app looks the same everywhere, regardless
-  /// of the OS appearance. [ClippyColors.dark] is still defined in theme.dart
-  /// but is intentionally unreferenced.
-  ThemeData _themeData(ClippyColors c) => ThemeData(
-    useMaterial3: true,
-    brightness: Brightness.light,
-    scaffoldBackgroundColor: c.bg,
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: c.green,
-      brightness: Brightness.light,
-      surface: c.bg,
-    ),
-    extensions: [c],
-  );
+  ThemeData _themeData(ClippyColors c) {
+    final brightness = c.isDark ? Brightness.dark : Brightness.light;
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      scaffoldBackgroundColor: c.bg,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: c.green,
+        brightness: brightness,
+        surface: c.bg,
+      ),
+      extensions: [c],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Clippy',
-      debugShowCheckedModeBanner: false,
-      theme: _themeData(ClippyColors.light),
-      home: const ClippyRoot(),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: theme,
+      builder: (context, mode, _) => MaterialApp(
+        title: 'Clippy',
+        debugShowCheckedModeBanner: false,
+        theme: _themeData(ClippyColors.light),
+        darkTheme: _themeData(ClippyColors.dark),
+        themeMode: mode,
+        home: ClippyRoot(theme: theme),
+      ),
     );
   }
 }
 
 class ClippyRoot extends StatefulWidget {
-  const ClippyRoot({super.key});
+  final ThemeController theme;
+  const ClippyRoot({super.key, required this.theme});
 
   @override
   State<ClippyRoot> createState() => _ClippyRootState();
@@ -140,6 +149,7 @@ class _ClippyRootState extends State<ClippyRoot> {
     return HomePage(
       controller: controller,
       pairing: _pairing!,
+      theme: widget.theme,
       onUnpair: _onUnpair,
     );
   }

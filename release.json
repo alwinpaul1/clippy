@@ -1,13 +1,10 @@
 {
-  "version": "1.0.36",
+  "version": "1.0.37",
   "notes": {
     "features": [],
     "improvements": [
-      "Clippy now uses one consistent look everywhere — the Light / Dark / System setting has been removed",
-      "The paperclip now bobs and blinks on the pairing screen, like it does on the main screen"
+      "The Light / Dark / System appearance setting is back in Settings"
     ],
-    "fixes": [
-      "Fixed hard-to-read text on the pairing screen and the background-sync permission sheet"
-    ]
+    "fixes": []
   }
 }
