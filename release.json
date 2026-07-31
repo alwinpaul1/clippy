@@ -1,9 +1,9 @@
 {
-  "version": "1.0.38",
+  "version": "1.0.39",
   "notes": {
     "features": [],
     "improvements": [
-      "The download page at clippy.alwinpaul.me is back to its previous layout"
+      "Tidied the download page hero on clippy.alwinpaul.me"
     ],
     "fixes": []
   }
