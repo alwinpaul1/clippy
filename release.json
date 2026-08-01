@@ -1,10 +1,10 @@
 {
-  "version": "1.0.42",
+  "version": "1.0.43",
   "notes": {
     "features": [],
-    "improvements": [
-      "Background sync no longer reads the device serial number when naming this device"
-    ],
-    "fixes": []
+    "improvements": [],
+    "fixes": [
+      "Background sync no longer holds the phone awake overnight, which was draining the battery"
+    ]
   }
 }

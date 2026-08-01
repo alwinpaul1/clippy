@@ -381,7 +381,15 @@ class ForegroundServiceManager {
       foregroundTaskOptions: ForegroundTaskOptions(
         // Drives the heartbeat check in _BackgroundSyncHandler.
         eventAction: ForegroundTaskEventAction.repeat(10000),
-        allowWakeLock: true,
+        // NO partial wakelock. Measured on a real S23 overnight: the service
+        // held ForegroundService:WakeLock for 5h34m of a 5h49m screen-off
+        // window, burning 37m of CPU and 110 mAh — second only to Instagram.
+        // It bought nothing: over the same 7h52m the radio was busy for 12s Rx
+        // + 8s Tx (WiFi asleep 99.9% of the time). Incoming socket data wakes
+        // the CPU on its own, and Clippy is on the battery-optimisation
+        // allowlist, so it does not need to hold the device awake to be
+        // reachable. Keep the WiFi lock: that one does not block deep sleep.
+        allowWakeLock: false,
         allowWifiLock: true,
         // Apple-ecosystem feel: sync comes back on its own after a reboot
         // (the service isolate runs the receive loop until the app is opened).
