@@ -1,10 +1,8 @@
 {
-  "version": "1.0.45",
+  "version": "1.0.46",
   "notes": {
     "features": [],
-    "improvements": [
-      "Clippy now warns you on the home screen when an update has switched background sync off, with a one-tap fix"
-    ],
+    "improvements": [],
     "fixes": []
   }
 }

@@ -89,6 +89,30 @@ class ClipController extends ChangeNotifier
   bool bgSyncRegressed = false;
   static const _bgSyncOptedInKey = 'clippy.bgSyncOptedIn.v1';
 
+  /// Decide whether background sync has regressed, and remember an opt-in.
+  ///
+  /// Pulled out of [_refreshBgSyncRegression] so the rule is testable without
+  /// standing up a whole controller (relay, key store, clipboard channels):
+  /// the interesting part is the prefs interaction, not the plumbing.
+  ///
+  /// - enabled            -> record the opt-in, never a regression
+  /// - disabled + opted in -> REGRESSION (this is the case worth a banner)
+  /// - disabled + never opted in -> nothing; do not nag a user who never
+  ///   turned background sync on in the first place
+  @visibleForTesting
+  static Future<bool> evaluateBgSyncRegression(
+    SharedPreferences prefs,
+    bool enabled,
+  ) async {
+    if (enabled) {
+      if (prefs.getBool(_bgSyncOptedInKey) != true) {
+        await prefs.setBool(_bgSyncOptedInKey, true);
+      }
+      return false;
+    }
+    return prefs.getBool(_bgSyncOptedInKey) ?? false;
+  }
+
   bool get isDesktop =>
       defaultTargetPlatform == TargetPlatform.macOS ||
       defaultTargetPlatform == TargetPlatform.windows ||
@@ -390,19 +414,8 @@ class ClipController extends ChangeNotifier
     if (_disposed) return;
     final prefs = await SharedPreferences.getInstance();
     if (_disposed) return;
-    if (s.enabled) {
-      // Remember the opt-in, so a later disappearance is recognisable as a
-      // regression rather than someone who simply never enabled it.
-      if (prefs.getBool(_bgSyncOptedInKey) != true) {
-        await prefs.setBool(_bgSyncOptedInKey, true);
-      }
-      if (bgSyncRegressed) {
-        bgSyncRegressed = false;
-        notifyListeners();
-      }
-      return;
-    }
-    final regressed = prefs.getBool(_bgSyncOptedInKey) ?? false;
+    final regressed = await evaluateBgSyncRegression(prefs, s.enabled);
+    if (_disposed) return;
     if (regressed != bgSyncRegressed) {
       bgSyncRegressed = regressed;
       notifyListeners();
