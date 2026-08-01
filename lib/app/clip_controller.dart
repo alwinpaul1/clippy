@@ -76,6 +76,19 @@ class ClipController extends ChangeNotifier
   // screenshots won't sync until they grant full access.
   String screenshotAccess = 'granted';
 
+  /// True when the user HAD background sync switched on and it is now off.
+  ///
+  /// Android disables an app's accessibility service whenever the app is
+  /// reinstalled — which includes Clippy's own in-app update. Background
+  /// capture then silently stops: the app still opens, still syncs while you
+  /// are looking at it, and nothing anywhere says the thing you switched on
+  /// has been switched off. Observed on a real device after an update.
+  ///
+  /// Only ever true for someone who turned it on before, so a user who never
+  /// opted in is never nagged.
+  bool bgSyncRegressed = false;
+  static const _bgSyncOptedInKey = 'clippy.bgSyncOptedIn.v1';
+
   bool get isDesktop =>
       defaultTargetPlatform == TargetPlatform.macOS ||
       defaultTargetPlatform == TargetPlatform.windows ||
@@ -228,6 +241,8 @@ class ClipController extends ChangeNotifier
       // sync new ones directly. Not awaited: the first call pops the
       // photo-access dialog, and startup shouldn't block on the answer.
       unawaited(_startScreenshotSync());
+      // ...and notice if an update silently switched background sync off.
+      unawaited(_refreshBgSyncRegression());
       // Sync anything the background AccessibilityService captured.
       unawaited(_drainQueue());
       // Heartbeat the service isolate: it stays connected at all times, but
@@ -283,6 +298,9 @@ class ClipController extends ChangeNotifier
       // Re-check photo access: the user may have just returned from granting
       // full access via the "Fix" banner, which should now clear it.
       unawaited(_startScreenshotSync());
+      // Same for background sync — clears the banner the moment they finish
+      // re-enabling the accessibility service.
+      unawaited(_refreshBgSyncRegression());
     }
   }
 
@@ -359,6 +377,36 @@ class ClipController extends ChangeNotifier
     if (_disposed) return;
     screenshotAccess = status;
     notifyListeners();
+  }
+
+  /// Notice background sync being switched off behind the user's back.
+  ///
+  /// Runs on the same resume hook as the screenshot-access refresh, so the
+  /// banner appears the first time the app is opened after an update took the
+  /// accessibility service down with it.
+  Future<void> _refreshBgSyncRegression() async {
+    if (isDesktop) return;
+    final s = await ShareChannel.bgSyncStatus();
+    if (_disposed) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (_disposed) return;
+    if (s.enabled) {
+      // Remember the opt-in, so a later disappearance is recognisable as a
+      // regression rather than someone who simply never enabled it.
+      if (prefs.getBool(_bgSyncOptedInKey) != true) {
+        await prefs.setBool(_bgSyncOptedInKey, true);
+      }
+      if (bgSyncRegressed) {
+        bgSyncRegressed = false;
+        notifyListeners();
+      }
+      return;
+    }
+    final regressed = prefs.getBool(_bgSyncOptedInKey) ?? false;
+    if (regressed != bgSyncRegressed) {
+      bgSyncRegressed = regressed;
+      notifyListeners();
+    }
   }
 
   /// Manual capture (phones without background capture, or any device).

@@ -14,6 +14,7 @@ import '../platform/share_channel.dart';
 import '../core/pairing/pairing_key.dart';
 import '../core/update/update_info.dart';
 import 'clip_controller.dart';
+import 'permission_help_sheet.dart';
 import 'settings_page.dart';
 import 'theme.dart';
 import 'theme_controller.dart';
@@ -483,6 +484,20 @@ class _HomeBodyState extends State<_HomeBody> {
             bottom: 16,
             child: SafeArea(child: _ShotAccessBanner()),
           ),
+        // Background sync was enabled and has been switched off — almost
+        // always because an app update took the accessibility service with
+        // it. Shown ABOVE the photo-access banner's slot only when that one
+        // is absent, so the two never stack on top of each other.
+        if (defaultTargetPlatform == TargetPlatform.android &&
+            _ctl.bgSyncRegressed &&
+            _ctl.screenshotAccess != 'partial' &&
+            _ctl.screenshotAccess != 'denied')
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 16,
+            child: SafeArea(child: _BgSyncOffBanner()),
+          ),
         // In-app update available.
         Positioned(
           left: 16,
@@ -503,6 +518,61 @@ class _HomeBodyState extends State<_HomeBody> {
 
 /// Pinned warning: screenshots won't sync until Clippy has FULL photo access
 /// (Android 14+ "Select photos" partial grants hide new screenshots entirely).
+/// Pinned warning: background sync was ON and is now OFF.
+///
+/// Android drops an app's accessibility service on every reinstall, and that
+/// includes Clippy's own in-app update — so the feature the user deliberately
+/// enabled goes away silently, and the app keeps looking healthy because it
+/// still syncs whenever it is open. Tapping through re-runs the same help
+/// sheet as first-time setup.
+class _BgSyncOffBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ck;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border.all(color: c.rust.withValues(alpha: 0.45)),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.10),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.sync_problem, size: 18, color: c.rust),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Background sync turned off — the last update reset it.',
+              style: Ct.body(12.5, color: c.ink, height: 1.35),
+            ),
+          ),
+          TextButton(
+            onPressed: () => showPermissionHelpSheet(
+              context,
+              title: 'Enable background sync',
+              whatFor: "Android switches this off whenever Clippy updates. "
+                  'Turn it back on and copies will sync again while the app '
+                  'is closed.',
+              onOpenSettings: ShareChannel.openA11ySettings,
+            ),
+            child: Text(
+              'Fix',
+              style: Ct.body(13.5, weight: FontWeight.w600, color: c.green),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ShotAccessBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
