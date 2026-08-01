@@ -418,7 +418,21 @@ class ForegroundServiceManager {
   /// no longer declares, and the system kills the service (the very failure
   /// this type change fixes). A version mismatch forces one stop+start, which
   /// is the only thing that rewrites those persisted options.
-  static const _serviceTypesVersion = 2; // 1 = legacy dataSync, 2 = specialUse
+  // 1 = legacy dataSync, 2 = specialUse, 3 = allowWakeLock:false
+  //
+  // Bump this for ANY ForegroundTaskOptions change, not just serviceTypes.
+  // The plugin persists those options and only rewrites them on a stop/start,
+  // and _ensureRunning() returns early when a service is already running —
+  // so on an existing install the new options are simply never applied.
+  // Shipping allowWakeLock:false in 1.0.43 changed nothing on a real device
+  // for exactly this reason: autoRunOnMyPackageReplaced restarted the service
+  // with the OLD persisted options and we then declined to touch it.
+  static const _serviceTypesVersion = 3;
+
+  /// The current options version, so tests assert against the real constant
+  /// instead of a literal that goes stale the next time it is bumped.
+  @visibleForTesting
+  static int get serviceOptionsVersion => _serviceTypesVersion;
   static const _typesVersionKey = 'fgs_service_types_version';
 
   /// Publish liveness, invalidating any health poll already in flight — its

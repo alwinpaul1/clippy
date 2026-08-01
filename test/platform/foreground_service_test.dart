@@ -96,7 +96,8 @@ void main() {
         reason: 'the old options must be torn down before the new type is '
             'written, or the stale type survives the update');
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getInt('fgs_service_types_version'), 2,
+    expect(prefs.getInt('fgs_service_types_version'),
+        ForegroundServiceManager.serviceOptionsVersion,
         reason: 'the migration must record that it ran');
     expect(ForegroundServiceManager.backgroundSyncAlive.value, isTrue);
   });
@@ -115,7 +116,8 @@ void main() {
 
   test('an already-migrated running service is left alone (no restart storm)',
       () async {
-    SharedPreferences.setMockInitialValues({'fgs_service_types_version': 2});
+    SharedPreferences.setMockInitialValues(
+        {'fgs_service_types_version': ForegroundServiceManager.serviceOptionsVersion});
     serviceRunning = true;
 
     await ForegroundServiceManager.start();
@@ -151,7 +153,8 @@ void main() {
 
   test('ensureRunning revives a service that died while the app was away',
       () async {
-    SharedPreferences.setMockInitialValues({'fgs_service_types_version': 2});
+    SharedPreferences.setMockInitialValues(
+        {'fgs_service_types_version': ForegroundServiceManager.serviceOptionsVersion});
     serviceRunning = false; // killed by the OEM battery manager
 
     await ForegroundServiceManager.ensureRunning();
@@ -161,7 +164,8 @@ void main() {
   });
 
   test('ensureRunning is a no-op when the service is already up', () async {
-    SharedPreferences.setMockInitialValues({'fgs_service_types_version': 2});
+    SharedPreferences.setMockInitialValues(
+        {'fgs_service_types_version': ForegroundServiceManager.serviceOptionsVersion});
     serviceRunning = true;
 
     await ForegroundServiceManager.ensureRunning();
@@ -176,7 +180,8 @@ void main() {
         const Duration(milliseconds: 20);
     addTearDown(() => ForegroundServiceManager.healthPollInterval =
         const Duration(seconds: 20));
-    SharedPreferences.setMockInitialValues({'fgs_service_types_version': 2});
+    SharedPreferences.setMockInitialValues(
+        {'fgs_service_types_version': ForegroundServiceManager.serviceOptionsVersion});
     serviceRunning = true;
     ForegroundServiceManager.startHealthWatch();
     await Future<void>.delayed(const Duration(milliseconds: 40));
@@ -232,7 +237,8 @@ void main() {
         reason: 'the migration must survive an asynchronous stop, not throw '
             'ServiceAlreadyStartedException into ClipController.init()');
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getInt('fgs_service_types_version'), 2);
+    expect(prefs.getInt('fgs_service_types_version'),
+        ForegroundServiceManager.serviceOptionsVersion);
   });
 
   test('start() never throws when the plugin does — a refused service must not '
@@ -286,7 +292,8 @@ void main() {
         const Duration(milliseconds: 20);
     addTearDown(() => ForegroundServiceManager.healthPollInterval =
         const Duration(seconds: 20));
-    SharedPreferences.setMockInitialValues({'fgs_service_types_version': 2});
+    SharedPreferences.setMockInitialValues(
+        {'fgs_service_types_version': ForegroundServiceManager.serviceOptionsVersion});
     serviceRunning = true;
     ForegroundServiceManager.startHealthWatch();
 
@@ -312,7 +319,8 @@ void main() {
         const Duration(milliseconds: 10);
     addTearDown(() => ForegroundServiceManager.healthPollInterval =
         const Duration(seconds: 20));
-    SharedPreferences.setMockInitialValues({'fgs_service_types_version': 2});
+    SharedPreferences.setMockInitialValues(
+        {'fgs_service_types_version': ForegroundServiceManager.serviceOptionsVersion});
     serviceRunning = false;
     // The system REFUSES the start outright (ForegroundServiceStartNotAllowed).
     // This fails fast — unlike a start that merely never comes up, which the
