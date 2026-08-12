@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// One captured clipboard item drained from the queue: text or an image.
-/// [name] is the source file's basename — requeue() writes an undelivered
+/// [name] is the source file's basename, requeue() writes an undelivered
 /// item back under its ORIGINAL name, preserving capture order (a fresh
 /// timestamp would re-order old content after newer captures) and making the
 /// write idempotent across the two draining isolates.
@@ -60,28 +60,28 @@ abstract class ClipQueue {
   // Processing a clip can fail two very different ways, and treating them the
   // same is how you delete a user's backlog:
   //
-  //  * GLOBAL/transient — the engine's prefs write fails (disk full: exactly
+  //  * GLOBAL/transient, the engine's prefs write fails (disk full: exactly
   //    what a 200MB queue causes), the crypto box is unusable, the isolate is
   //    out of memory. EVERY item fails, not one. The only safe response is to
   //    put the clip back, stop draining, and try again LATER.
-  //  * PER-ITEM — one payload is genuinely unprocessable.
+  //  * PER-ITEM, one payload is genuinely unprocessable.
   //
   // They are indistinguishable at the throw site, so time is the discriminator:
   // an item is only suspected of being poison once it has failed on separate
-  // drains, minutes apart — never three times in one loop, milliseconds apart.
+  // drains, minutes apart, never three times in one loop, milliseconds apart.
   // And a suspected-poison clip is QUARANTINED, never deleted: it goes to
   // `<name>.dead` where it stops blocking the queue but still exists.
   static const maxItemFailures = 3;
   static final Map<String, int> _failures = {};
   // Every clip we have EVER failed on, blamed or not. Strikes only accrue with
-  // evidence, so _failures alone cannot answer "have we tried this clip?" — and
+  // evidence, so _failures alone cannot answer "have we tried this clip?", and
   // that question is what decides whether a cooldown applies. Without it, a clip
   // we cannot convict looks untried, skips its own hold, and spins.
   static final Set<String> _tried = {};
 
   /// After a failed drain, hold off before touching the queue again. Without
   /// this the requeue's rename re-fires the inotify watcher, which re-drains
-  /// instantly, which fails again — a hot loop pinning the CPU.
+  /// instantly, which fails again, a hot loop pinning the CPU.
   static DateTime? _cooldownUntil;
   static int _drainFailures = 0;
 
@@ -99,20 +99,20 @@ abstract class ClipQueue {
   /// Is there a clip on disk we have NEVER failed on?
   ///
   /// The cooldown exists to stop us hammering a broken engine (or re-reading a
-  /// jam) — it must never make the user's NEXT copy wait behind it. A clip with
+  /// jam), it must never make the user's NEXT copy wait behind it. A clip with
   /// no strike history has never been tried, so the hold does not apply to it.
   static DateTime? _untriedAt;
   static bool _untriedCache = false;
 
   static Future<bool> hasUntriedWork() async {
     // A failed drain requeues every clip, and each write fires the inotify
-    // watcher — hundreds of run() entries within milliseconds, each of which
+    // watcher, hundreds of run() entries within milliseconds, each of which
     // would otherwise list the whole directory. One listing per burst is enough.
     final last = _untriedAt;
     if (last != null &&
         DateTime.now().difference(last) < const Duration(milliseconds: 300)) {
       // Short on purpose: the inotify burst from a failed drain's requeues lands
-      // within milliseconds, so this still collapses ~400 listings into one —
+      // within milliseconds, so this still collapses ~400 listings into one,
       // but a stale `false` must never make a clip the user JUST copied wait for
       // the service's next 10s tick.
       return _untriedCache;
@@ -139,7 +139,7 @@ abstract class ClipQueue {
 
   /// A drain failed: hold off before touching the queue again.
   ///
-  /// [escalate] doubles the hold each time, up to 4 minutes — right when the
+  /// [escalate] doubles the hold each time, up to 4 minutes, right when the
   /// ENGINE is down, so a persistent fault costs one attempt a minute instead of
   /// a spinning core. It is WRONG when the engine is proven healthy and only a
   /// bad clip failed: the hold then exists solely to stop the requeue's inotify
@@ -161,7 +161,7 @@ abstract class ClipQueue {
   }
 
   /// The escalation level of the backoff. A drain that observed nothing must
-  /// not reset this — an empty directory is not evidence that anything works
+  /// not reset this, an empty directory is not evidence that anything works
   /// (the other isolate may be mid-batch, having already deleted the files).
   @visibleForTesting
   static int get drainFailures => _drainFailures;
@@ -174,8 +174,8 @@ abstract class ClipQueue {
   /// Record that [name] failed, and report whether it has now failed on enough
   /// SEPARATE runs to be given up on (the caller parks it).
   ///
-  /// This is only ever called when the engine PROVED itself during the run —
-  /// something else was delivered — so the failure really is this clip's. A
+  /// This is only ever called when the engine PROVED itself during the run,
+  /// something else was delivered, so the failure really is this clip's. A
   /// failure with nothing delivered is indistinguishable from a broken engine
   /// and must never be counted: that is how a backlog gets destroyed.
   /// Remember that [name] failed, whether or not there was evidence to blame it.
@@ -183,7 +183,7 @@ abstract class ClipQueue {
     if (name == null) return;
     // The cap MUST exceed the queue's own file bound ([maxQueueFiles]). Evicting
     // a name makes that clip look UNTRIED again, which makes hasUntriedWork()
-    // true, which bypasses the cooldown — so with a backlog bigger than the cap
+    // true, which bypasses the cooldown, so with a backlog bigger than the cap
     // the hold would never apply and the requeue->inotify->drain spin returns.
     // enforceBound keeps the queue at ~200 files, so this is never reached in
     // practice; it is a memory backstop, not a working limit.
@@ -211,12 +211,12 @@ abstract class ClipQueue {
   static void clearFailures(String? name) {
     if (name == null) return;
     _failures.remove(name);
-    _tried.remove(name); // it worked — it is not a known-bad clip any more
+    _tried.remove(name); // it worked, it is not a known-bad clip any more
   }
 
   /// Clear the static machine between tests. Strike counters and cooldowns are
   /// process-wide, so without this one test's failures silently poison the
-  /// next test's clips — which is exactly how two of these tests came to pass
+  /// next test's clips, which is exactly how two of these tests came to pass
   /// for the wrong reason.
   @visibleForTesting
   static void resetForTests() {
@@ -232,7 +232,7 @@ abstract class ClipQueue {
 
   /// Park a clip we have given up on. The clip is already back on disk (a
   /// failure is requeued the moment it happens), so this is an atomic RENAME to
-  /// `<name>.dead` — nothing is rewritten, nothing is held in memory, and a
+  /// `<name>.dead`, nothing is rewritten, nothing is held in memory, and a
   /// failure here leaves the clip exactly where it was: still queued. It stops
   /// blocking the queue but is never destroyed; [enforceBound] reaps it after a
   /// day.
@@ -245,13 +245,13 @@ abstract class ClipQueue {
       debugPrint('ClipQueue: parked unprocessable clip $name');
       return true;
     } catch (_) {
-      return false; // still on the queue — we simply could not park it
+      return false; // still on the queue, we simply could not park it
     }
   }
 
   /// How much a single drain may hold in memory at once. The queue's own bound
   /// is 200MB of DISK, and every drained item is materialized as bytes in a
-  /// list — an hours-long backlog (the service died; captures kept landing)
+  /// list, an hours-long backlog (the service died; captures kept landing)
   /// would otherwise be read in one go and OOM the app at the worst possible
   /// moment: launch. Whatever doesn't fit stays on disk, oldest-first, and the
   /// next drain takes the next batch.
@@ -273,7 +273,7 @@ abstract class ClipQueue {
   /// [skip] holds the basenames of clips that already failed during this drain
   /// run. They stay ON DISK (never held in RAM, never at risk from a process
   /// kill) but are stepped over, so a jam at the head of the queue can never
-  /// starve whatever is behind it — at any size.
+  /// starve whatever is behind it, at any size.
   static Future<List<ClipQueueItem>> drain({Set<String> skip = const {}}) async {
     final dir = await _dir();
     if (dir == null) return const [];
@@ -292,19 +292,19 @@ abstract class ClipQueue {
       for (final f in files) {
         final ext = f.path.split('.').last.toLowerCase();
         // Images are staged as `<name>.part` then renamed in, so a `.part`
-        // seen mid-rename is incomplete — the next drain gets it. But a rename
+        // seen mid-rename is incomplete, the next drain gets it. But a rename
         // that never completed (writer killed, rename failed) would otherwise
-        // orphan the file forever — reap it once it's clearly stale.
+        // orphan the file forever, reap it once it's clearly stale.
         if (ext == 'part') {
           _reapIfStale(f);
           continue;
         }
-        // A quarantined clip is parked, not queued — never re-read it (it would
+        // A quarantined clip is parked, not queued, never re-read it (it would
         // come back as garbage "text" and fail forever).
         if (ext == 'dead') continue;
         if (skip.contains(f.uri.pathSegments.last)) continue; // failed already
         // Batch cap: stop BEFORE consuming the file, so it stays on disk (the
-        // only crash-proof copy) for the next pass. Never cap at zero items —
+        // only crash-proof copy) for the next pass. Never cap at zero items,
         // one clip larger than the budget must still make progress.
         if (items.isNotEmpty &&
             (items.length >= maxDrainFiles || bytes >= _maxDrainBytes)) {
@@ -329,8 +329,8 @@ abstract class ClipQueue {
     try {
       t = await f.readAsString();
     } catch (_) {
-      // A read can fail transiently — an OOM decoding a big image in the
-      // memory-tight service isolate, an EIO on flaky flash — so the file is
+      // A read can fail transiently, an OOM decoding a big image in the
+      // memory-tight service isolate, an EIO on flaky flash, so the file is
       // LEFT ALONE: the next drain (or the other isolate, which may have the
       // memory) gets it. It is only marked tried, because a file that cannot be
       // read is not "untried work" and must not turn every cooldown into a
@@ -355,7 +355,7 @@ abstract class ClipQueue {
     try {
       bytes = await f.readAsBytes();
     } catch (_) {
-      // See _drainText: marked tried, but NEVER deleted — a big image that OOMs
+      // See _drainText: marked tried, but NEVER deleted, a big image that OOMs
       // in this isolate may well decode in the other one.
       noteAttemptFailed(f.uri.pathSegments.last);
       return null;
@@ -371,17 +371,17 @@ abstract class ClipQueue {
   }
 
   // A drain now leaves its un-taken tail on disk between batches (that is the
-  // point of the batch cap) — and enforceBound prunes OLDEST-first, i.e.
+  // point of the batch cap), and enforceBound prunes OLDEST-first, i.e.
   // exactly the files the drain is about to deliver, from an isolate whose own
   // link may be down. This heartbeat says "a drain is live in SOME isolate".
   //
-  // It is only ever refreshed, NEVER deleted — that is what killed the old
+  // It is only ever refreshed, NEVER deleted, that is what killed the old
   // drain.lock: whichever drain finished first deleted the lock out from under
   // the other one. Staleness expires it instead.
   // ONE FILE PER ISOLATE. A single shared beat could never be released: whoever
   // finished first would delete it out from under the other's live drain (that
   // is what killed the old drain.lock). With a file each, an isolate releases
-  // only its OWN — no race — and enforceBound simply stands down while ANY beat
+  // only its OWN, no race, and enforceBound simply stands down while ANY beat
   // is fresh. Without a release, a drain's own beat keeps standing the pruner
   // down for a whole minute after it ends, and with the service draining every
   // 10s that means the queue bound never runs at all.
@@ -395,7 +395,7 @@ abstract class ClipQueue {
   static DateTime? _lastBeat;
 
   /// Refresh the "a drain is live" heartbeat. Callers must keep calling this
-  /// WHILE they upload — a batch of large images can take minutes, far longer
+  /// WHILE they upload, a batch of large images can take minutes, far longer
   /// than [_beatFresh], and a heartbeat that goes stale mid-drain lets the other
   /// isolate prune the very tail we are working through. Self-throttled, so
   /// calling it per item costs nothing.
@@ -418,12 +418,12 @@ abstract class ClipQueue {
     } catch (_) {}
   }
 
-  /// This isolate's drain is over. Deleting only OUR beat is always safe — the
-  /// other isolate owns a different file — and it is what lets enforceBound run
+  /// This isolate's drain is over. Deleting only OUR beat is always safe, the
+  /// other isolate owns a different file, and it is what lets enforceBound run
   /// at all: a beat left behind stands the pruner down for a full minute, and
   /// the service drains every 10 seconds.
   static Future<void> releaseBeat() async {
-    if (_lastBeat == null) return; // we never beat — nothing to let go of
+    if (_lastBeat == null) return; // we never beat, nothing to let go of
     final dir = await _dir();
     if (dir == null) return;
     _lastBeat = null;
@@ -433,7 +433,7 @@ abstract class ClipQueue {
   }
 
   /// Is a drain live in ANY isolate? Takes the directory listing the caller
-  /// already has — enforceBound needs it anyway, and listing twice per pass is
+  /// already has, enforceBound needs it anyway, and listing twice per pass is
   /// pure I/O on the phone.
   static bool _drainLive(List<File> entries) {
     final now = DateTime.now();
@@ -450,7 +450,7 @@ abstract class ClipQueue {
         }
       }
     } catch (_) {}
-    return false; // no live heartbeat — nothing is draining
+    return false; // no live heartbeat, nothing is draining
   }
 
   /// Whether [f]'s last modification is older than [age]. Treats a
@@ -465,7 +465,7 @@ abstract class ClipQueue {
   }
 
   /// A file that stays empty (writer killed mid-write) is re-listed on every
-  /// drain forever — reap it after a grace window.
+  /// drain forever, reap it after a grace window.
   static void _reapIfStale(File f) {
     try {
       if (_olderThan(f, const Duration(seconds: 30))) f.deleteSync();
@@ -474,7 +474,7 @@ abstract class ClipQueue {
 
   /// Put a drained item BACK on disk under its ORIGINAL filename. drain()
   /// consumes the file before the send happens, so if the relay link dies
-  /// mid-drain the disk copy — the only one that survives a process kill —
+  /// mid-drain the disk copy, the only one that survives a process kill,
   /// would be gone. Both types go through .part+rename staging so a
   /// concurrent drain (or the inotify watcher this write triggers) never
   /// reads a half-written file. Reusing the original name preserves capture
@@ -501,7 +501,7 @@ abstract class ClipQueue {
         part.deleteSync(); // don't leave an orphan blocking the reaper
       }
     } catch (_) {
-      // Disk full / dir gone — nothing more we can do without the file.
+      // Disk full / dir gone, nothing more we can do without the file.
     }
   }
 
@@ -514,7 +514,7 @@ abstract class ClipQueue {
   }
 
   // The queue only grows while the relay is unreachable (drains are gated on
-  // a confirmed link), and nothing else bounds it — a device that stays
+  // a confirmed link), and nothing else bounds it, a device that stays
   // paired-but-unconnected would accumulate captures (multi-MB images
   // included) without limit. Mutable only so tests can shrink the fixture.
   @visibleForTesting
@@ -523,25 +523,25 @@ abstract class ClipQueue {
   static int maxQueueBytes = 200 << 20;
 
   /// How long a queue file must sit untouched before the bound may prune it.
-  /// This — a per-file property, not shared lock state — is the cross-isolate
+  /// This, a per-file property, not shared lock state, is the cross-isolate
   /// safety: anything a drain just requeued (or a writer just staged) carries
   /// a fresh mtime and is structurally unprunable, with no heartbeat for a
   /// concurrent drain to delete out from under the other isolate. An OLD
   /// over-bound file can still be pruned while the other isolate's drain is
-  /// mid-flight — but pruning it is exactly the bound's stated policy.
+  /// mid-flight, but pruning it is exactly the bound's stated policy.
   static const _pruneMinAge = Duration(minutes: 1);
 
   /// Drop the oldest queue files while over the count/byte bound. `.part`
   /// staging files are exempt from the bound (they are mid-write), but stale
-  /// ones are reaped here too: while offline — the only time this runs —
+  /// ones are reaped here too: while offline, the only time this runs,
   /// drain() never runs, so its reaper can't.
   // The bound is a slow-moving condition, but the service ticks the drain (and
   // this) every 10s: listing + stat-ing 200 files that often is pure battery.
   // Two different waits, because they answer two different questions:
-  //  * a pass that RAN has just settled the queue — nothing can change fast
+  //  * a pass that RAN has just settled the queue, nothing can change fast
   //    enough to matter for a minute;
   //  * a pass that stood down for a live drain settled nothing, so it must come
-  //    back soon — but not on every tick for the length of a long drain.
+  //    back soon, but not on every tick for the length of a long drain.
   static DateTime? _boundNextAt;
   static const _boundAfterPass = Duration(seconds: 60);
   static const _boundAfterStandDown = Duration(seconds: 15);
@@ -568,7 +568,7 @@ abstract class ClipQueue {
       }
       _boundNextAt = DateTime.now().add(_boundAfterPass);
       // The bound is judged against EVERYTHING on disk (that's the real
-      // usage), but only files past the age gate are eligible for deletion —
+      // usage), but only files past the age gate are eligible for deletion,
       // fresh writes protect themselves by mtime.
       var count = 0;
       var total = 0;
@@ -603,7 +603,7 @@ abstract class ClipQueue {
         try {
           f.deleteSync();
         } catch (_) {
-          // Failed with the file still present: NOT freed — counting it
+          // Failed with the file still present: NOT freed, counting it
           // would end the loop with the disk still over its bound. A file
           // that vanished concurrently is genuinely gone and still counts.
           var stillThere = true;
@@ -620,14 +620,14 @@ abstract class ClipQueue {
 
   /// Instant sync: fires the moment native code writes a captured clip (inotify
   /// via Directory.watch). This is on filesDir (app-private ext4), where
-  /// inotify is reliable — unlike external storage's FUSE mount. Returns null
+  /// inotify is reliable, unlike external storage's FUSE mount. Returns null
   /// off Android; callers keep a slow poll as a fallback either way.
   static Future<Stream<void>?> watch() async {
     final dir = await _dir();
     if (dir == null) return null;
     try {
       dir.createSync(recursive: true); // must exist before watching
-      // All events: text is a create/modify, images are renamed in (a move) —
+      // All events: text is a create/modify, images are renamed in (a move),
       // drain is idempotent, so extra triggers are cheap.
       return dir.watch();
     } catch (_) {

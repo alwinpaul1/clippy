@@ -9,7 +9,7 @@ import 'desktop_updater.dart';
 
 /// Downloads and applies an app update for the current platform. The URL is the
 /// already-resolved absolute artifact URL (APK / macOS .app zip / Windows
-/// installer). [onProgress] reports 0.0–1.0 during download.
+/// installer). [onProgress] reports 0.0, 1.0 during download.
 abstract class PlatformUpdater {
   /// [sha256] is the artifact's expected hex digest, from the signed-by-CI
   /// manifest. It is REQUIRED, not optional: this method downloads and installs
@@ -19,7 +19,7 @@ abstract class PlatformUpdater {
       {required String sha256, void Function(double)? onProgress});
 
   /// The updater for the running platform, or null where in-app update isn't
-  /// supported (web, Linux) — callers fall back to opening the download page.
+  /// supported (web, Linux), callers fall back to opening the download page.
   static PlatformUpdater? forCurrent() {
     if (kIsWeb) return null;
     if (Platform.isAndroid) return _lazyAndroid();
@@ -31,11 +31,11 @@ abstract class PlatformUpdater {
   static PlatformUpdater _lazyDesktop() => DesktopUpdater();
 }
 
-/// Thrown when a downloaded artifact's SHA-256 does not match the manifest's —
+/// Thrown when a downloaded artifact's SHA-256 does not match the manifest's,
 /// i.e. the bytes were TAMPERED with (a completed download whose content is
 /// wrong). A truncated download is a [DownloadException] instead, so a flaky
 /// network is never mistaken for an attack. The file is deleted before either
-/// is raised — a bad binary is never left where an install path could pick it
+/// is raised, a bad binary is never left where an install path could pick it
 /// up.
 class IntegrityException implements Exception {
   IntegrityException(this.expected, this.actual);
@@ -44,10 +44,10 @@ class IntegrityException implements Exception {
   @override
   String toString() =>
       'update artifact failed its integrity check '
-      '(expected $expected, got $actual) — refusing to install';
+      '(expected $expected, got $actual). Refusing to install.';
 }
 
-/// A download that could not complete or was misconfigured — retryable, and NOT
+/// A download that could not complete or was misconfigured, retryable, and NOT
 /// evidence of tampering. Covers a truncated stream and a malformed manifest
 /// hash. Callers fall back to the download page.
 class DownloadException implements Exception {
@@ -69,7 +69,7 @@ final _hex64 = RegExp(r'^[0-9a-f]{64}$');
 ///
 /// The hash is computed AS the bytes stream past, so an 80MB APK is never read
 /// from disk a second time. This is the only integrity gate for macOS and
-/// Windows — Android additionally has the system installer's signing-key check,
+/// Windows. Android additionally has the system installer's signing-key check,
 /// but the desktop platforms have nothing else between the network and running
 /// code.
 Future<void> downloadTo(
@@ -82,7 +82,7 @@ Future<void> downloadTo(
 }) async {
   // Validate the expected hash BEFORE spending a download on it. A malformed
   // manifest hash (stray space, wrong case, a `sha256:` prefix) is a manifest
-  // problem, not tampering — and reporting it as such lets the UI fall back to
+  // problem, not tampering, and reporting it as such lets the UI fall back to
   // the download page instead of crying wolf.
   final expected = expectedSha256.trim().toLowerCase();
   if (!_hex64.hasMatch(expected)) {
@@ -120,7 +120,7 @@ Future<void> downloadTo(
       await sink.close();
     }
     // A stream can end SHORT of its declared length without throwing (the socket
-    // closed mid-download). That is a truncated file, not a tampered one — the
+    // closed mid-download). That is a truncated file, not a tampered one, the
     // common failure on a slow mobile link. Say so, so it is retried rather than
     // mistaken for an attack. (Over-length is anomalous/hostile, but reported as
     // its own thing rather than mislabelled "truncated".)

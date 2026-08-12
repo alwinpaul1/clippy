@@ -7,7 +7,7 @@ import 'share_channel.dart';
 
 /// Last Build.MODEL resolved natively, so the background-sync isolate can reuse
 /// it. That isolate runs its own engine with no MainActivity method channel, so
-/// without this it falls back to device_info_plus — and that reads the serial.
+/// without this it falls back to device_info_plus, and that reads the serial.
 const _modelCacheKey = 'clippy.deviceModel.v1';
 
 /// A short, human-friendly name for THIS device, shown on synced clips
@@ -18,7 +18,7 @@ Future<String> resolveDeviceName() async {
   try {
     if (Platform.isAndroid) {
       // Native Build.MODEL rather than device_info_plus: the plugin builds its
-      // whole AndroidDeviceInfo eagerly, which calls Build.getSerial() — denied
+      // whole AndroidDeviceInfo eagerly, which calls Build.getSerial(), denied
       // on Android 10+ and logged as a permission violation. An app whose pitch
       // is that it never sees an identity should not reach for the device
       // serial, even accidentally through a plugin.

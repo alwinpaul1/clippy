@@ -44,7 +44,7 @@ class SyncEngine {
     await _state.writeLastAppliedHash(hash);
   }
 
-  /// Spec §7 — On local clipboard change.
+  /// Spec §7. On local clipboard change.
   Future<List<SyncAction>> onLocalClip(ClipEvent event) async {
     // Rule 1: ignore non-text, concealed/sensitive, or oversize clips.
     if (!event.isText || event.isConcealed || event.byteSize > _sizeCapBytes) {
@@ -65,7 +65,7 @@ class SyncEngine {
     // Rule 2b: persisted dedup. If this content is already the last clip we
     // applied or uploaded, re-reading it (fresh isolate after the background
     // service applied a clip, resume re-read, …) must not upload a duplicate.
-    // The in-memory echo window can't cover this — it's per-isolate.
+    // The in-memory echo window can't cover this, it's per-isolate.
     if (h == await _state.readLastAppliedHash()) return const [];
 
     // Rule 3: seal and upload.
@@ -76,7 +76,7 @@ class SyncEngine {
 
   /// On local IMAGE capture. [base64Image] is the original image, base64'd, and
   /// treated as the sealed plaintext (so the echo-guard and dedup work exactly
-  /// as for text). No text size-cap — the relay enforces its own ciphertext cap.
+  /// as for text). No text size-cap, the relay enforces its own ciphertext cap.
   Future<List<SyncAction>> onLocalImage(
     String base64Image, {
     String mime = 'image/jpeg',
@@ -89,7 +89,7 @@ class SyncEngine {
       _expectedEchoExpiry = null;
       return const [];
     }
-    // Rule 2b — see onLocalClip: don't re-upload the last applied content.
+    // Rule 2b, see onLocalClip: don't re-upload the last applied content.
     if (h == await _state.readLastAppliedHash()) return const [];
     final clip = (await _crypto.seal(base64Image, source: _selfDeviceId))
         .copyWith(kind: 'image', mime: mime);
@@ -98,13 +98,13 @@ class SyncEngine {
   }
 
   /// Record that WE just placed [hash]'s content on the system clipboard
-  /// ourselves — tap-to-apply of an existing history item
+  /// ourselves, tap-to-apply of an existing history item
   /// (`ClipController.applyItem`). The resulting local re-capture (desktop
   /// clipboard watcher, or Android's AccessibilityService firing on the system
   /// "Copied" toast → clip queue → drain) must NOT be re-uploaded as a new
   /// clip. Suppress it exactly as applying a remote clip does: the one-shot
   /// in-memory echo window (Rule 2) plus the persisted last-applied hash
-  /// (Rule 2b) — the latter is what covers the Android drain, which may run in
+  /// (Rule 2b), the latter is what covers the Android drain, which may run in
   /// the foreground-service isolate rather than this one. [hash] is the item's
   /// content fingerprint (RemoteClip.hash == fingerprint(plaintext)).
   Future<void> noteApplied(String hash) async {
@@ -113,7 +113,7 @@ class SyncEngine {
     await _setLastApplied(hash);
   }
 
-  /// Spec §7 — On remote snapshot.
+  /// Spec §7. On remote snapshot.
   Future<List<SyncAction>> onRemoteSnapshot(RemoteClip clip) async {
     // Rule 1: never react to our own writes.
     if (clip.source == _selfDeviceId) return const [];
@@ -128,7 +128,7 @@ class SyncEngine {
     final isFirstConsidered = !_firstSnapshotConsidered;
     _firstSnapshotConsidered = true;
 
-    // Rule 3: cold-start / fresh-install protection — do not clobber the live
+    // Rule 3: cold-start / fresh-install protection, do not clobber the live
     // clipboard with a stale clip on the first considered snapshot.
     if (isFirstConsidered &&
         _clock().difference(clip.timestamp) > _freshnessWindow) {

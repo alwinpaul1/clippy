@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
-/// Watches macOS's screenshot save folder (⇧⌘3/4 write files there — they
+/// Watches macOS's screenshot save folder (⇧⌘3/4 write files there, they
 /// never touch the clipboard, so the clipboard watcher can't see them) and
 /// hands each new screenshot's bytes to [onImage]. No-op off macOS.
 ///
@@ -59,7 +59,7 @@ class MacScreenshotWatcher {
           return;
         }
       } on FileSystemException {
-        // Not readable yet (or gone) — retry once, then give up.
+        // Not readable yet (or gone), retry once, then give up.
       }
     }
   }

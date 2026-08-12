@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 
 /// Receives text OR images sent to Clippy via Android's "Send to Clippy" entry
-/// points (text-selection popup + Share sheet). No special permissions — the
+/// points (text-selection popup + Share sheet). No special permissions, the
 /// user picks "Clippy" and it syncs. On desktop the native channel is absent,
 /// so the calls no-op.
 abstract class ShareChannel {
@@ -25,7 +25,7 @@ abstract class ShareChannel {
 
   /// `Build.MODEL` for this device (e.g. "SM-S918B"), or null off Android /
   /// if the native side is unavailable. Deliberately narrower than
-  /// device_info_plus, which eagerly reads the device serial as well — see the
+  /// device_info_plus, which eagerly reads the device serial as well, see the
   /// note on the native `deviceModel` handler.
   static Future<String?> deviceModel() async {
     try {
@@ -55,8 +55,8 @@ abstract class ShareChannel {
   /// Start the Android screenshot auto-sync: new screenshots arrive through
   /// the [listen] onImage handler like shared images. Prompts for photo access
   /// on first call. Returns the access level:
-  ///  - 'granted': full access — screenshots will sync.
-  ///  - 'partial': Android 14+ "Select photos" — screenshots WON'T sync;
+  ///  - 'granted': full access, screenshots will sync.
+  ///  - 'partial': Android 14+ "Select photos", screenshots WON'T sync;
   ///    the user must grant full access (see [openPhotoSettings]).
   ///  - 'denied' / 'unavailable': no sync.
   static Future<String> startScreenshotWatch() async {
@@ -113,7 +113,7 @@ abstract class ShareChannel {
     } catch (_) {}
   }
 
-  /// Clippy's App info page — where the ⋮ → "Allow restricted settings" gate
+  /// Clippy's App info page, where the ⋮ → "Allow restricted settings" gate
   /// lives that Android puts on the Accessibility / display-over-apps toggles
   /// for sideloaded installs.
   static Future<void> openAppInfo() async {
@@ -124,7 +124,7 @@ abstract class ShareChannel {
 
   /// Android fallback for image clipboard reads: Gallery-style copies put a
   /// content:// URI on the clipboard (no byte representation), which
-  /// super_clipboard can't surface — the native side resolves the URI to
+  /// super_clipboard can't surface, the native side resolves the URI to
   /// bytes. Returns null when the clipboard holds no readable image URI.
   static Future<({Uint8List bytes, String mime})?> readClipImage() async {
     try {

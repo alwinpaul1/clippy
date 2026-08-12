@@ -9,7 +9,7 @@ import 'update_info.dart';
 
 /// Checks the relay's /version.json for a newer release and remembers which
 /// versions the user dismissed. Pure of any UI; failures are swallowed on the
-/// automatic path (returns null) — callers decide whether to surface an error.
+/// automatic path (returns null), callers decide whether to surface an error.
 class UpdateService {
   final Uri manifestUri;
   final Future<({String version, int build})> Function() _currentVersion;
@@ -27,7 +27,7 @@ class UpdateService {
 
   /// Returns the manifest's [UpdateInfo] iff it is strictly newer than the
   /// running app; null if up to date. THROWS on a non-200 response, a network
-  /// failure, or an unreadable manifest — so the manual "Check for updates"
+  /// failure, or an unreadable manifest, so the manual "Check for updates"
   /// path can tell "up to date" apart from "couldn't reach the relay".
   ///
   /// Transient DNS / socket failures get one short retry (macOS + Tailscale
@@ -74,7 +74,7 @@ class UpdateService {
       // propagate. Transient catches fall through here after the last attempt.
       break;
     }
-    // ignore: only_throw_errors — lastError is Exception | SocketException | ClientException
+    // ignore: only_throw_errors, lastError is Exception | SocketException | ClientException
     throw lastError ?? Exception('could not reach the update server');
   }
 
@@ -90,7 +90,7 @@ class UpdateService {
 
   /// Resolve an artifact path against the manifest's OWN origin. A relative
   /// path (what CI emits: `/download/...`) resolves against the manifest host.
-  /// An absolute URL is accepted only if it names that same origin — a manifest
+  /// An absolute URL is accepted only if it names that same origin, a manifest
   /// must never be able to redirect the download to another host. Combined with
   /// the mandatory hash check in the updater, that keeps a tampered manifest
   /// from pointing clients at an attacker-controlled binary.
@@ -98,14 +98,14 @@ class UpdateService {
     final u = Uri.parse(pathOrUrl);
     if (!u.hasScheme) return manifestUri.resolve(pathOrUrl);
     // Same ORIGIN: scheme, host, AND port. Pinning only host would let a
-    // tampered manifest redirect to another port on the same machine — a
+    // tampered manifest redirect to another port on the same machine, a
     // service an attacker with a foothold there could control.
     final sameOrigin = u.scheme == manifestUri.scheme &&
         u.host == manifestUri.host &&
         u.port == manifestUri.port;
     if (sameOrigin) return u;
     throw Exception('update artifact origin ${u.scheme}://${u.host}:${u.port} '
-        'is not the manifest origin — refusing');
+        'is not the manifest origin. Refusing.');
   }
 
   /// [key] is a `version+build` identifier (see [UpdateController]) so a

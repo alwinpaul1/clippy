@@ -27,7 +27,7 @@ class WebSocketClipStore {
 
   // Outbound edit frames (deletes/clears) held while the link isn't confirmed
   // (handshake in flight, socket half-open, between reconnects) and ALWAYS
-  // replayed when it is — the UI confirms deletes to the user immediately
+  // replayed when it is, the UI confirms deletes to the user immediately
   // ("Clip deleted" / "gone for good"), so dropping a buffered edit would
   // silently resurrect content the user was told is gone. Replay at any age
   // is safe because every edit carries a server-side 'before' watermark: it
@@ -42,7 +42,7 @@ class WebSocketClipStore {
   // but not yet detected (~2× the transport ping interval). Every append is
   // kept here, keyed by content hash, until the relay's explicit 'ack' frame
   // proves delivery ('reject' proves it must stop). Whatever is unproven
-  // after a reconnect is resent AT ANY AGE — resends are marked
+  // after a reconnect is resent AT ANY AGE, resends are marked
   // ('resend': true) so the relay can 'reject' ones whose content was
   // deleted meanwhile (tombstones), and they are idempotent (move-to-top),
   // so no clock heuristic is needed and nothing undelivered is ever given
@@ -54,7 +54,7 @@ class WebSocketClipStore {
 
   // At most ONE tracked clip may exceed the byte budget (a full-quality
   // screenshot can be ~2× the whole budget). It lives IN [_unacked] like any
-  // entry — insertion order preserved, one lifecycle — but its bytes are
+  // entry, insertion order preserved, one lifecycle, but its bytes are
   // exempt from the budget so it cannot evict the entire normal backlog;
   // [_jumboKey] points at it so a newer jumbo replaces it (newest wins).
   String? _jumboKey;
@@ -112,7 +112,7 @@ class WebSocketClipStore {
     );
     transport.send(jsonEncode({'type': 'join', 'room': roomToken}));
     // NOT connected yet: the socket may still be handshaking (or already
-    // dead). The relay answers every join with a history frame — only that
+    // dead). The relay answers every join with a history frame, only that
     // reply proves the link, and _onMessage flips the flag.
   }
 
@@ -139,20 +139,20 @@ class WebSocketClipStore {
     try {
       msg = jsonDecode(raw) as Map<String, dynamic>;
     } catch (_) {
-      // Unparseable — do NOT flip connected on it: only a real (parsed) frame
+      // Unparseable, do NOT flip connected on it: only a real (parsed) frame
       // may, or the justConnected flush below would be skipped and buffered
       // clips would sit stranded for this connection's whole lifetime.
       return;
     }
-    // First parsed frame after (re)opening is the join reply — only a
+    // First parsed frame after (re)opening is the join reply, only a
     // received frame proves the link is real (a socket can look open while
     // dead).
     final justConnected = !_connected;
     if (justConnected) _setConnected(true);
     try {
       switch (msg['type']) {
-        case 'ack': // relay stored our clip — delivery proven
-        case 'reject': // relay will never store it — stop resending
+        case 'ack': // relay stored our clip, delivery proven
+        case 'reject': // relay will never store it, stop resending
           final h = msg['hash'];
           if (h is String) _untrackUnacked(h);
         case 'history':
@@ -172,7 +172,7 @@ class WebSocketClipStore {
           final clip = _parse(msg['clip']);
           _untrackUnacked(clip.hash); // our own broadcast = server has it
           // Mirror the relay's dedup: an existing hash anywhere in history
-          // moves to the top (fresh server timestamp), never duplicates —
+          // moves to the top (fresh server timestamp), never duplicates,
           // otherwise a resend/re-copy of a mid-history clip shows twice
           // until the next snapshot silently rewrites it.
           _history
@@ -184,7 +184,7 @@ class WebSocketClipStore {
           final hashes =
               (msg['hashes'] as List?)?.whereType<String>().toSet() ??
               const <String>{};
-          hashes.forEach(_untrackUnacked); // deleted — never resend it
+          hashes.forEach(_untrackUnacked); // deleted, never resend it
           if (hashes.isNotEmpty) {
             _history.removeWhere((c) => hashes.contains(c.hash));
             _emitHistory();
@@ -198,7 +198,7 @@ class WebSocketClipStore {
       }
     } catch (_) {
       // A malformed field inside an otherwise-parsed frame (bad timestamp,
-      // wrong shape) — drop the frame; never let it kill the socket
+      // wrong shape), drop the frame; never let it kill the socket
       // subscription or escape to the zone.
     } finally {
       if (justConnected) {
@@ -228,12 +228,12 @@ class WebSocketClipStore {
   }
 
   /// Watermark for destructive edits: the newest SERVER timestamp this
-  /// device has seen. Server stamps compared to server stamps — immune to
+  /// device has seen. Server stamps compared to server stamps, immune to
   /// device-clock skew, which matters: a device whose clock runs behind the
   /// relay would otherwise stamp a delete BEFORE the just-stored clip's
   /// server time and the edit would silently no-op. Everything the user can
   /// see is at-or-before the newest entry, and anything stored later
-  /// (a deliberate re-copy) is after it — exactly the intended scope. Only a
+  /// (a deliberate re-copy) is after it, exactly the intended scope. Only a
   /// cold offline start (no snapshot ever) falls back to the device clock,
   /// which the relay additionally clamps to server-now.
   String _watermarkIso() => _history.isEmpty
@@ -245,10 +245,10 @@ class WebSocketClipStore {
 
   /// Send a sealed clip to the room. At-least-once: the clip is tracked in
   /// [_unacked] until the relay acks it, and resent after a reconnect
-  /// otherwise — so a copy made while the link is down (or half-open) syncs
+  /// otherwise, so a copy made while the link is down (or half-open) syncs
   /// when the connection comes back instead of silently vanishing.
   Future<void> append(EncryptedClip clip) async {
-    // Nothing above the relay's ciphertext cap can ever be stored — don't
+    // Nothing above the relay's ciphertext cap can ever be stored, don't
     // build or send a frame that would only be rejected.
     if (clip.ciphertext.length > _maxCiphertextChars) return;
     final map = clip.toMap();
@@ -261,7 +261,7 @@ class WebSocketClipStore {
     _untrackUnacked(clip.hash);
     final exempt = frame.length > _maxUnackedBytes;
     if (exempt) {
-      // Only one budget-exempt entry at a time — a newer jumbo replaces the
+      // Only one budget-exempt entry at a time, a newer jumbo replaces the
       // old one (still in capture order relative to everything else).
       final old = _jumboKey;
       if (old != null) _untrackUnacked(old);
@@ -286,7 +286,7 @@ class WebSocketClipStore {
     final list = hashes.toList();
     if (list.isEmpty) return;
     final before = _watermarkIso(); // BEFORE the local removal mutates history
-    // The user deleted these — never resend them, even if the server never
+    // The user deleted these, never resend them, even if the server never
     // held them (offline delete) or the frame below is lost.
     list.forEach(_untrackUnacked);
     final doomed = list.toSet();
@@ -298,15 +298,15 @@ class WebSocketClipStore {
   }
 
   /// Clear the room for all devices. Watermarked with the moment the user
-  /// acted, so it works from ANY state — even a cold offline start where no
-  /// snapshot ever arrived — and a late replay clears exactly what existed
+  /// acted, so it works from ANY state, even a cold offline start where no
+  /// snapshot ever arrived, and a late replay clears exactly what existed
   /// at-or-before the tap: clips this device never saw included, clips other
   /// devices add afterwards excluded.
   Future<void> clearAll() async {
     final before = _watermarkIso(); // BEFORE the local clear mutates history
     _untrackAllUnacked(); // cleared clips must never be resent
     if (_history.isNotEmpty) {
-      _history.clear(); // the UI said "gone for good" — reflect it right now
+      _history.clear(); // the UI said "gone for good", reflect it right now
       _emitHistory();
     }
     _send(jsonEncode({'type': 'clear', 'before': before}));
@@ -348,7 +348,7 @@ class WebSocketClipStore {
   /// proves delivered (supplementary to the ack, and the lost-ack fallback),
   /// then resend the rest in capture order, AT ANY AGE. A frame that was
   /// already on the wire once is marked 'resend': true so the relay can
-  /// answer 'reject' if its content was deleted meanwhile (tombstones) —
+  /// answer 'reject' if its content was deleted meanwhile (tombstones),
   /// that, not a clock, is what distinguishes "deleted elsewhere" from
   /// "never delivered". A first flush of an offline-buffered clip is NOT a
   /// resend: it is fresh user intent and may legitimately revive content.
@@ -378,7 +378,7 @@ class WebSocketClipStore {
 }
 
 /// One tracked-for-resend clip. [sent] is whether it has EVER been on the
-/// wire — a later transmission of a sent clip is flagged 'resend' so the
+/// wire, a later transmission of a sent clip is flagged 'resend' so the
 /// relay can tombstone-reject it, while the first flush of an offline copy
 /// counts as fresh user intent. [exempt] entries (jumbo frames) don't count
 /// toward the byte budget so they can't evict the backlog.

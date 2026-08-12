@@ -55,10 +55,10 @@ class ClipController extends ChangeNotifier
   DateTime? _suppressImageUntil;
   // The clipboard content we already synced, in either direction. The resume
   // hook re-reads the clipboard every time Clippy returns to the foreground,
-  // and the engine's echo window (~2s) can't cover a minutes-later re-read —
+  // and the engine's echo window (~2s) can't cover a minutes-later re-read,
   // without this, every app-open would re-upload the current clip. Text is
   // matched exactly; an image is matched by a format-agnostic fingerprint of
-  // its picture — the platform hands our own write back re-encoded (a received
+  // its picture, the platform hands our own write back re-encoded (a received
   // JPEG re-reads as PNG), so a raw-byte / content-hash compare misses the echo.
   String? _handledText;
   String? _handledImageFp;
@@ -79,7 +79,7 @@ class ClipController extends ChangeNotifier
   /// True when the user HAD background sync switched on and it is now off.
   ///
   /// Android disables an app's accessibility service whenever the app is
-  /// reinstalled — which includes Clippy's own in-app update. Background
+  /// reinstalled, which includes Clippy's own in-app update. Background
   /// capture then silently stops: the app still opens, still syncs while you
   /// are looking at it, and nothing anywhere says the thing you switched on
   /// has been switched off. Observed on a real device after an update.
@@ -140,7 +140,7 @@ class ClipController extends ChangeNotifier
     _prefs = prefs;
     // Restore the echo guard for whatever image is (still) on this device's
     // clipboard, so a relaunch does not re-upload a picture Clippy itself put
-    // there — attributed to this device, as if the user had copied it.
+    // there, attributed to this device, as if the user had copied it.
     _handledImageFp = prefs.getString(_imageFpKey);
     final cacheKey = 'clippy.clips.${roomToken.hashCode.toRadixString(16)}';
     final cached = prefs.getString(cacheKey);
@@ -156,7 +156,7 @@ class ClipController extends ChangeNotifier
         history = await _historyStore!.project(clips);
         notifyListeners();
       } catch (_) {
-        // Corrupt cache — the live snapshot will overwrite it shortly.
+        // Corrupt cache, the live snapshot will overwrite it shortly.
       }
     }
 
@@ -185,7 +185,7 @@ class ClipController extends ChangeNotifier
       // leaves history (Clear all / deleting the current clip). The content is
       // usually still on the system clipboard, so wiping the dedup guard makes
       // the next passive re-read (app reopen, a fresh isolate, the background
-      // drain) re-upload it — the cleared/deleted clip "bounces back" as a new
+      // drain) re-upload it, the cleared/deleted clip "bounces back" as a new
       // clip. Keeping the guard makes Clear all actually stick. Tradeoff:
       // re-copying that exact content again is deduped until something else is
       // copied first (a rare edge; copying anything else resets the guard).
@@ -195,7 +195,7 @@ class ClipController extends ChangeNotifier
       for (final a in actions) {
         // Auto-place the latest clip on the system clipboard so it can be
         // pasted on this device without opening Clippy. (On Android this pops
-        // the system "Copied" toast — unavoidable.) OfferRestore is not
+        // the system "Copied" toast, unavoidable.) OfferRestore is not
         // auto-applied.
         if (a is! ApplyToClipboard) continue;
         if (clip.kind == 'image') {
@@ -206,7 +206,7 @@ class ClipController extends ChangeNotifier
             _incomingImagePending = true;
             // Register the picture up front so the watcher's re-encoded
             // read-back is recognised as our own echo however much later it
-            // fires (macOS App Nap can delay it well past the time window) —
+            // fires (macOS App Nap can delay it well past the time window),
             // and PERSIST it, because the clipboard outlives the process. The
             // platform hands our own write back re-encoded (a JPEG we applied
             // re-reads as PNG), so lastAppliedHash cannot catch it; without the
@@ -216,7 +216,7 @@ class ClipController extends ChangeNotifier
             await _setHandledImageFp(await ImageClipboard.fingerprint(jpeg));
             await ImageClipboard.write(jpeg);
           } catch (_) {
-            // Corrupt payload — skip.
+            // Corrupt payload, skip.
           }
         } else {
           _handledText = a.text; // suppress the resume/watcher re-read echo
@@ -227,7 +227,7 @@ class ClipController extends ChangeNotifier
     _connectedSub = _store!.connected.listen((up) {
       connected = up;
       notifyListeners();
-      // Clips captured while the link was down wait on disk — push them the
+      // Clips captured while the link was down wait on disk, push them the
       // moment the relay confirms we're back (no-op off Android).
       if (up) unawaited(_drainQueue());
     });
@@ -254,14 +254,14 @@ class ClipController extends ChangeNotifier
       // refusing the service would throw the dialog up on every retry.
       await ForegroundServiceManager.start(askBatteryExemption: true);
       // The service can be killed while the app sits open (OEM battery
-      // manager) — poll its liveness so the header stops claiming "Synced"
+      // manager), poll its liveness so the header stops claiming "Synced"
       // the moment it dies, not at the next resume.
       ForegroundServiceManager.startHealthWatch();
       // Android 10+ blocks clipboard reads while backgrounded (for every app,
       // service or not), so capture outgoing copies the moment Clippy returns
       // to the foreground instead.
       WidgetsBinding.instance.addObserver(this);
-      // Screenshots never touch the Android clipboard — watch MediaStore and
+      // Screenshots never touch the Android clipboard, watch MediaStore and
       // sync new ones directly. Not awaited: the first call pops the
       // photo-access dialog, and startup shouldn't block on the answer.
       unawaited(_startScreenshotSync());
@@ -271,7 +271,7 @@ class ClipController extends ChangeNotifier
       unawaited(_drainQueue());
       // Heartbeat the service isolate: it stays connected at all times, but
       // only writes the clipboard / scans screenshots when our pings stop
-      // (swipe-away) — the heartbeat decides ownership, not connection.
+      // (swipe-away), the heartbeat decides ownership, not connection.
       ForegroundServiceManager.pingAlive();
       _uiPing = Timer.periodic(
         ForegroundServiceManager.uiPingInterval,
@@ -307,12 +307,12 @@ class ClipController extends ChangeNotifier
     if (state == AppLifecycleState.resumed && !isDesktop) {
       ForegroundServiceManager.pingAlive();
       // The service may have died while we were away (OEM battery manager, a
-      // platform restriction, an app update) — revive it, and let the UI say
+      // platform restriction, an app update), revive it, and let the UI say
       // so if it stays down.
       unawaited(ForegroundServiceManager.ensureRunning());
       ForegroundServiceManager.startHealthWatch();
       onClipboardChanged();
-      // Bound the disk unconditionally — a dead service means nothing pruned
+      // Bound the disk unconditionally, a dead service means nothing pruned
       // while captures kept landing, and a CONNECTED-but-failing engine stops
       // the drain too. Not chained to the drain: that made the pruner see our
       // own fresh heartbeat every time and never prune at all. Each isolate's
@@ -322,7 +322,7 @@ class ClipController extends ChangeNotifier
       // Re-check photo access: the user may have just returned from granting
       // full access via the "Fix" banner, which should now clear it.
       unawaited(_startScreenshotSync());
-      // Same for background sync — clears the banner the moment they finish
+      // Same for background sync, clears the banner the moment they finish
       // re-enabling the accessibility service.
       unawaited(_refreshBgSyncRegression());
     }
@@ -336,7 +336,7 @@ class ClipController extends ChangeNotifier
     process: (item) async {
       if (item.isImage) {
         // fromQueue: a queued capture is NOT the clipboard echo of an image we
-        // just applied — it was captured by native code, maybe hours ago. The
+        // just applied, it was captured by native code, maybe hours ago. The
         // time window must not gate it (drain() already deleted its file, so
         // suppressing it destroys the clip); the fingerprint check inside
         // catches a true echo instead.
@@ -349,15 +349,15 @@ class ClipController extends ChangeNotifier
 
   /// Push text AND images the background native code captured while the UI was
   /// away. The failure policy (requeue, back off, quarantine) lives in
-  /// [QueueDrainer] — both isolates must behave identically.
+  /// [QueueDrainer], both isolates must behave identically.
   Future<void> _drainQueue() => _drainer.run();
 
   @override
   void onClipboardChanged() async {
     // Image first: a screenshot or copied image file can also carry a text /
-    // file-path representation, and we must sync the image — not the path.
+    // file-path representation, and we must sync the image, not the path.
     // Gallery-style copies hold only a content:// URI, invisible to
-    // super_clipboard — the native fallback resolves those (Android only).
+    // super_clipboard, the native fallback resolves those (Android only).
     String? clipMime;
     var png = await ImageClipboard.read();
     if (png == null) {
@@ -368,13 +368,13 @@ class ClipController extends ChangeNotifier
       }
     }
     if (png != null) {
-      _handledText = null; // clipboard is an image now — the text guard is stale
+      _handledText = null; // clipboard is an image now, the text guard is stale
       final fp = await ImageClipboard.fingerprint(png);
-      // Our own echo of an image we just applied — matched by the format-
+      // Our own echo of an image we just applied, matched by the format-
       // agnostic fingerprint registered up front on the incoming path (so it
       // holds even after the OS re-encodes the read-back). Compare rather than
       // blindly bless the pending read: a DIFFERENT image copied before the
-      // echo arrives (the window can be minutes on Android — receive while
+      // echo arrives (the window can be minutes on Android, receive while
       // backgrounded, read on resume) must still sync. An undecodable read-back
       // (fp == null) inside the just-wrote window is treated as the echo to
       // avoid a re-upload loop.
@@ -386,7 +386,7 @@ class ClipController extends ChangeNotifier
       await _pushLocalImage(png, mime: clipMime);
       return;
     }
-    // Clipboard no longer holds an image — the image guard is stale.
+    // Clipboard no longer holds an image, the image guard is stale.
     _incomingImagePending = false;
     await _setHandledImageFp(null);
     final data = await Clipboard.getData(Clipboard.kTextPlain);
@@ -430,12 +430,12 @@ class ClipController extends ChangeNotifier
   ///
   /// The TIME window must not gate a queued clip: it was captured whenever the
   /// native code saw it (possibly hours ago), and drain() has already deleted
-  /// its file — suppressing it destroys the clip outright. But it can still BE
+  /// its file, suppressing it destroys the clip outright. But it can still BE
   /// an echo (Clippy writes an incoming image to the clipboard; the a11y
   /// service captures that write and queues it), and a clipboard round-trip
   /// re-encodes the image, so a content HASH won't catch it. Use the same
   /// format-agnostic fingerprint the watcher path uses: identity, not timing.
-  /// Dropping a true echo loses nothing — that image is already in the room.
+  /// Dropping a true echo loses nothing, that image is already in the room.
   /// Set the echo fingerprint and persist it (null clears it).
   Future<void> _setHandledImageFp(String? fp) async {
     _handledImageFp = fp;
@@ -463,7 +463,7 @@ class ClipController extends ChangeNotifier
     final engine = _engine;
     final store = _store;
     if (engine == null || store == null) return;
-    // Always the original bytes — images sync at full quality, no downscaling.
+    // Always the original bytes, images sync at full quality, no downscaling.
     final (bytes, outMime) = ImageClipboard.prepareForRelay(png, mime: mime);
     final actions = await engine.onLocalImage(base64Encode(bytes), mime: outMime);
     for (final a in actions) {
@@ -489,11 +489,11 @@ class ClipController extends ChangeNotifier
   }
 
   /// Tap-to-apply: put an existing history item back on the system clipboard.
-  /// It must NOT re-upload — it is already in the room. So first record it as
+  /// It must NOT re-upload, it is already in the room. So first record it as
   /// last-applied (before writing, so the persisted hash is in place when the
   /// re-capture drains): on Android the write pops the "Copied" toast that our
   /// AccessibilityService treats as a copy, and on desktop the clipboard
-  /// watcher fires — both would otherwise re-broadcast a duplicate. The
+  /// watcher fires, both would otherwise re-broadcast a duplicate. The
   /// engine's echo guard (Rule 2b, persisted + cross-isolate) then drops it.
   /// Images also prime the format-agnostic fingerprint so a re-encoded
   /// read-back (macOS hands a JPEG back as PNG) is still caught on the watcher

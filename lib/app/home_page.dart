@@ -39,7 +39,7 @@ class HomePage extends StatelessWidget {
   });
 
   /// One snackbar for the whole screen. The chip and its label both come from
-  /// the theme's `snackBarTheme`, which uses the M3 inverse pair — so the label
+  /// the theme's `snackBarTheme`, which uses the M3 inverse pair, so the label
   /// flips with the theme instead of being pinned to one palette's light value.
   static void snack(BuildContext context, String text) {
     ScaffoldMessenger.of(context)
@@ -90,7 +90,7 @@ class HomePage extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    // True white in both themes — a QR needs a real white
+                    // True white in both themes, a QR needs a real white
                     // quiet zone to scan reliably.
                     color: Colors.white,
                     border: Border.all(color: c.border),
@@ -315,7 +315,7 @@ class _HomeBodyState extends State<_HomeBody> {
       action: 'Clear all',
     );
     if (ok == true) {
-      // heavyImpact, not mediumImpact — see _deleteSelected.
+      // heavyImpact, not mediumImpact, see _deleteSelected.
       Haptics.thump();
       await _ctl.clearAll();
     }
@@ -421,7 +421,7 @@ class _HomeBodyState extends State<_HomeBody> {
           top: 0,
           left: 0,
           right: 0,
-          // Selection is a MODE — the bar swap announces it. A short fade +
+          // Selection is a MODE, the bar swap announces it. A short fade +
           // drop makes the mode change legible without slowing anyone down;
           // this is the "containers may enter" budget, spent once.
           child: AnimatedSwitcher(
@@ -464,7 +464,7 @@ class _HomeBodyState extends State<_HomeBody> {
           ),
         ),
         // Screenshot auto-sync can't work with "Select photos" (partial) or
-        // denied photo access — a transient snackbar was too easy to miss, so
+        // denied photo access, a transient snackbar was too easy to miss, so
         // pin a banner until it's fixed. The lifecycle-resume refresh in
         // ClipController clears it once full access is granted.
         if (defaultTargetPlatform == TargetPlatform.android &&
@@ -476,7 +476,7 @@ class _HomeBodyState extends State<_HomeBody> {
             bottom: 16,
             child: SafeArea(child: _ShotAccessBanner()),
           ),
-        // Background sync was enabled and has been switched off — almost
+        // Background sync was enabled and has been switched off, almost
         // always because an app update took the accessibility service with
         // it. Shown ABOVE the photo-access banner's slot only when that one
         // is absent, so the two never stack on top of each other.
@@ -513,7 +513,7 @@ class _HomeBodyState extends State<_HomeBody> {
 /// Pinned warning: background sync was ON and is now OFF.
 ///
 /// Android drops an app's accessibility service on every reinstall, and that
-/// includes Clippy's own in-app update — so the feature the user deliberately
+/// includes Clippy's own in-app update, so the feature the user deliberately
 /// enabled goes away silently, and the app keeps looking healthy because it
 /// still syncs whenever it is open. Tapping through re-runs the same help
 /// sheet as first-time setup.
@@ -523,7 +523,7 @@ class _BgSyncOffBanner extends StatelessWidget {
     final c = context.ck;
     return _WarnBanner(
       icon: Icons.sync_problem_rounded,
-      message: 'Background sync turned off — the last update reset it.',
+      message: 'Background sync turned off. The last update reset it.',
       onFix: () => showPermissionHelpSheet(
         context,
         title: 'Enable background sync',
@@ -543,7 +543,7 @@ class _ShotAccessBanner extends StatelessWidget {
     final c = context.ck;
     return _WarnBanner(
       icon: Icons.screenshot_monitor_rounded,
-      message: "Screenshots won't sync — Clippy needs full photo access.",
+      message: "Screenshots won't sync. Clippy needs full photo access.",
       onFix: ShareChannel.openPhotoSettings,
       c: c,
     );
@@ -551,7 +551,7 @@ class _ShotAccessBanner extends StatelessWidget {
 }
 
 /// The one pinned-warning shape. Both warnings on this screen were the same
-/// 40 lines with two words changed, so they are one widget now — the next
+/// 40 lines with two words changed, so they are one widget now, the next
 /// warning inherits the treatment instead of copying it a third time.
 ///
 /// The error tint carries the alarm, so the surface stays the ordinary card:
@@ -694,7 +694,7 @@ class _GlassHeader extends StatelessWidget {
                     Expanded(
                       child: ValueListenableBuilder<bool>(
                         // A green "Synced" dot only ever meant "the UI's own
-                        // connection is up" — it stayed green through a
+                        // connection is up", it stayed green through a
                         // six-hour background-sync outage. Tell the truth.
                         valueListenable:
                             ForegroundServiceManager.backgroundSyncAlive,
@@ -704,11 +704,11 @@ class _GlassHeader extends StatelessWidget {
                               ? 'Reconnecting…'
                               : (bgAlive
                                   ? 'Synced'
-                                  // The app is open — "open Clippy" would be an
+                                  // The app is open, "open Clippy" would be an
                                   // instruction the user cannot follow. Say what
                                   // is true; the health watch is already
                                   // retrying in the background.
-                                  : 'Background sync stopped — retrying');
+                                  : 'Background sync stopped, retrying');
                           return Row(
                             children: [
                               Container(
@@ -967,7 +967,7 @@ class _HistoryList extends StatelessWidget {
             // The single newest clip in the whole list gets the hero
             // treatment: it is the clip the user opened the app to paste.
             // Groups are newest-first, so it is the first row of the first
-            // group — same list slot, same interactions, larger clothes.
+            // group, same list slot, same interactions, larger clothes.
             latest: device == devices.first && item == clips.first,
             selecting: selecting,
             selected: selected.contains(item.hash),
@@ -998,7 +998,7 @@ class _HistoryList extends StatelessWidget {
 /// identity object: the device's tinted circle mark (platform glyph, letter
 /// fallback), its name, a count pill, and the fold chevron moved to the
 /// trailing edge where disclosure lives. The mark's colour is the same one
-/// the group's clip rows repeat on their kind plates — colour says WHERE,
+/// the group's clip rows repeat on their kind plates, colour says WHERE,
 /// glyph says WHAT.
 class _DeviceHeader extends StatelessWidget {
   final String device;
@@ -1056,8 +1056,8 @@ class _DeviceHeader extends StatelessWidget {
               ),
               // The chevron sits WITH the group's name, not at the far edge.
               // It used to be pushed out by a Spacer, which stranded it in the
-              // middle of a wide window and — because the flex did not resolve
-              // the same way for every row — left the arrows at different
+              // middle of a wide window and, because the flex did not resolve
+              // the same way for every row, left the arrows at different
               // horizontal positions from each other. Sitting next to the
               // count it is deterministic, it reads as belonging to the group
               // it folds, and it cannot drift between rows.
@@ -1084,7 +1084,7 @@ class _DeviceHeader extends StatelessWidget {
 ///
 /// The single newest clip in the list renders with `latest: true`: a bigger
 /// preview (three lines instead of two), a larger thumbnail and a 24 radius.
-/// It is the reason the app was opened — the hierarchy should say so.
+/// It is the reason the app was opened, the hierarchy should say so.
 ///
 /// It carried a "LATEST" chip too; the owner had it removed. The list is
 /// already newest-first, so the badge only restated the row's own position.
@@ -1159,8 +1159,8 @@ class _ClipTile extends StatelessWidget {
               children: [
                 // The LATEST chip is gone at the owner's request. The list is
                 // already newest-first, so the badge restated the row's own
-                // position. The newest clip keeps its larger clothes — more
-                // preview lines and a wider radius — which is emphasis the
+                // position. The newest clip keeps its larger clothes, more
+                // preview lines and a wider radius, which is emphasis the
                 // eye reads without a label having to say it.
                 Text(
                   item.isImage ? 'Image' : item.text,
@@ -1186,7 +1186,7 @@ class _ClipTile extends StatelessWidget {
 
     if (selecting) return card;
     // Swipe-left to delete. confirmDismiss triggers the delete and returns
-    // false so the row isn't self-removed — the history rebuild removes it.
+    // false so the row isn't self-removed, the history rebuild removes it.
     return Dismissible(
       key: ValueKey('dismiss-${item.hash}'),
       direction: DismissDirection.endToStart,
@@ -1217,7 +1217,7 @@ class _ClipTile extends StatelessWidget {
   }
 }
 
-/// The row's copy affordance. Tapping flashes a tick for a moment — the copy
+/// The row's copy affordance. Tapping flashes a tick for a moment, the copy
 /// happens instantly and invisibly, so the button itself is the one place
 /// that can confirm it happened. Motion budget: 180 ms, one icon.
 class _CopyButton extends StatefulWidget {
@@ -1285,7 +1285,7 @@ class _Check extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ck;
-    // A FILLED brand chip, so it takes the same fill the filled buttons take —
+    // A FILLED brand chip, so it takes the same fill the filled buttons take,
     // not `c.accent`, which is the lighter INK violet in dark mode and would
     // leave a white tick at roughly 2:1 on it.
     final fill =
@@ -1309,7 +1309,7 @@ class _Check extends StatelessWidget {
 }
 
 /// The designed empty state: mascot, a real title, one honest sentence, and
-/// the one action that actually helps — pairing another device (an empty list
+/// the one action that actually helps, pairing another device (an empty list
 /// usually means this is the only device in the group). The old copy said
 /// "add one below" and there was nothing below; now the promised control
 /// exists and the copy tells no lies.
@@ -1331,7 +1331,7 @@ class _EmptyState extends StatelessWidget {
               Opacity(
                 opacity: 0.5,
                 // Alive like the header mark (gentle bob + blink): an empty
-                // room shouldn't feel dead — Clippy is waiting, not broken.
+                // room shouldn't feel dead. Clippy is waiting, not broken.
                 child: AnimatedClippyMark(
                   height: 64,
                   clipHex: c.hex(c.muted2),
@@ -1376,7 +1376,7 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-/// Turn 6a: text clip preview — an expanding bottom sheet with the full
+/// Turn 6a: text clip preview, an expanding bottom sheet with the full
 /// content and Copy (primary) / Delete actions.
 class _TextPreview extends StatelessWidget {
   final HistoryItem item;
@@ -1483,7 +1483,7 @@ class _TextPreview extends StatelessWidget {
   }
 }
 
-/// Turn 6b: image clip preview — a full-screen viewer with Copy image / Delete.
+/// Turn 6b: image clip preview, a full-screen viewer with Copy image / Delete.
 class _ImagePreview extends StatelessWidget {
   final HistoryItem item;
   final VoidCallback onCopy;
@@ -1650,7 +1650,7 @@ class _SquareIconBtn extends StatelessWidget {
 
 // --- helpers ---
 
-/// What a clip IS, for the row's mark and meta line. Four kinds only — the
+/// What a clip IS, for the row's mark and meta line. Four kinds only, the
 /// distinctions a user acts on (open a link, run a command, view an image,
 /// paste text). Finer taxonomy would be decoration.
 enum _ClipKind { text, link, code, image }
@@ -1700,7 +1700,7 @@ String _rel(DateTime t) {
 String _meta(HistoryItem item, _ClipKind kind) {
   // No device here: the list groups by device, so the section header carries
   // it. (The full-screen / bottom-sheet previews still show the device.)
-  // Kind first, size when it means something, age last — the same order the
+  // Kind first, size when it means something, age last, the same order the
   // eye asks the questions in.
   final rel = _rel(item.timestamp);
   if (item.isImage) {
@@ -1709,7 +1709,7 @@ String _meta(HistoryItem item, _ClipKind kind) {
     return '$fmt · $kb KB · $rel';
   }
   final label = _kindLabel(kind);
-  // Length only when the preview visibly truncates — "12 chars" is noise.
+  // Length only when the preview visibly truncates, "12 chars" is noise.
   if (item.text.length >= 100) {
     return '$label · ${item.text.length} chars · $rel';
   }

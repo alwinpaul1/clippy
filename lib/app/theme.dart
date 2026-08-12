@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-/// Clippy's design system — the violet Material 3 palette shared with
+/// Clippy's design system, the violet Material 3 palette shared with
 /// Walletify. Both apps are the same owner's, so they read as siblings: same
 /// scheme, same face, same card vocabulary. What Clippy keeps of its own is
 /// the paperclip mascot and a lighter hand with motion, because Clippy shows
@@ -12,7 +12,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 /// The two [ColorScheme]s below are copied verbatim from Walletify's
 /// `app/lib/core/theme.dart`. They were contrast-audited there on 2026-08-12;
 /// copying the audited values keeps that work instead of re-deriving it. Dark
-/// is HAND-BUILT, not seeded — a `fromSeed` dark scheme desaturates every
+/// is HAND-BUILT, not seeded, a `fromSeed` dark scheme desaturates every
 /// accent into mud. Do not replace it with a seed.
 
 /// The bundled family (see `assets/fonts/` and `pubspec.yaml`). Bundled, not
@@ -23,7 +23,7 @@ const appFontFamily = 'PlusJakartaSans';
 
 /// The header wordmark's serif, kept from the previous design at the owner's
 /// request. It is Newsreader, instanced to wght=500/opsz=36 and **subset to
-/// the six letters of "Clippy"** — 2 KB instead of 451 KB.
+/// the six letters of "Clippy"**, 2 KB instead of 451 KB.
 ///
 /// **It can draw exactly one word.** Every other character is tofu. Use it
 /// through [Ct.wordmark] and nowhere else; if the app name ever changes, the
@@ -33,17 +33,17 @@ const wordmarkFontFamily = 'ClippyWordmark';
 const brandPurple = Color(0xFF630ED4);
 const brandPurpleBright = Color(0xFF7C3AED);
 
-/// The dark theme's FILLED-BUTTON background — deliberately NOT dark `primary`
+/// The dark theme's FILLED-BUTTON background, deliberately NOT dark `primary`
 /// (#8B5CF6). `primary` also renders as INK on dark surfaces, where it must
 /// stay light; a solid fill under white text needs the opposite. One value
 /// cannot serve both, so the fill gets its own token.
 const primaryFillDark = Color(0xFF8554F6);
 
-/// Brand violet as TEXT on a dark surface. `primary` measures 4.35:1 there —
+/// Brand violet as TEXT on a dark surface. `primary` measures 4.35:1 there,
 /// fine for an icon or a border (3:1), short of the 4.5:1 body text needs.
 const primaryTextDark = Color(0xFFA98BFF);
 
-/// The signature gradient. It marks the app's own moments — the header, the
+/// The signature gradient. It marks the app's own moments, the header, the
 /// pair button, the selection bar. It never becomes a general surface.
 const brandGradient = LinearGradient(
   begin: Alignment.topLeft,
@@ -55,7 +55,7 @@ const brandGradient = LinearGradient(
 /// neutral dark frame, and a light scanner chrome washes the viewfinder out.
 const scannerBg = Color(0xFF15131A);
 
-/// The sync status light — GREEN, deliberately not the brand violet.
+/// The sync status light. GREEN, deliberately not the brand violet.
 ///
 /// This dot reports a live system state. A state light painted in the brand
 /// colour stops reading as a signal and starts reading as decoration, and the
@@ -145,19 +145,19 @@ const _darkScheme = ColorScheme(
 /// role, so the two apps cannot drift apart.
 @immutable
 class ClippyColors extends ThemeExtension<ClippyColors> {
-  /// Page canvas — `surface`.
+  /// Page canvas, `surface`.
   final Color bg;
 
-  /// Card fill — `surfaceContainerLowest`.
+  /// Card fill, `surfaceContainerLowest`.
   final Color surface;
 
-  /// Primary text — `onSurface`.
+  /// Primary text, `onSurface`.
   final Color ink;
 
-  /// Hairline divider — `outlineVariant`.
+  /// Hairline divider, `outlineVariant`.
   final Color border;
 
-  /// Control outline — `outline`.
+  /// Control outline, `outline`.
   final Color borderStrong;
 
   /// Weakest meta text. `outline`, which the audit put past 4.5:1 on every
@@ -165,20 +165,20 @@ class ClippyColors extends ThemeExtension<ClippyColors> {
   /// real sentences and not only for decoration.
   final Color muted;
 
-  /// Secondary text — `onSurfaceVariant`.
+  /// Secondary text, `onSurfaceVariant`.
   final Color muted2;
 
   /// The brand accent as INK. Light uses `primary`; dark uses
   /// [primaryTextDark], because dark `primary` is 4.35:1 as text.
   final Color accent;
 
-  /// Destructive / failing — `error`.
+  /// Destructive / failing, `error`.
   final Color rust;
 
   /// The healthy sync light. See [syncOkLight].
   final Color syncOk;
 
-  /// Snackbar chip and its label — `inverseSurface` / `onInverseSurface`.
+  /// Snackbar chip and its label, `inverseSurface` / `onInverseSurface`.
   /// The old theme hardcoded a cream label because its chip was dark in BOTH
   /// themes. M3's inverse pair flips with the theme, so the label has to flip
   /// with it; that is why [onSnack] exists at all.
@@ -191,7 +191,7 @@ class ClippyColors extends ThemeExtension<ClippyColors> {
 
   final Color dialogBg;
 
-  /// Selected-row tint — the brand at low alpha, per theme.
+  /// Selected-row tint, the brand at low alpha, per theme.
   final Color selBg;
 
   final bool isDark;
@@ -262,12 +262,12 @@ extension ClippyColorsX on BuildContext {
 }
 
 /// Text helpers over the bundled family. Clippy runs the same Jakarta ramp as
-/// Walletify — 30/38 w700 · 24/32 w700 · 20/28 w600 · 18/24 w600 · 16/24 ·
-/// 14/20 · 12/16 · 11/16 — and these helpers exist so a screen names the ROLE
+/// Walletify, 30/38 w700 · 24/32 w700 · 20/28 w600 · 18/24 w600 · 16/24 ·
+/// 14/20 · 12/16 · 11/16, and these helpers exist so a screen names the ROLE
 /// it wants instead of restating a font family at 60 call sites.
 ///
 /// `color` is nullable on purpose. Passing null inherits from the enclosing
-/// [DefaultTextStyle], which the theme paints with `onSurface` — so a helper
+/// [DefaultTextStyle], which the theme paints with `onSurface`, so a helper
 /// with no colour is correct in BOTH themes. The old helpers defaulted to a
 /// static light-mode constant, which was invisible on the dark canvas.
 abstract class Ct {
@@ -297,7 +297,7 @@ abstract class Ct {
       );
 
   /// Keys, hashes and other fixed-width strings. Clippy bundles ONE family, so
-  /// this is Jakarta with tabular figures rather than a second mono face —
+  /// this is Jakarta with tabular figures rather than a second mono face,
   /// `hb-shape --features=tnum` measures every Jakarta digit at exactly 0.600
   /// em, so figures line up in a column even though the letters do not. A real
   /// mono would align the letters too; it is not worth a second font file for
@@ -318,7 +318,7 @@ abstract class Ct {
       );
 
   /// The header wordmark, and ONLY the header wordmark. The face behind it can
-  /// draw the letters of "Clippy" and nothing else — see [wordmarkFontFamily].
+  /// draw the letters of "Clippy" and nothing else, see [wordmarkFontFamily].
   static TextStyle wordmark(double size, {Color? color}) => TextStyle(
         fontFamily: wordmarkFontFamily,
         fontSize: size,
@@ -338,8 +338,8 @@ abstract class Ct {
       );
 }
 
-/// Icon discipline: ONE language — Flutter's built-in ROUNDED Material set
-/// (`Icons.*_rounded`) — at three sizes, and nothing else.
+/// Icon discipline: ONE language. Flutter's built-in ROUNDED Material set
+/// (`Icons.*_rounded`), at three sizes, and nothing else.
 ///
 /// Deliberately NOT `material_symbols_icons`, although Walletify ships it.
 /// Walletify pays ~16 MB of APK for the Symbols variable fonts because its
@@ -347,7 +347,7 @@ abstract class Ct {
 /// price bought a real capability. Clippy draws ~25 static chrome glyphs and
 /// has no dynamic icon names, so the same price would buy nothing here. The
 /// built-in set is tree-shaken to the glyphs actually used (~a few KB), and
-/// Walletify's own CHROME icons are `Icons.*_rounded` too — so the two apps'
+/// Walletify's own CHROME icons are `Icons.*_rounded` too, so the two apps'
 /// chrome matches anyway. If Clippy ever grows server-driven icons, revisit.
 abstract class ClipIcons {
   /// Header and navigation actions.
@@ -360,7 +360,7 @@ abstract class ClipIcons {
   static const double inline = 16;
 }
 
-/// A tinted plate carrying one glyph (or a letter monogram) — Clippy's version
+/// A tinted plate carrying one glyph (or a letter monogram). Clippy's version
 /// of Walletify's `CategoryMark`, and the leading mark of every designed row
 /// in the app: clip rows, settings rows, banners, sheet headers.
 ///
@@ -370,7 +370,7 @@ abstract class ClipIcons {
 /// family; a mark that mixes its own colours is the drift this exists to stop.
 ///
 /// The fallback is a LETTER, never a broken square (Walletify's rule): when no
-/// glyph fits — an unrecognised device name — the monogram still gives the
+/// glyph fits, an unrecognised device name, the monogram still gives the
 /// thing a face.
 class GlyphPlate extends StatelessWidget {
   final IconData? icon;
@@ -437,7 +437,7 @@ int _stableHash(String s) {
 
 /// A device's stable identity colour: one of three audited scheme roles,
 /// picked by name. The header mark introduces the colour; the clip rows under
-/// it repeat the colour on their kind plates — colour says WHERE a clip came
+/// it repeat the colour on their kind plates, colour says WHERE a clip came
 /// from, the glyph says WHAT it is.
 Color deviceTint(ColorScheme scheme, String device) {
   final bases = [scheme.primary, scheme.tertiary, scheme.secondary];
@@ -445,7 +445,7 @@ Color deviceTint(ColorScheme scheme, String device) {
 }
 
 /// Best-effort platform glyph for a device name (Build.MODEL on Android,
-/// hostname on desktop). Null means "no confident guess" — the caller shows a
+/// hostname on desktop). Null means "no confident guess", the caller shows a
 /// letter monogram instead, never a wrong platform.
 IconData? deviceGlyph(String device) {
   final d = device.toLowerCase();
@@ -490,7 +490,7 @@ class SheetGrabber extends StatelessWidget {
 
 /// The card and surface vocabulary, shared with Walletify:
 /// radius 24, `surfaceContainerLowest`, and **tone plus exactly ONE edge per
-/// theme** — a violet-tinted lift shadow in light, a hairline in dark, where a
+/// theme**, a violet-tinted lift shadow in light, a hairline in dark, where a
 /// shadow on a near-black canvas reads as a smudge. Never both, never neither.
 class ClipCard extends StatelessWidget {
   final Widget child;

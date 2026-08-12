@@ -23,7 +23,7 @@ class DesktopTray with TrayListener, WindowListener {
   static bool get isDesktop =>
       !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
 
-  // Pre-rendered bounce samples (amount 0..1) × open/blink — see
+  // Pre-rendered bounce samples (amount 0..1) × open/blink, see
   // assets/icon/tray_anim/. Matches website keyframes in server/web/index.html.
   static const _bobFrames = 9;
   static const _bobMs = 5500;
@@ -53,7 +53,7 @@ class DesktopTray with TrayListener, WindowListener {
 
     trayManager.addListener(this);
     await _setIcon(_framePath(0, closed: false));
-    await trayManager.setToolTip('Clippy — clipboard sync');
+    await trayManager.setToolTip('Clippy clipboard sync');
     await trayManager.setContextMenu(
       Menu(items: [
         MenuItem(key: 'show', label: 'Open Clippy'),
@@ -105,7 +105,7 @@ class DesktopTray with TrayListener, WindowListener {
         final blinkT = (now % _blinkMs) / _blinkMs;
         final amount = _bobAmount(bobT);
         final frame = (amount * (_bobFrames - 1)).round();
-        // Website: scaleY(.1) at 95% of the 4.2s blink cycle (~92–98% closed).
+        // Website: scaleY(.1) at 95% of the 4.2s blink cycle (~92, 98% closed).
         final closed = blinkT >= 0.92 && blinkT <= 0.98;
         await _setIcon(_framePath(frame, closed: closed));
       } catch (_) {
@@ -144,7 +144,7 @@ class DesktopTray with TrayListener, WindowListener {
       case 'quit':
         // The one real quit. Hard-exit so it bypasses macOS
         // applicationShouldTerminate (which now cancels Cmd+Q / Dock-Quit to
-        // keep syncing in the menu bar). Nothing to flush — sync state is
+        // keep syncing in the menu bar). Nothing to flush, sync state is
         // server-authoritative and prefs are written on change.
         _stopAnim();
         await trayManager.destroy();

@@ -8,7 +8,7 @@ import 'package:image/image.dart' as img;
 import 'package:super_clipboard/super_clipboard.dart';
 
 /// System-clipboard image read/write via super_clipboard. Incoming images are
-/// put on the clipboard in their own format (bytes verbatim — instant and
+/// put on the clipboard in their own format (bytes verbatim, instant and
 /// lossless); only meaningful where super_clipboard is supported (macOS,
 /// Android, …); returns null / no-ops elsewhere.
 abstract class ImageClipboard {
@@ -54,11 +54,11 @@ abstract class ImageClipboard {
     return completer.future;
   }
 
-  /// Put an image on the clipboard in its own format, bytes verbatim — instant
+  /// Put an image on the clipboard in its own format, bytes verbatim, instant
   /// and lossless at any size. On macOS/Windows a PNG rendition is attached
   /// lazily (super_clipboard provides it on demand), so the rare paste target
   /// that only accepts PNG still works without paying the encode up front.
-  /// Android needs no PNG rendition — its clipboard is a format-agnostic content
+  /// Android needs no PNG rendition, its clipboard is a format-agnostic content
   /// URI, so a JPEG/webp/… pastes into any app as-is. Unrecognized bytes fall
   /// back to a one-off PNG transcode.
   static Future<void> write(Uint8List bytes) async {
@@ -75,7 +75,7 @@ abstract class ImageClipboard {
         );
         if (ok == true) return;
       } catch (_) {
-        // No handler (background isolate) — fall through to super_clipboard.
+        // No handler (background isolate), fall through to super_clipboard.
       }
     }
     final cb = _cb;
@@ -129,7 +129,7 @@ abstract class ImageClipboard {
   }
 
   /// Transcode arbitrary image bytes to PNG. Used only for the lazy desktop PNG
-  /// rendition (computed on demand) and the unrecognized-format fallback — never
+  /// rendition (computed on demand) and the unrecognized-format fallback, never
   /// on the fast path. Native (Skia) codec, with a pure-Dart fallback for
   /// isolates where the native codec is unavailable. Null if undecodable.
   @visibleForTesting
@@ -173,7 +173,7 @@ abstract class ImageClipboard {
   /// bytes: a JPEG and the PNG it gets re-encoded to on a clipboard round-trip
   /// decode to the same pixels, so they share one fingerprint. The sync layer
   /// uses this to recognise an image it just received coming back off the
-  /// clipboard in a different format (the receive→re-read echo) — a raw-byte or
+  /// clipboard in a different format (the receive→re-read echo), a raw-byte or
   /// content-hash compare can't, because JPEG≠PNG bytes. Null if undecodable.
   static Future<String?> fingerprint(Uint8List bytes) async {
     ui.Image? image;
@@ -182,7 +182,7 @@ abstract class ImageClipboard {
       final descriptor = await ui.ImageDescriptor.encoded(buffer);
       final w = descriptor.width;
       final h = descriptor.height;
-      // Decode to a small fixed raster — cheap, and identical for either format
+      // Decode to a small fixed raster, cheap, and identical for either format
       // of the same picture.
       final codec = await descriptor.instantiateCodec(
         targetWidth: 64,
@@ -200,7 +200,7 @@ abstract class ImageClipboard {
     }
   }
 
-  /// FNV-1a 32-bit — a fast non-crypto hash, enough for a stable dedup key.
+  /// FNV-1a 32-bit, a fast non-crypto hash, enough for a stable dedup key.
   static int _fnv1a(Uint8List data) {
     var hash = 0x811c9dc5;
     for (final b in data) {
@@ -210,7 +210,7 @@ abstract class ImageClipboard {
     return hash;
   }
 
-  /// Prepare an image for relay transport: the original bytes, untouched —
+  /// Prepare an image for relay transport: the original bytes, untouched,
   /// no downscaling, no re-encoding, ever. Returns the bytes plus their mime
   /// type; [mime] is the caller's hint, else it's sniffed from the bytes.
   /// The relay's maxCiphertextChars is sized to fit real screenshots raw.

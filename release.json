@@ -1,11 +1,11 @@
 {
-  "version": "1.4.8",
+  "version": "1.4.9",
   "notes": {
     "features": [],
-    "improvements": [],
-    "fixes": [
-      "The fold arrow on a device group now sits next to the device name instead of drifting into the middle of the window.",
-      "Removed the LATEST tag — the list is already newest-first."
-    ]
+    "improvements": [
+      "A new app icon on every platform: the violet Clippy paperclip.",
+      "Shorter, plainer wording across settings, banners and status lines."
+    ],
+    "fixes": []
   }
 }

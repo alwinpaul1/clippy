@@ -10,12 +10,12 @@ import 'theme.dart';
 /// First-run pairing. One device creates a group key; other devices join by
 /// scanning its QR or pasting the key.
 ///
-/// This screen deliberately keeps its OLD layout — the owner reviewed the
+/// This screen deliberately keeps its OLD layout, the owner reviewed the
 /// redesigned version and asked for the previous structure back, with only
 /// the colours updated ("revert this to old but keep the same colors like
 /// new"). So: the loose ink mascot with no plate behind it, the old sizes and
 /// spacing, the old bordered key field, and PLAIN outlined/filled action
-/// buttons — the violet system paints them, but the bones are the originals.
+/// buttons, the violet system paints them, but the bones are the originals.
 /// The brand gradient does NOT appear here anymore; see docs/DESIGN.md.
 class PairingPage extends StatefulWidget {
   final Future<void> Function(PairingKey) onPaired;
@@ -50,7 +50,7 @@ class _PairingPageState extends State<PairingPage> {
   }
 
   /// One snackbar helper. The chip and its label both come from the theme's
-  /// `snackBarTheme`, which uses the M3 inverse pair — so the label flips with
+  /// `snackBarTheme`, which uses the M3 inverse pair, so the label flips with
   /// the theme instead of being pinned to one palette's light colour.
   void _toast(String message) {
     ScaffoldMessenger.of(context)
@@ -94,7 +94,7 @@ class _PairingPageState extends State<PairingPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Center(
-                      // Alive here too — same bob + blink as the home header,
+                      // Alive here too, same bob + blink as the home header,
                       // and the same INK as the home header: the mascot is one
                       // face with one colour everywhere.
                       child: AnimatedClippyMark(
@@ -113,8 +113,8 @@ class _PairingPageState extends State<PairingPage> {
                     const SizedBox(height: 10),
                     Text(
                       'Generate a key on your first device, then paste or scan '
-                      'it on the others. End-to-end encrypted — the server never '
-                      'sees it.',
+                      'it on the others. It is end-to-end encrypted, so the '
+                      'server never sees it.',
                       textAlign: TextAlign.center,
                       style: Ct.body(14.5, color: c.muted2, height: 1.5),
                     ),
@@ -169,7 +169,7 @@ class _PairingPageState extends State<PairingPage> {
                           focusedBorder: InputBorder.none,
                           hintText: 'paste key…',
                           // The violet palette's `muted` is `outline`, audited
-                          // past 4.5:1 on every surface tier in both themes —
+                          // past 4.5:1 on every surface tier in both themes,
                           // the old per-theme hint branch is no longer needed.
                           hintStyle: Ct.mono(12.5, color: c.muted),
                         ),
@@ -181,7 +181,7 @@ class _PairingPageState extends State<PairingPage> {
                         child: Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            // Stays true white in both themes — a QR needs a
+                            // Stays true white in both themes, a QR needs a
                             // real white quiet zone to scan reliably.
                             color: Colors.white,
                             border: Border.all(color: c.border),
@@ -276,7 +276,7 @@ class _OutlinedAction extends StatelessWidget {
   }
 }
 
-/// The old PLAIN filled button, back at the owner's request — not the
+/// The old PLAIN filled button, back at the owner's request, not the
 /// gradient. New paint only: the fill is the theme's filled-button pair
 /// (`primaryFillDark` in dark, `primary` in light) so white ink clears 4.5:1
 /// in both themes.

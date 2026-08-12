@@ -46,7 +46,7 @@ class DesktopUpdater implements PlatformUpdater {
     final installedApp = exe.parent.parent.parent.path; // -> Clippy.app
 
     // Detached helper: wait for THIS process to quit, swap the bundle, relaunch.
-    // Must interpolate Dart's [pid] — a bare `$pid` in the script is empty, so
+    // Must interpolate Dart's [pid], a bare `$pid` in the script is empty, so
     // the wait loop never runs and `rm -rf` races the still-running app (swap
     // fails; user stays on the old build).
     final selfPid = pid;
@@ -77,7 +77,7 @@ open "$installedApp"
     await downloadTo(url, setup, expectedSha256: sha256, onProgress: onProgress);
     // Inno Setup: silent install, close the running app. The installer's [Run]
     // entry relaunches Clippy when it finishes (its skipifsilent flag was
-    // removed so silent updates reopen the app — Restart Manager can't, as a
+    // removed so silent updates reopen the app. Restart Manager can't, as a
     // Flutter app doesn't register with it). /NORESTART: never reboot Windows.
     await Process.start(
       setup.path,

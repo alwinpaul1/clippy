@@ -15,7 +15,7 @@ Every colour is READ OUT OF `lib/app/theme.dart` (the two `ColorScheme`
 literals, the named top-level consts, and the `ClippyColors.of` factory
 body), plus the two screens that hardcode fixed-dark chrome
 (`lib/app/qr_scanner_page.dart`, and the `_ImagePreview` block of
-`lib/app/home_page.dart`) — never copied into this file. A private copy is
+`lib/app/home_page.dart`), never copied into this file. A private copy is
 exactly how a gate like this goes stale the first time someone tunes a
 colour and forgets the script. If a role is renamed or a file's shape
 changes, this script fails loudly (`sys.exit`) rather than silently scoring
@@ -30,7 +30,7 @@ THRESHOLD: `kind="text"` -> WCAG 1.4.3, 4.5:1. `kind="mark"` -> WCAG 1.4.11
 used, and the pair tables below say why.
 
 EXIT-CODE POLICY: any pair below its threshold is a FAIL and exits 1. There
-is no WARN/safety-net tier here (unlike Walletify's script) — everything
+is no WARN/safety-net tier here (unlike Walletify's script), everything
 this script checks has a live call site in the app today.
 """
 from __future__ import annotations
@@ -45,32 +45,32 @@ THEME = LIB / "app" / "theme.dart"
 QR_SCANNER = LIB / "app" / "qr_scanner_page.dart"
 HOME_PAGE = LIB / "app" / "home_page.dart"
 
-TEXT_MIN = 4.5   # WCAG 1.4.3 — body / label text
-MARK_MIN = 3.0   # WCAG 1.4.11 — icons, borders, dots, chart-style marks
+TEXT_MIN = 4.5   # WCAG 1.4.3, body / label text
+MARK_MIN = 3.0   # WCAG 1.4.11, icons, borders, dots, chart-style marks
 
 #: Role pairs that are BELOW threshold and have NO call site in the app today.
 #: They are reported loudly on every run but do not fail the gate, because
 #: failing on a pair nothing renders would leave the gate permanently red and
-#: therefore ignored — and an ignored gate catches nothing.
+#: therefore ignored, and an ignored gate catches nothing.
 #:
 #: The two colour schemes are copied VERBATIM from Walletify's contrast-audited
 #: theme so the sibling apps cannot drift (see docs/DESIGN.md). Nudging a value
 #: here to green a pair nobody draws would buy a passing number with real drift.
 #:
 #: THE CONDITION THAT MAKES EACH ONE FATAL IS WRITTEN BELOW. If you are about to
-#: render one of these, you own fixing it FIRST — delete its entry, watch the
+#: render one of these, you own fixing it FIRST, delete its entry, watch the
 #: gate go red, and fix it properly.
 LATENT_PAIRS = {
     ("onPrimary", "primary"): (
-        "LATENT (dark) — white on raw dark `primary` is 4.23:1. Nothing renders "
+        "LATENT (dark), white on raw dark `primary` is 4.23:1. Nothing renders "
         "it: every filled surface routes through `primaryFillDark` (4.57:1) via "
         "the FilledButton theme, and `primary` appears in dark only as a BORDER "
         "(ClipCard highlighted), where 3:1 applies and it passes. Becomes fatal "
         "the moment white text or a white icon is drawn on `scheme.primary` in "
-        "dark — use `primaryFillDark` for that instead of minting a third violet."
+        "dark, use `primaryFillDark` for that instead of minting a third violet."
     ),
     ("onTertiaryContainer", "tertiaryContainer"): (
-        "LATENT (dark) — 4.43:1. Neither role has a call site; only the bare "
+        "LATENT (dark), 4.43:1. Neither role has a call site; only the bare "
         "`scheme.tertiary` is used. Becomes fatal on first use of the container "
         "role; the fix is to darken tertiaryContainer #066ABC to about #0668B9."
     ),
@@ -86,7 +86,7 @@ SURFACE_TIERS = [
 ]
 
 #: Named Flutter constants that can appear as a colour expression instead of
-#: a literal `Color(0x........)`. Kept deliberately tiny and explicit —
+#: a literal `Color(0x........)`. Kept deliberately tiny and explicit,
 #: anything else unresolved fails loudly rather than guessing.
 _NAMED_FLUTTER_COLORS = {
     "Colors.white": "FFFFFFFF",
@@ -126,13 +126,13 @@ def _resolve_color_expr(expr: str, *, context: str, named: dict[str, str] | None
     if named and expr in named:
         return named[expr]
 
-    sys.exit(f"check_contrast: unrecognised colour expression {expr!r} in {context} — the shape changed")
+    sys.exit(f"check_contrast: unrecognised colour expression {expr!r} in {context}, the shape changed")
 
 
 def read_named_exprs(path: pathlib.Path) -> dict[str, tuple[str, int]]:
     """`const NAME = <expr>;` on one line -> {NAME: (raw_expr, line_number)}.
 
-    Deliberately does NOT try to parse a multi-line declaration — a reformat
+    Deliberately does NOT try to parse a multi-line declaration, a reformat
     that breaks that shape fails the "not found" check downstream rather
     than silently parsing something else. Matches Walletify's script's own
     rule, generalised to allow the RHS to be any expression (not only a
@@ -160,7 +160,7 @@ def read_scheme(name: str, *, named: dict[str, str]) -> dict[str, str]:
             continue
         pal[role] = _resolve_color_expr(expr, context=f"{name}.{role}", named=named)
     if not pal:
-        sys.exit(f"check_contrast: parsed 0 roles from `{name}` — the shape changed")
+        sys.exit(f"check_contrast: parsed 0 roles from `{name}`, the shape changed")
     return pal
 
 
@@ -169,7 +169,7 @@ def read_clippycolors_of() -> dict[str, str]:
     field: expr assignments out of theme.dart, as {field: raw_expr}.
 
     Only single-line `field: expr,` assignments are captured (matches
-    every field this script needs — `selBg`'s multi-line ternary is the one
+    every field this script needs, `selBg`'s multi-line ternary is the one
     field in the factory that does NOT match, and nothing here needs it).
     """
     src = _strip_comments(THEME.read_text(encoding="utf-8"))
@@ -178,11 +178,11 @@ def read_clippycolors_of() -> dict[str, str]:
         src, re.S | re.M,
     )
     if not m:
-        sys.exit(f"check_contrast: no `factory ClippyColors.of` body found in {THEME} — the shape changed")
+        sys.exit(f"check_contrast: no `factory ClippyColors.of` body found in {THEME}, the shape changed")
     body = m.group(1)
     fields = dict(re.findall(r"(\w+):\s*([^\n]+?),\s*$", body, re.M))
     if not fields:
-        sys.exit("check_contrast: parsed 0 fields from `ClippyColors.of` — the shape changed")
+        sys.exit("check_contrast: parsed 0 fields from `ClippyColors.of`, the shape changed")
     return fields
 
 
@@ -198,7 +198,7 @@ def _resolve_derived_expr(
     if m:
         if m.group(1) not in scheme:
             sys.exit(f"check_contrast: ClippyColors.of.{context} refers to scheme.{m.group(1)}, "
-                      f"not a field of the ColorScheme — the shape changed")
+                      f"not a field of the ColorScheme, the shape changed")
         return scheme[m.group(1)]
     m = re.fullmatch(r"dark\s*\?\s*(.+?)\s*:\s*(.+)", expr)
     if m:
@@ -269,12 +269,12 @@ class Pair:
 
 
 def scheme_role_pairs(scheme: dict[str, str]) -> list[Pair]:
-    """Every `onX` role scored against its matching `X` base role — found by
+    """Every `onX` role scored against its matching `X` base role, found by
     auto-detecting the M3 on/base naming convention in whatever fields
     theme.dart's ColorScheme actually has, rather than a hand-typed list
     that silently stops matching new roles. `onSurfaceVariant` deliberately
     does NOT match here (there is no `surfaceVariant` field on this scheme)
-    — it is swept against the six surface tiers below instead, same as
+, it is swept against the six surface tiers below instead, same as
     Walletify's own audit treated it.
     """
     pairs = []
@@ -285,7 +285,7 @@ def scheme_role_pairs(scheme: dict[str, str]) -> list[Pair]:
         if base not in scheme:
             continue
         kind, why = "text", (
-            "WCAG 1.4.3 — ColorScheme on/base role pair (button labels, container ink)"
+            "WCAG 1.4.3. ColorScheme on/base role pair (button labels, container ink)"
         )
         if (role, base) in LATENT_PAIRS:
             kind, why = "latent", LATENT_PAIRS[(role, base)]
@@ -296,13 +296,13 @@ def scheme_role_pairs(scheme: dict[str, str]) -> list[Pair]:
 def surface_sweep_pairs(scheme: dict[str, str]) -> list[Pair]:
     """`outline` and `onSurfaceVariant` against all six surface tiers.
     Both render as real body/meta text in Clippy (`ClippyColors.muted` /
-    `.muted2` — see theme.dart's own doc comment on `muted`), so both get
+    `.muted2`, see theme.dart's own doc comment on `muted`), so both get
     the 4.5:1 text threshold, not the 3:1 a bare "outline" name suggests.
     """
     pairs = []
     for role, why in (
-        ("outline", "WCAG 1.4.3 — used as body text via ClippyColors.muted (row meta line, 'N selected' etc.)"),
-        ("onSurfaceVariant", "WCAG 1.4.3 — used as body text via ClippyColors.muted2 (subtitles, dialog copy)"),
+        ("outline", "WCAG 1.4.3, used as body text via ClippyColors.muted (row meta line, 'N selected' etc.)"),
+        ("onSurfaceVariant", "WCAG 1.4.3, used as body text via ClippyColors.muted2 (subtitles, dialog copy)"),
     ):
         for surf in SURFACE_TIERS:
             pairs.append(Pair(f"{role} on {surf}", scheme[role], scheme[surf], "text", why))
@@ -312,7 +312,7 @@ def surface_sweep_pairs(scheme: dict[str, str]) -> list[Pair]:
 def clippy_token_pairs(
     scheme: dict[str, str], *, named: dict[str, str], derived_raw: dict[str, str], is_dark: bool,
 ) -> list[Pair]:
-    """Clippy's own tokens — never seen by Walletify's script."""
+    """Clippy's own tokens, never seen by Walletify's script."""
     pairs: list[Pair] = []
 
     sync_hex = named["syncOkDark"] if is_dark else named["syncOkLight"]
@@ -320,7 +320,7 @@ def clippy_token_pairs(
     for surf in SURFACE_TIERS:
         pairs.append(Pair(
             f"{sync_name} on {surf}", sync_hex, scheme[surf], "mark",
-            "WCAG 1.4.11 — non-text status dot (theme.dart: 'GREEN, deliberately not the brand violet')",
+            "WCAG 1.4.11, non-text status dot (theme.dart: 'GREEN, deliberately not the brand violet')",
         ))
 
     def derived(field: str) -> str:
@@ -334,17 +334,17 @@ def clippy_token_pairs(
     for surf in ("surface", "surfaceContainerLowest"):
         pairs.append(Pair(
             f"ClippyColors.accent on {surf}", accent_hex, scheme[surf], "text",
-            "WCAG 1.4.3 — renders as text (LATEST chip label, banner 'Fix' link)",
+            "WCAG 1.4.3, renders as text (LATEST chip label, banner 'Fix' link)",
         ))
 
     # ink (=onSurface) is already scored against `surface` by
     # scheme_role_pairs, but its most common real backdrop is
-    # surfaceContainerLowest (ClipCard fill, dialogBg) — every clip row's
+    # surfaceContainerLowest (ClipCard fill, dialogBg), every clip row's
     # body text renders there, not on the bare page surface.
     ink_hex = derived("ink")
     pairs.append(Pair(
         "ClippyColors.ink on surfaceContainerLowest", ink_hex, scheme["surfaceContainerLowest"], "text",
-        "WCAG 1.4.3 — clip row / dialog body text sits on the card fill, not the bare page surface",
+        "WCAG 1.4.3, clip row / dialog body text sits on the card fill, not the bare page surface",
     ))
 
     # THE TWO BORDER TOKENS ARE NOT INTERCHANGEABLE, AND ONLY ONE OWES 3:1.
@@ -357,7 +357,7 @@ def clippy_token_pairs(
     #                                               hairlines, sheet grabbers,
     #                                               a frame round a QR quiet
     #                                               zone. Low contrast is the
-    #                                               POINT — see the
+    #                                               POINT, see the
     #                                               tone-plus-one-edge rule in
     #                                               docs/DESIGN.md. Scoring it
     #                                               at 3:1 fails all six tiers
@@ -369,7 +369,7 @@ def clippy_token_pairs(
     #                                               measuring the wrong thing.
     #
     #   outline (= ClippyColors.borderStrong)       the boundary of an actual
-    #                                               control — an outlined
+    #                                               control, an outlined
     #                                               button, a chip, a text
     #                                               field. THIS one owes 3:1,
     #                                               because when it is the only
@@ -380,43 +380,43 @@ def clippy_token_pairs(
     # borderStrong is the checked token. Enforcing it this way is what turns a
     # permanently-red gate into one whose red means something. If a control's
     # edge is ever drawn with `c.border` again, THAT is the defect to fix at
-    # the call site — do not relax this check to accommodate it.
+    # the call site, do not relax this check to accommodate it.
     border_hex = derived("border")
     borderstrong_hex = derived("borderStrong")
     for surf in SURFACE_TIERS:
         pairs.append(Pair(
             f"ClippyColors.borderStrong on {surf}", borderstrong_hex, scheme[surf], "mark",
-            "WCAG 1.4.11 — the edge of an outlined control (button, chip, text field)",
+            "WCAG 1.4.11, the edge of an outlined control (button, chip, text field)",
         ))
     for surf in SURFACE_TIERS:
         pairs.append(Pair(
             f"ClippyColors.border on {surf}", border_hex, scheme[surf], "decorative",
-            "exempt from WCAG 1.4.11 — decorative divider / card hairline, not a control edge",
+            "exempt from WCAG 1.4.11, decorative divider / card hairline, not a control edge",
         ))
 
     onsnack_hex = derived("onSnack")
     snack_hex = derived("snack")
     pairs.append(Pair(
         "ClippyColors.onSnack on ClippyColors.snack", onsnack_hex, snack_hex, "text",
-        "WCAG 1.4.3 — snackbar label text on its own chip",
+        "WCAG 1.4.3, snackbar label text on its own chip",
     ))
 
     onbrand_hex = derived("onBrand")
     for stop_name in ("brandPurpleBright", "brandPurple"):
         pairs.append(Pair(
             f"ClippyColors.onBrand on {stop_name} (gradient stop)", onbrand_hex, named[stop_name], "text",
-            "WCAG 1.4.3 — '<n> selected' title / FilledButton label on the brand gradient",
+            "WCAG 1.4.3, '<n> selected' title / FilledButton label on the brand gradient",
         ))
 
     if is_dark:
         pairs.append(Pair(
             "onPrimary(white) on primaryFillDark", named["Colors.white"], named["primaryFillDark"], "text",
-            "WCAG 1.4.3 — dark FilledButton's real fill (theme.dart _build: NOT dark `primary`, see its own doc comment)",
+            "WCAG 1.4.3, dark FilledButton's real fill (theme.dart _build: NOT dark `primary`, see its own doc comment)",
         ))
         for surf in SURFACE_TIERS:
             pairs.append(Pair(
                 f"primaryTextDark on {surf}", named["primaryTextDark"], scheme[surf], "text",
-                "WCAG 1.4.3 — brand-violet body text on dark surfaces (theme.dart: dark `primary` alone is only 4.35:1)",
+                "WCAG 1.4.3, brand-violet body text on dark surfaces (theme.dart: dark `primary` alone is only 4.35:1)",
             ))
 
     return pairs
@@ -427,8 +427,8 @@ def clippy_token_pairs(
 def qr_scanner_pairs(named: dict[str, str]) -> list[Pair]:
     """The QR scanner is fixed dark in BOTH themes (see its own module doc
     comment) and never reads `context.ck`, so it can only be checked here.
-    Every colour below is parsed out of qr_scanner_page.dart itself — never
-    hand-copied — with a regex anchored on the surrounding literal text, so
+    Every colour below is parsed out of qr_scanner_page.dart itself, never
+    hand-copied, with a regex anchored on the surrounding literal text, so
     a future edit that changes the shape fails loudly instead of silently
     scoring a stale value.
     """
@@ -437,7 +437,7 @@ def qr_scanner_pairs(named: dict[str, str]) -> list[Pair]:
     def find(pattern: str, *, what: str) -> tuple[str, ...]:
         m = re.search(pattern, src, re.S)
         if not m:
-            sys.exit(f"check_contrast: could not find {what} in {QR_SCANNER} — the shape changed")
+            sys.exit(f"check_contrast: could not find {what} in {QR_SCANNER}, the shape changed")
         return m.groups()
 
     scanner_bg = named["scannerBg"]
@@ -447,7 +447,7 @@ def qr_scanner_pairs(named: dict[str, str]) -> list[Pair]:
     )
     dim_overlay = _resolve_color_expr(dim_overlay_expr, context="QR scanner dim overlay")
     # The dim overlay's own RGB is scannerBg's RGB at partial alpha, so
-    # compositing it over scannerBg is a documented no-op — kept as an
+    # compositing it over scannerBg is a documented no-op, kept as an
     # explicit composite rather than assumed, so a future colour change here
     # is picked up automatically instead of silently staying "an assumed no-op".
     viewfinder_bg = composite_stack(scanner_bg, dim_overlay)
@@ -477,17 +477,17 @@ def qr_scanner_pairs(named: dict[str, str]) -> list[Pair]:
 
     return [
         Pair("back-icon ink on scannerBg (+dim overlay)", col(back_icon), viewfinder_bg, "mark",
-             "WCAG 1.4.11 — IconButton, non-text"),
+             "WCAG 1.4.11. IconButton, non-text"),
         Pair("'Scan pairing QR' title on scannerBg (+dim overlay)", col(title_color), viewfinder_bg, "text",
-             "WCAG 1.4.3 — real text over the viewfinder"),
+             "WCAG 1.4.3, real text over the viewfinder"),
         Pair("corner-bracket stroke on scannerBg (+dim overlay)", col(bracket_color), viewfinder_bg, "mark",
-             "WCAG 1.4.11 — the viewfinder frame graphic, non-text"),
+             "WCAG 1.4.11, the viewfinder frame graphic, non-text"),
         Pair("torch icon (off state) on its own translucent fill", col(torch_off_icon), torch_off_bg, "mark",
-             "WCAG 1.4.11 — icon button"),
+             "WCAG 1.4.11, icon button"),
         Pair("torch icon (on state, scannerBg ink) on white fill", col(torch_on_icon), col(torch_on_bg), "mark",
-             "WCAG 1.4.11 — icon button"),
+             "WCAG 1.4.11, icon button"),
         Pair("hint-chip text on its own translucent fill", col(hint_text_color), hint_bg, "text",
-             "WCAG 1.4.3 — real instructional text"),
+             "WCAG 1.4.3, real instructional text"),
     ]
 
 
@@ -497,7 +497,7 @@ def image_viewer_pairs(named: dict[str, str], dark_scheme: dict[str, str]) -> li
     the file (they are that block's own source of truth), anchored on the
     doc comment that introduces them so a shape change fails loudly.
     """
-    # NOTE: matched against the COMMENT-STRIPPED text — the block's own doc
+    # NOTE: matched against the COMMENT-STRIPPED text, the block's own doc
     # comment ("Fixed dark chrome in BOTH themes...") is not a usable anchor
     # because _strip_comments removes it along with every other comment.
     # `const bg = scannerBg;` is unique in the file on its own, so it anchors
@@ -511,7 +511,7 @@ def image_viewer_pairs(named: dict[str, str], dark_scheme: dict[str, str]) -> li
         src, re.S,
     )
     if not m:
-        sys.exit(f"check_contrast: could not find the _ImagePreview bg/fg/meta/danger block in {HOME_PAGE} — the shape changed")
+        sys.exit(f"check_contrast: could not find the _ImagePreview bg/fg/meta/danger block in {HOME_PAGE}, the shape changed")
     bg_expr, fg_expr, meta_expr, danger_expr = m.groups()
 
     local_named = dict(named)
@@ -523,34 +523,34 @@ def image_viewer_pairs(named: dict[str, str], dark_scheme: dict[str, str]) -> li
     (border_alpha,) = re.search(r"border: danger\.withValues\(alpha: ([\d.]+)\)", src).groups() \
         if re.search(r"border: danger\.withValues\(alpha: ([\d.]+)\)", src) else (None,)
     if border_alpha is None:
-        sys.exit(f"check_contrast: could not find danger's border alpha in {HOME_PAGE} — the shape changed")
+        sys.exit(f"check_contrast: could not find danger's border alpha in {HOME_PAGE}, the shape changed")
     danger_border = f"{round(float(border_alpha) * 255):02X}{danger[2:]}"
     danger_border_effective = composite_stack(bg, danger_border)
 
     pairs = [
         Pair("fg(white) text on bg (scannerBg)", fg, bg, "text",
-             "WCAG 1.4.3 — 'Image' label / 'Copy image' button label"),
+             "WCAG 1.4.3, 'Image' label / 'Copy image' button label"),
         Pair("fg(white) icon on bg (scannerBg)", fg, bg, "mark",
-             "WCAG 1.4.11 — close / copy icon buttons"),
+             "WCAG 1.4.11, close / copy icon buttons"),
         Pair("meta text on bg (scannerBg)", meta, bg, "text",
-             "WCAG 1.4.3 — 'PNG · 240 KB · device · 2m' line"),
+             "WCAG 1.4.3, 'PNG · 240 KB · device · 2m' line"),
         Pair("danger icon on bg (scannerBg)", danger, bg, "mark",
-             "WCAG 1.4.11 — delete icon"),
-        # Label reads the alpha it actually parsed — a hardcoded "35%" here
+             "WCAG 1.4.11, delete icon"),
+        # Label reads the alpha it actually parsed, a hardcoded "35%" here
         # would keep printing 35 after someone changed the Dart to 45.
         Pair(f"danger border ({round(float(border_alpha) * 100)}% alpha, composited) on bg",
              danger_border_effective, bg, "mark",
-             "WCAG 1.4.11 — delete button's own outline"),
+             "WCAG 1.4.11, delete button's own outline"),
         Pair("fg(white) label on primaryFillDark", fg, named["primaryFillDark"], "text",
-             "WCAG 1.4.3 — 'Copy image' button fill (same token as the dark FilledButton)"),
+             "WCAG 1.4.3, 'Copy image' button fill (same token as the dark FilledButton)"),
         Pair("fg(white) icon on primaryFillDark", fg, named["primaryFillDark"], "mark",
-             "WCAG 1.4.11 — 'Copy image' button's leading icon"),
+             "WCAG 1.4.11, 'Copy image' button's leading icon"),
     ]
 
     # Drift check: meta/danger are documented in home_page.dart's own
     # comments as copies of the dark scheme's outline/error. If theme.dart's
     # dark scheme ever moves and these don't, they silently stop matching
-    # what they claim to be — exactly the duplicate-value failure mode the
+    # what they claim to be, exactly the duplicate-value failure mode the
     # user's own workflow guidance calls out. Not a contrast failure, so it
     # does not affect the exit code; printed as its own line either way.
     drift = []
@@ -559,7 +559,7 @@ def image_viewer_pairs(named: dict[str, str], dark_scheme: dict[str, str]) -> li
     if danger != dark_scheme["error"]:
         drift.append(f"danger {danger} != dark ColorScheme.error {dark_scheme['error']}")
     print("  [drift check] home_page.dart's `meta`/`danger` vs. theme.dart's dark scheme: "
-          + ("OK, still match" if not drift else "DRIFTED — " + "; ".join(drift)))
+          + ("OK, still match" if not drift else "DRIFTED, " + "; ".join(drift)))
 
     return pairs
 
@@ -571,7 +571,7 @@ def run_section(title: str, pairs: list[Pair]) -> int:
     fails = 0
     for p in pairs:
         r = contrast_ratio(p.fg, p.bg)
-        # "decorative" is measured and printed but never enforced — WCAG 1.4.11
+        # "decorative" is measured and printed but never enforced. WCAG 1.4.11
         # exempts pure decoration. It is printed so a reviewer can still SEE the
         # number and challenge the exemption, rather than the pair vanishing.
         if p.kind == "decorative":
@@ -580,13 +580,13 @@ def run_section(title: str, pairs: list[Pair]) -> int:
             continue
         if p.kind == "latent":
             # The latent list is keyed by ROLE NAME, so it matches in both
-            # themes — but the pair usually fails in only one of them. Where it
+            # themes, but the pair usually fails in only one of them. Where it
             # already clears the bar, print it as the ordinary pass it is;
             # announcing "below 4.5:1" over an 8.25:1 light pair would be a
             # gate that lies in the safe direction, which is still lying.
             if r >= TEXT_MIN:
                 print(f"  ok   {r:5.2f}:1  needs 4.5:1 (WCAG 1.4.3, text)  {p.label}")
-                print("        why: WCAG 1.4.3 — ColorScheme on/base role pair "
+                print("        why: WCAG 1.4.3. ColorScheme on/base role pair "
                       "(listed as latent for the other theme; passes here)")
                 continue
             print(f"  WARN {r:5.2f}:1  below 4.5:1 but UNUSED           {p.label}")
@@ -611,7 +611,7 @@ def main() -> int:
     ]
     missing = [n for n in required_consts if n not in theme_named_raw]
     if missing:
-        sys.exit(f"check_contrast: {', '.join(missing)} not found in {THEME} — the shape changed")
+        sys.exit(f"check_contrast: {', '.join(missing)} not found in {THEME}, the shape changed")
 
     named: dict[str, str] = dict(_NAMED_FLUTTER_COLORS)
     # These are all literal `Color(0x........)` today (verified against the
@@ -640,16 +640,16 @@ def main() -> int:
             + (", dark-only primaryFillDark/primaryTextDark" if is_dark else "") + ")",
             clippy_token_pairs(scheme, named=named, derived_raw=derived_raw, is_dark=is_dark),
         )
-        print(f"\n  -> {theme_name}: {fails} pair(s) below threshold" + ("" if fails else "  — PASS"))
+        print(f"\n  -> {theme_name}: {fails} pair(s) below threshold" + ("" if fails else ". PASS"))
         if fails:
             exit_code = 1
 
     print("\n===================== FIXED CHROME (identical in both themes) =====================")
     print("Not theme-scoped: these two screens never read context.ck and render the same in light mode.")
     fails = 0
-    fails += run_section("QR scanner — lib/app/qr_scanner_page.dart", qr_scanner_pairs(named))
-    fails += run_section("Image viewer — lib/app/home_page.dart _ImagePreview", image_viewer_pairs(named, dark))
-    print(f"\n  -> FIXED CHROME: {fails} pair(s) below threshold" + ("" if fails else "  — PASS"))
+    fails += run_section("QR scanner, lib/app/qr_scanner_page.dart", qr_scanner_pairs(named))
+    fails += run_section("Image viewer, lib/app/home_page.dart _ImagePreview", image_viewer_pairs(named, dark))
+    print(f"\n  -> FIXED CHROME: {fails} pair(s) below threshold" + ("" if fails else ". PASS"))
     if fails:
         exit_code = 1
 

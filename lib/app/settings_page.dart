@@ -16,7 +16,7 @@ import 'update_sheet.dart';
 /// Redesigned from a stack of identical icon-text rows into designed groups:
 /// the theme choice is a segmented control (three peers, one glance), every
 /// action row leads with a [GlyphPlate], and background-sync setup reads as
-/// the SEQUENCE it is — numbered steps under a progress track, built from a
+/// the SEQUENCE it is, numbered steps under a progress track, built from a
 /// list so the next step slots in without another redesign.
 class SettingsPage extends StatelessWidget {
   final ThemeController theme;
@@ -101,12 +101,14 @@ class SettingsPage extends StatelessWidget {
                     _Label('BACKGROUND SYNC', c),
                     const _BgSyncCard(),
                     _Note(
-                        'Lets copies sync while Clippy is closed. Android only '
-                        'allows this via an accessibility service; reading the '
-                        'clipboard briefly flickers the screen. Allowing '
-                        'background battery use keeps the connection alive '
-                        'while the screen is off — without it Android pauses '
-                        'sync minutes after the phone locks. Off by default.',
+                        // Seven lines cut to two. The card above now states
+                        // the feature, its status and every step by name, so
+                        // the note only has to carry what the card cannot:
+                        // the one surprising side effect, and the fact that
+                        // the last step is not optional, that was the bug.
+                        'Reading the clipboard briefly flickers the screen. '
+                        'All three steps are needed. Without the last one, '
+                        'Android pauses sync soon after the phone locks.',
                         c),
                   ],
                   const SizedBox(height: 26),
@@ -223,7 +225,7 @@ class _Divider extends StatelessWidget {
 }
 
 /// One cell of the appearance control. A theme choice is one pick from three
-/// visible peers — a segmented control shows all three states in one glance,
+/// visible peers, a segmented control shows all three states in one glance,
 /// where the old three radio rows spent a whole card saying the same thing.
 class _ThemeSeg extends StatelessWidget {
   final IconData icon;
@@ -287,7 +289,7 @@ class _ActionRow extends StatelessWidget {
   final ClippyColors c;
   final IconData icon;
 
-  /// The plate's identity colour — a scheme role, per [GlyphPlate].
+  /// The plate's identity colour, a scheme role, per [GlyphPlate].
   final Color base;
   final String label;
   final Color labelColor;
@@ -326,7 +328,7 @@ class _ActionRow extends StatelessWidget {
 }
 
 /// The running app's version, shown in the About card. Loaded asynchronously
-/// via package_info_plus — the same source the updater compares against.
+/// via package_info_plus, the same source the updater compares against.
 class _VersionRow extends StatefulWidget {
   const _VersionRow();
   @override
@@ -368,11 +370,11 @@ class _VersionRowState extends State<_VersionRow> {
 
 /// One step of background-sync setup. The card below renders a LIST of these,
 /// so growing the sequence (a battery step is already on its way) means
-/// appending one entry — the layout, numbering and progress track follow.
+/// appending one entry, the layout, numbering and progress track follow.
 class _SyncStep {
   final IconData icon;
 
-  /// The row label while the step is still to do (no number — the leading
+  /// The row label while the step is still to do (no number, the leading
   /// badge carries it).
   final String setupLabel;
 
@@ -386,7 +388,7 @@ class _SyncStep {
   /// The sheet exists for ONE reason: Android hides Accessibility and
   /// display-over-apps behind the "restricted setting" gate for sideloaded
   /// apps, and dropping the user cold into Settings dead-ends there. A step
-  /// with no such gate — the battery exemption opens a plain system dialog —
+  /// with no such gate, the battery exemption opens a plain system dialog,
   /// gets no sheet, because an explainer in front of a working button is just
   /// a tap the user has to spend.
   final String? helpTitle;
@@ -441,7 +443,7 @@ class _BgSyncCardState extends State<_BgSyncCard> with WidgetsBindingObserver {
   /// to bind before AccessibilityManager reports it, which can land after we
   /// have already resumed from the Settings screen. Reading once on resume can
   /// therefore catch the OLD value, leaving the first step on "Enable Clippy
-  /// sync" forever even though the grant succeeded — which reads to the user
+  /// sync" forever even though the grant succeeded, which reads to the user
   /// as "it didn't work". Re-read a few times and stop as soon as something
   /// changes.
   Future<void> _refreshUntilSettled() async {
@@ -480,7 +482,7 @@ class _BgSyncCardState extends State<_BgSyncCard> with WidgetsBindingObserver {
     final c = context.ck;
     final scheme = Theme.of(context).colorScheme;
     // THE list. A third step (battery) slots in as one more entry here plus
-    // its status field above — nothing else in this card changes.
+    // its status field above, nothing else in this card changes.
     final steps = [
       _SyncStep(
         icon: Icons.accessibility_new_rounded,
@@ -499,15 +501,15 @@ class _BgSyncCardState extends State<_BgSyncCard> with WidgetsBindingObserver {
         granted: _overlay,
         helpTitle: 'Allow display over apps',
         helpBody: 'Clippy briefly draws over the screen to read the clipboard '
-            'the moment you copy — part of background sync.',
+            'the moment you copy. That is part of background sync.',
         openSettings: ShareChannel.requestOverlay,
       ),
-      // Step 3 — the one background sync actually stands on. Without the
+      // Step 3, the one background sync actually stands on. Without the
       // battery exemption Doze cuts the relay connection minutes after the
       // screen locks (a foreground service does NOT exempt the process from
       // Doze networking), and Android 12+ refuses to restart the service from
       // the background after an OEM kill. It used to be asked once ever, at
-      // first launch, and never appeared on this screen — so a user who
+      // first launch, and never appeared on this screen, so a user who
       // followed every step here could still watch background sync die the
       // moment the phone went into a pocket. That is the reported bug.
       //
@@ -525,11 +527,11 @@ class _BgSyncCardState extends State<_BgSyncCard> with WidgetsBindingObserver {
     final all = done == steps.length;
     final left = steps.length - done;
     final summary = all
-        ? 'On — syncing while Clippy is closed'
+        ? 'On, syncing while Clippy is closed'
         : done == 0
-            ? 'Off — ${steps.length} steps to set up'
+            ? 'Off. ${steps.length} steps to set up'
             // "one more step" was correct only while there were two steps.
-            : '$done of ${steps.length} done — $left more '
+            : '$done of ${steps.length} done, $left more '
                 '${left == 1 ? 'step' : 'steps'}';
     return ClipCard(
       child: Column(
@@ -662,7 +664,7 @@ class _StepBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.ck;
     final scheme = Theme.of(context).colorScheme;
-    // Filled brand chip when done — same fill as the filled buttons, because
+    // Filled brand chip when done, same fill as the filled buttons, because
     // `accent` is the lighter INK violet in dark mode and a white tick on it
     // would sit near 2:1.
     final fill = c.isDark ? primaryFillDark : scheme.primary;

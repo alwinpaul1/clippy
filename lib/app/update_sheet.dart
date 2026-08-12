@@ -14,8 +14,8 @@ class UpdateBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ck;
-    // The same banner anatomy as the home screen's warnings — plate, message,
-    // action — so every pinned strip in the app is one shape. Only the tint
+    // The same banner anatomy as the home screen's warnings, plate, message,
+    // action, so every pinned strip in the app is one shape. Only the tint
     // differs: brand violet, because an update is news, not a fault.
     return ClipCard(
       radius: 20,
@@ -32,7 +32,7 @@ class UpdateBanner extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Update available — v${info.version}',
+              'Update available: v${info.version}',
               style: Ct.body(13.5, weight: FontWeight.w600, color: c.ink),
             ),
           ),
@@ -121,7 +121,7 @@ class _UpdateSheetState extends State<_UpdateSheet> {
             const SheetGrabber(),
             // The version hero is the gradient's one appearance here, and it
             // shows ONLY for a feature release. A bug release is deliberately
-            // framed as "what got better", with no version to celebrate — the
+            // framed as "what got better", with no version to celebrate, the
             // project's own release rule, kept visible in the design.
             if (!info.isBugUpdate) ...[
               Container(
@@ -156,7 +156,7 @@ class _UpdateSheetState extends State<_UpdateSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Each section gets its own mark on its own scheme role —
+                    // Each section gets its own mark on its own scheme role,
                     // three GlyphPlates from the same family as the rest of
                     // the app, and the one place Clippy's lighter hand shows
                     // in this sheet. Features = spark, improvements = up,
