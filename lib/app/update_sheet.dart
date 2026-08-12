@@ -14,44 +14,36 @@ class UpdateBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ck;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => showUpdateSheet(context, info),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
-          decoration: BoxDecoration(
-            color: c.surface,
-            border: Border.all(color: c.green.withValues(alpha: 0.5)),
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.10),
-                blurRadius: 14,
-                offset: const Offset(0, 4),
-              ),
-            ],
+    // The same banner anatomy as the home screen's warnings — plate, message,
+    // action — so every pinned strip in the app is one shape. Only the tint
+    // differs: brand violet, because an update is news, not a fault.
+    return ClipCard(
+      radius: 20,
+      highlighted: true,
+      onTap: () => showUpdateSheet(context, info),
+      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+      child: Row(
+        children: [
+          GlyphPlate(
+            icon: Icons.download_rounded,
+            base: Theme.of(context).colorScheme.primary,
+            size: 32,
           ),
-          child: Row(
-            children: [
-              Icon(Icons.system_update, size: 18, color: c.green),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Update available — v${info.version}',
-                  style: Ct.body(13, weight: FontWeight.w500, color: c.ink),
-                ),
-              ),
-              Text('View',
-                  style: Ct.body(13.5, weight: FontWeight.w600, color: c.green)),
-              IconButton(
-                icon: Icon(Icons.close, size: 18, color: c.muted),
-                onPressed: () => updater.dismiss(),
-              ),
-            ],
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Update available — v${info.version}',
+              style: Ct.body(13.5, weight: FontWeight.w600, color: c.ink),
+            ),
           ),
-        ),
+          Text('View',
+              style: Ct.body(13.5, weight: FontWeight.w700, color: c.accent)),
+          IconButton(
+            icon: Icon(Icons.close_rounded, size: 18, color: c.muted),
+            tooltip: 'Dismiss this version',
+            onPressed: () => updater.dismiss(),
+          ),
+        ],
       ),
     );
   }
@@ -64,7 +56,7 @@ Future<void> showUpdateSheet(BuildContext context, UpdateInfo info) {
     isScrollControlled: true,
     backgroundColor: context.ck.bg,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
     builder: (_) => _UpdateSheet(info: info),
   );
@@ -114,54 +106,91 @@ class _UpdateSheetState extends State<_UpdateSheet> {
   @override
   Widget build(BuildContext context) {
     final c = context.ck;
+    final scheme = Theme.of(context).colorScheme;
     final info = widget.info;
     final title = info.isBugUpdate
         ? 'Bug fixes & improvements'
         : 'New in ${info.version}';
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(Icons.system_update, color: c.green, size: 24),
-                const SizedBox(width: 10),
-                Expanded(child: Text(title, style: Ct.title(22, color: c.ink))),
-              ],
-            ),
-            Text('Version ${info.version}',
-                style: Ct.body(13, color: c.muted)),
+            const SheetGrabber(),
+            // The version hero is the gradient's one appearance here, and it
+            // shows ONLY for a feature release. A bug release is deliberately
+            // framed as "what got better", with no version to celebrate — the
+            // project's own release rule, kept visible in the design.
+            if (!info.isBugUpdate) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                decoration: BoxDecoration(
+                  gradient: brandGradient,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('NEW VERSION',
+                        style: Ct.sectionLabel(
+                            color: Colors.white.withValues(alpha: 0.75))),
+                    const SizedBox(height: 6),
+                    Text(info.version,
+                        style: Ct.title(30, color: c.onBrand)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+            ],
+            Text(title, style: Ct.title(22, color: c.ink)),
+            if (info.isBugUpdate) ...[
+              const SizedBox(height: 4),
+              Text('Version ${info.version}', style: Ct.body(13, color: c.muted)),
+            ],
             const SizedBox(height: 16),
             Flexible(
               child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _Section('New Features', info.features, c),
-                    _Section('New Improvements', info.improvements, c),
-                    _Section('Bug Fixes', info.fixes, c),
+                    // Each section gets its own mark on its own scheme role —
+                    // three GlyphPlates from the same family as the rest of
+                    // the app, and the one place Clippy's lighter hand shows
+                    // in this sheet. Features = spark, improvements = up,
+                    // fixes = bug. The lists themselves stay quiet dots.
+                    _Section('New Features', Icons.auto_awesome_rounded,
+                        scheme.primary, info.features, c),
+                    _Section('Improvements', Icons.trending_up_rounded,
+                        scheme.tertiary, info.improvements, c),
+                    _Section('Bug Fixes', Icons.bug_report_rounded,
+                        scheme.secondary, info.fixes, c),
                   ],
                 ),
               ),
             ),
             if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(_error!, style: Ct.body(13, color: c.rust, height: 1.4)),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(12),
+                // The M3 error pair carries its own contrast in both themes, so
+                // this needs no per-theme branch.
+                decoration: BoxDecoration(
+                  color: scheme.errorContainer,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(_error!,
+                    style: Ct.body(13, color: scheme.onErrorContainer)),
+              ),
             ],
             const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
+              // Styled by the filled-button theme, which already picks the
+              // right fill per theme. See permission_help_sheet.dart.
               child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: c.green,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
                 onPressed: _progress != null ? null : _update,
                 child: _progress != null
                     ? Row(
@@ -173,20 +202,16 @@ class _UpdateSheetState extends State<_UpdateSheet> {
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               value: _progress == 0 ? null : _progress,
-                              color: Ck.bg,
+                              color: scheme.onPrimary,
                             ),
                           ),
                           const SizedBox(width: 10),
-                          Text(
-                            _progress == 0
-                                ? 'Starting…'
-                                : 'Downloading ${(_progress! * 100).round()}%',
-                            style: Ct.body(15, weight: FontWeight.w600, color: Ck.bg),
-                          ),
+                          Text(_progress == 0
+                              ? 'Starting…'
+                              : 'Downloading ${(_progress! * 100).round()}%'),
                         ],
                       )
-                    : Text('Update now',
-                        style: Ct.body(15, weight: FontWeight.w600, color: Ck.bg)),
+                    : const Text('Update now'),
               ),
             ),
           ],
@@ -198,31 +223,47 @@ class _UpdateSheetState extends State<_UpdateSheet> {
 
 class _Section extends StatelessWidget {
   final String title;
+  final IconData icon;
+  final Color base;
   final List<String> items;
   final ClippyColors c;
-  const _Section(this.title, this.items, this.c);
+  const _Section(this.title, this.icon, this.base, this.items, this.c);
 
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title.toUpperCase(),
-              style: Ct.sectionLabel().copyWith(color: c.muted)),
-          const SizedBox(height: 6),
+          Row(
+            children: [
+              GlyphPlate(icon: icon, base: base, size: 24),
+              const SizedBox(width: 8),
+              Text(title.toUpperCase(),
+                  style: Ct.sectionLabel(color: c.muted)),
+            ],
+          ),
+          const SizedBox(height: 10),
           for (final it in items)
             Padding(
-              padding: const EdgeInsets.only(bottom: 4),
+              // Indented to the section title's text edge, so the list reads
+              // as the plate's content rather than a second left margin.
+              padding: const EdgeInsets.only(bottom: 6, left: 32),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('•  ', style: Ct.body(14, color: c.green)),
-                  Expanded(
-                    child: Text(it, style: Ct.body(14, color: c.ink, height: 1.4)),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 7, right: 10),
+                    child: Container(
+                      width: 5,
+                      height: 5,
+                      decoration:
+                          BoxDecoration(color: c.accent, shape: BoxShape.circle),
+                    ),
                   ),
+                  Expanded(child: Text(it, style: Ct.body(14, color: c.ink))),
                 ],
               ),
             ),

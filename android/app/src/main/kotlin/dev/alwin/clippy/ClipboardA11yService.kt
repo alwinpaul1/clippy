@@ -193,14 +193,67 @@ class ClipboardA11yService : AccessibilityService() {
             }
             return
         }
+        // Pixel (stock Android 13+): copying does NOT post a toast — SystemUI
+        // shows its clipboard overlay (the bottom-left preview chip,
+        // ClipboardOverlayView) instead, so the toast trigger above never fires
+        // and background capture silently never runs on those devices. Two
+        // additional copy-specific signals cover it, both scoped to
+        // com.android.systemui so they cannot re-introduce the tap/keyboard
+        // overlay-flash this trigger was deliberately narrowed to avoid:
+        //  - TYPE_ANNOUNCEMENT: the overlay announces the copy for
+        //    accessibility ("Copied" et al — same word list as the toast).
+        //  - TYPE_WINDOW_STATE_CHANGED whose class name mentions "clipboard":
+        //    the overlay window appearing.
+        //
+        // MEASURED on a stock Google Android 15 emulator (SDK 35) on
+        // 2026-08-12, with `adb shell uiautomator events` around a real copy.
+        // These are observed events, not AOSP reading — do not re-derive them:
+        //
+        //   TYPE_NOTIFICATION_STATE_CHANGED  0 events   <- NO toast at all
+        //   TYPE_ANNOUNCEMENT                1 event    package=com.android.systemui
+        //                                               text=[Text copied]        -> MATCHES
+        //   TYPE_WINDOW_STATE_CHANGED        package=com.android.systemui
+        //                                    className=android.widget.FrameLayout -> DOES NOT MATCH
+        //
+        // Two consequences, both load-bearing:
+        //  1. Zero toasts CONFIRMS the diagnosis. The toast was the only
+        //     trigger the pre-fix build had, and stock Android never posts one,
+        //     so background capture genuinely never ran on those devices.
+        //  2. The class-name gate below is NOT the locale-independent safety
+        //     net this comment used to claim. The overlay window reports a
+        //     plain `android.widget.FrameLayout`, so the gate never fires on
+        //     Android 15 and TYPE_ANNOUNCEMENT is the ONLY working background
+        //     trigger there. Locales outside `copyToastWords` therefore have no
+        //     background trigger on stock; they fall back to the app-open read.
+        //     Widening the class match is NOT the fix — a bare FrameLayout also
+        //     describes the shade, the volume panel and the screenshot UI, so
+        //     matching it would re-introduce the spurious reads this trigger
+        //     was narrowed to avoid. Extend `copyToastWords` instead, with
+        //     strings OBSERVED on a device, never guessed.
+        // The gate stays because it costs nothing and another Android version
+        // may name the class differently — but it must not be counted on.
+        if (t == AccessibilityEvent.TYPE_ANNOUNCEMENT) {
+            if (event.packageName?.toString() == "com.android.systemui" &&
+                isCopyToast(event.text)) {
+                attemptRead()
+            }
+            return
+        }
+        if (t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            if (event.packageName?.toString() == "com.android.systemui" &&
+                event.className?.toString()?.contains("clipboard", ignoreCase = true) == true) {
+                attemptRead()
+            }
+            return
+        }
         // No other trigger. We used to also fire on TYPE_VIEW_CLICKED (a Copy-
         // toolbar tap) and TYPE_VIEW_TEXT_SELECTION_CHANGED, but while Clippy is
         // backgrounded the read pops a 1px focus-grabbing overlay, so firing it
         // on every tap/keystroke flashed the screen (tapping a non-EditText
-        // input, opening a keyboard, tapping a button, …). The "Copied." system
-        // toast above is a precise copy signal, so we trigger ONLY on that. A
-        // copy still briefly flashes as the overlay grabs focus to read; taps
-        // and keyboards no longer do.
+        // input, opening a keyboard, tapping a button, …). The signals above
+        // fire only on a real copy, so we trigger ONLY on those. A copy still
+        // briefly flashes as the overlay grabs focus to read; taps and
+        // keyboards no longer do.
     }
 
     private fun attemptRead() {

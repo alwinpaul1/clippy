@@ -307,12 +307,62 @@ void main() {
         reason: 'and once revived, say so');
   });
 
-  // NOT tested here: the battery-exemption request. The plugin gates
-  // isIgnoringBatteryOptimizations on the REAL Platform.isAndroid and returns
-  // true off-device, so the branch is unreachable from a host test. What the
-  // code guarantees instead — that the request cannot stall start() behind its
-  // system dialog — is structural: it is fired unawaited AFTER the service is
-  // up (see _askBatteryExemption).
+  // The battery-exemption DIALOG itself is not reachable from a host test:
+  // the plugin gates isIgnoringBatteryOptimizations on the REAL
+  // Platform.isAndroid and answers "exempt" off-device without touching the
+  // channel. What IS testable — via [batteryExemptionAsks], counted before
+  // that gate — is whether start() DECIDED to ask, which is the part that
+  // regressed: the already-running early return used to skip the ask, so the
+  // dialog appeared exactly once ever (first install) and a user who
+  // dismissed it was never asked again, with nothing in Settings to recover.
+  test('the launch-path battery ask fires even when the service is ALREADY '
+      'running (the common launch path used to skip it — the one-shot-dialog '
+      'bug behind "I did everything Settings asked and it still dies")',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'fgs_service_types_version':
+          ForegroundServiceManager.serviceOptionsVersion
+    });
+    serviceRunning = true; // survives swipe-away/reboot → true at most launches
+    batteryExempt = false;
+
+    await ForegroundServiceManager.start(askBatteryExemption: true);
+
+    expect(ForegroundServiceManager.batteryExemptionAsks, 1,
+        reason: 'returning early for a healthy service must not eat the '
+            'launch-path exemption ask — that made the dialog a one-shot');
+    expect(ForegroundServiceManager.backgroundSyncAlive.value, isTrue);
+  });
+
+  test('the ask also fires when the service had to be started', () async {
+    serviceRunning = false;
+    batteryExempt = false;
+
+    await ForegroundServiceManager.start(askBatteryExemption: true);
+
+    expect(ForegroundServiceManager.batteryExemptionAsks, 1);
+  });
+
+  test('a poll-driven revive NEVER asks for the battery exemption (the dialog '
+      'would reopen on every retry against a refusing OEM)', () async {
+    ForegroundServiceManager.healthPollInterval =
+        const Duration(milliseconds: 10);
+    addTearDown(() => ForegroundServiceManager.healthPollInterval =
+        const Duration(seconds: 20));
+    SharedPreferences.setMockInitialValues({
+      'fgs_service_types_version':
+          ForegroundServiceManager.serviceOptionsVersion
+    });
+    serviceRunning = false;
+    batteryExempt = false;
+
+    ForegroundServiceManager.startHealthWatch(); // revives via start(), no flag
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await ForegroundServiceManager.ensureRunning(); // resume path — also no flag
+
+    expect(ForegroundServiceManager.batteryExemptionAsks, 0,
+        reason: 'only the explicit launch path may open a system dialog');
+  });
   test('a service the system keeps refusing is retried with BACKOFF, not on '
       'every poll (that would just burn battery)', () async {
     ForegroundServiceManager.healthPollInterval =

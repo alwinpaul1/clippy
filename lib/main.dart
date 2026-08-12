@@ -29,21 +29,6 @@ class ClippyApp extends StatelessWidget {
   final ThemeController theme;
   const ClippyApp({super.key, required this.theme});
 
-  ThemeData _themeData(ClippyColors c) {
-    final brightness = c.isDark ? Brightness.dark : Brightness.light;
-    return ThemeData(
-      useMaterial3: true,
-      brightness: brightness,
-      scaffoldBackgroundColor: c.bg,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: c.green,
-        brightness: brightness,
-        surface: c.bg,
-      ),
-      extensions: [c],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
@@ -51,8 +36,10 @@ class ClippyApp extends StatelessWidget {
       builder: (context, mode, _) => MaterialApp(
         title: 'Clippy',
         debugShowCheckedModeBanner: false,
-        theme: _themeData(ClippyColors.light),
-        darkTheme: _themeData(ClippyColors.dark),
+        // Both themes are built once in theme.dart and shipped as equals —
+        // dark is hand-built there, not derived from a seed.
+        theme: lightTheme,
+        darkTheme: darkTheme,
         themeMode: mode,
         home: ClippyRoot(theme: theme),
       ),
@@ -139,7 +126,9 @@ class _ClippyRootState extends State<ClippyRoot> {
     if (_loading) {
       return Scaffold(
         backgroundColor: context.ck.bg,
-        body: Center(child: CircularProgressIndicator(color: context.ck.green)),
+        body: Center(
+          child: CircularProgressIndicator(color: context.ck.accent),
+        ),
       );
     }
     final controller = _controller;

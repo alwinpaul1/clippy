@@ -23,7 +23,7 @@ Future<void> showPermissionHelpSheet(
     isScrollControlled: true,
     backgroundColor: context.ck.bg,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
     builder: (_) => _PermissionHelpSheet(
       title: title,
@@ -48,71 +48,84 @@ class _PermissionHelpSheet extends StatelessWidget {
     final c = context.ck;
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const SheetGrabber(),
             Row(
               children: [
-                Icon(Icons.shield_outlined, color: c.green, size: 24),
-                const SizedBox(width: 10),
-                Expanded(child: Text(title, style: Ct.title(22, color: c.ink))),
+                GlyphPlate(
+                  icon: Icons.shield_rounded,
+                  base: Theme.of(context).colorScheme.primary,
+                  size: 40,
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Text(title, style: Ct.title(20, color: c.ink))),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(whatFor, style: Ct.body(14, color: c.muted, height: 1.4)),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: c.surface,
-                border: Border.all(color: c.border),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Android guards this for apps installed outside the Play '
-                    'Store, so you may see "App was denied access". Here\'s how '
-                    'to get past it:',
-                    style: Ct.body(13.5, color: c.ink, height: 1.45),
-                  ),
-                  const SizedBox(height: 12),
-                  _Step(1, 'Tap "Open Settings" below and try to turn Clippy\'s '
-                      'toggle on.', c),
-                  _Step(2, 'If you see the "restricted setting" warning, open '
-                      'Clippy\'s App info, tap the ⋮ menu (top-right), then '
-                      '"Allow restricted settings" and confirm with your PIN.', c),
-                  _Step(3, 'Come back and turn the toggle on — it\'ll stick.', c,
-                      last: true),
-                ],
+            const SizedBox(height: 12),
+            // The explainer scrolls; the two buttons stay pinned. `whatFor` is
+            // caller-supplied and the steps are long, so on a short screen this
+            // Column used to overflow rather than scroll — the sheet was built
+            // as a fixed min-height Column and had no give at all.
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(whatFor, style: Ct.body(14, color: c.muted2)),
+                    const SizedBox(height: 16),
+                    ClipCard(
+                      padding: const EdgeInsets.all(18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Android guards this for apps installed outside the '
+                            'Play Store, so you may see "App was denied access". '
+                            'Here\'s how to get past it:',
+                            style: Ct.body(13.5, color: c.ink),
+                          ),
+                          const SizedBox(height: 14),
+                          _Step(
+                              1,
+                              'Tap "Open Settings" below and try to turn '
+                              "Clippy's toggle on.",
+                              c),
+                          _Step(
+                              2,
+                              'If you see the "restricted setting" warning, open '
+                              "Clippy's App info, tap the ⋮ menu (top-right), "
+                              'then "Allow restricted settings" and confirm with '
+                              'your PIN.',
+                              c),
+                          _Step(
+                              3,
+                              "Come back and turn the toggle on — it'll stick.",
+                              c,
+                              last: true),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
+              // No local style: the filled-button theme already carries the
+              // brand fill and its matching foreground for BOTH themes, and
+              // dark uses primaryFillDark rather than primary so white ink
+              // clears 4.5:1 on it. Restating it here is how those two drift.
               child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: c.green,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
                 onPressed: () async {
                   Navigator.of(context).pop();
                   await onOpenSettings();
                 },
-                // On-green foreground must follow the theme: dark mode's green
-                // is the *lighter* 0xFF8FBCA6, so the light cream Ck.bg would
-                // sit at ~1.3:1 on it. Same pattern used on green fills in
-                // home_page.dart.
-                child: Text('Open Settings',
-                    style: Ct.body(15,
-                        weight: FontWeight.w600,
-                        color: c.isDark ? c.bg : Ck.bg)),
+                child: const Text('Open Settings'),
               ),
             ),
             const SizedBox(height: 10),
@@ -120,10 +133,12 @@ class _PermissionHelpSheet extends StatelessWidget {
               width: double.infinity,
               child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
+                  // borderStrong (M3 `outline`): an OutlinedButton's edge IS
+                  // the button, so it must clear 3:1 (WCAG 1.4.11).
                   side: BorderSide(color: c.borderStrong),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  padding: const EdgeInsets.symmetric(vertical: 15),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(18),
                   ),
                 ),
                 onPressed: () async {
@@ -141,6 +156,9 @@ class _PermissionHelpSheet extends StatelessWidget {
   }
 }
 
+/// One step on a connected rail: the numbered badge, and — until the last
+/// step — a thin line running down to the next badge. The line is what makes
+/// three sentences read as ONE procedure with an order, not three tips.
 class _Step extends StatelessWidget {
   final int n;
   final String text;
@@ -150,25 +168,43 @@ class _Step extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: last ? 0 : 8),
+    return IntrinsicHeight(
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 20,
-            height: 20,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: c.green.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Text('$n',
-                style: Ct.body(11, weight: FontWeight.w700, color: c.green)),
+          Column(
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: c.accent.withValues(alpha: c.isDark ? 0.24 : 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Text('$n',
+                    style:
+                        Ct.body(11, weight: FontWeight.w700, color: c.accent)),
+              ),
+              if (!last)
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    margin: const EdgeInsets.symmetric(vertical: 3),
+                    decoration: BoxDecoration(
+                      color: c.accent.withValues(alpha: 0.25),
+                      borderRadius: BorderRadius.circular(1),
+                    ),
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
-            child: Text(text, style: Ct.body(13.5, color: c.ink, height: 1.45)),
+            child: Padding(
+              padding: EdgeInsets.only(bottom: last ? 0 : 14),
+              child: Text(text, style: Ct.body(13.5, color: c.ink)),
+            ),
           ),
         ],
       ),
