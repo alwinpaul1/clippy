@@ -11,15 +11,33 @@ in-app-update manifest.
 
 Everything below is triggered by two files. To ship a new version:
 
-1. **Bump the user-facing version in `pubspec.yaml`** (line `version:`).
-   Format is still Flutter's `SEMVER+BUILD` (Android needs a monotonic build
-   integer), but **users only ever see SEMVER** — never show `+build` in the
-   UI. **Always raise the SEMVER** for every release; never ship a
-   build-only re-release of the same SEMVER (no more `1.0.33+36` → `+37`).
-   Raise the build number alongside the SEMVER (keep it strictly increasing).
+1. **Bump the version in `pubspec.yaml`** (line `version:`). Format is
+   Flutter's `SEMVER+BUILD`. **What you raise depends on what shipped:**
+
+   | The release contains | Raise |
+   |---|---|
+   | a new **feature** (`features` in `release.json` is non-empty) | **SEMVER and build** |
+   | only **improvements / fixes** (`features` is `[]`) | **the build number ONLY** |
+
    Examples:
-   - bug/maintenance: `1.0.34+41` → `1.0.35+42`
-   - new features:    `1.0.34+41` → `1.1.0+42`
+   - improvements only: `1.5.0+58` → `1.5.0+59`
+   - new features:      `1.5.0+58` → `1.6.0+59`
+
+   **The build number is always strictly increasing, with no exceptions.**
+   Android's `versionCode` must rise or the APK will not install over the
+   existing app.
+
+   **A build-only release does reach users.** `UpdateInfo.isNewerThan`
+   (`lib/core/update/update_info.dart`) compares the semver first and falls
+   through to `build > currentBuild` when the semvers match, so the updater
+   offers it. Do not "fix" that fall-through; this rule depends on it.
+
+   **The cost of a build-only release, so nobody is surprised by it:** the
+   user is told about "Version 1.5.0" while already running 1.5.0, because
+   the sheet and the banner both print the semver and users never see the
+   build number. That is the accepted trade for not inflating the semver on
+   small changes. If it ever becomes confusing, the fix is to print the build
+   in the sheet when the semver is unchanged, not to abandon the rule.
 
 2. **Edit `release.json`** (repo root) — set its `"version"` to the new semver
    (CI FAILS the build if it doesn't match `pubspec.yaml`, so stale notes can
@@ -82,9 +100,21 @@ staging a one-off VPS upload.
 ## Verifying a release went out
 
 ```
-curl -s https://clippy.alwinpaul.me/version.json      # 200 + new version
+curl -s https://clippy.alwinpaul.me/version.json      # 200 + new version AND build
 curl -so/dev/null -w '%{http_code}\n' \
   https://clippy.alwinpaul.me/download/Clippy-Android.apk  # 200
 ```
-(Repeat for `Clippy-macOS.zip` and `Clippy-Setup.exe`.) A changed byte size vs.
-the previous build confirms the automated deploy replaced the artifacts.
+(Repeat for `Clippy-macOS.zip` and `Clippy-Setup.exe`.)
+
+**Check the `build`, not only the `version`.** After an improvements-only
+release the semver is unchanged on purpose, so a version that "did not move"
+proves nothing. The build number is what moved.
+
+**Prove the artifacts are really new, do not infer it.** A changed byte size
+is a hint. The manifest's `sha256` is written by CI and can describe a file
+the VPS never received, so download one artifact and hash it yourself:
+
+```
+curl -sLo /tmp/c.zip https://clippy.alwinpaul.me/download/Clippy-macOS.zip
+shasum -a 256 /tmp/c.zip     # must equal .sha256.macos in version.json
+```
