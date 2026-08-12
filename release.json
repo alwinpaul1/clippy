@@ -1,10 +1,9 @@
 {
-  "version": "1.4.9",
+  "version": "1.5.0",
   "notes": {
     "features": [],
     "improvements": [
-      "A new app icon on every platform: the violet Clippy paperclip.",
-      "Shorter, plainer wording across settings, banners and status lines."
+      "A bolder app icon on every platform, with thicker lines and larger eyes."
     ],
     "fixes": []
   }
