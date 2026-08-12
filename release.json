@@ -1,20 +1,11 @@
 {
-  "version": "1.4.7",
+  "version": "1.4.8",
   "notes": {
-    "features": [
-      "A completely new look — one violet design across every screen, in light and dark.",
-      "Clips now show what they are at a glance: text, link, code or image, and which device sent them.",
-      "The newest clip stands out, with a longer preview."
-    ],
-    "improvements": [
-      "Background sync setup is now a numbered sequence that shows how far you have got.",
-      "Fonts ship inside the app, so it no longer downloads them on first launch."
-    ],
+    "features": [],
+    "improvements": [],
     "fixes": [
-      "Background sync now asks for the battery permission it actually needs. Without it, Android paused syncing minutes after the screen locked.",
-      "Copies now sync in the background on Pixel and other stock Android phones. Only Samsung's copy signal was detected before.",
-      "The permission help sheet no longer overflows on a short screen.",
-      "Button and chip outlines are now dark enough to see."
+      "The fold arrow on a device group now sits next to the device name instead of drifting into the middle of the window.",
+      "Removed the LATEST tag — the list is already newest-first."
     ]
   }
 }

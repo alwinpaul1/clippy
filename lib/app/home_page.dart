@@ -1054,13 +1054,21 @@ class _DeviceHeader extends StatelessWidget {
                 ),
                 child: Text('$count', style: Ct.mono(11, color: c.muted2)),
               ),
-              const Spacer(),
+              // The chevron sits WITH the group's name, not at the far edge.
+              // It used to be pushed out by a Spacer, which stranded it in the
+              // middle of a wide window and — because the flex did not resolve
+              // the same way for every row — left the arrows at different
+              // horizontal positions from each other. Sitting next to the
+              // count it is deterministic, it reads as belonging to the group
+              // it folds, and it cannot drift between rows.
+              const SizedBox(width: 6),
               AnimatedRotation(
                 turns: collapsed ? -0.25 : 0,
                 duration: const Duration(milliseconds: 180),
                 child: Icon(Icons.keyboard_arrow_down_rounded,
                     size: 18, color: c.muted),
               ),
+              const Spacer(),
             ],
           ),
         ),
@@ -1075,8 +1083,12 @@ class _DeviceHeader extends StatelessWidget {
 /// (kind · size · age), and a copy button that confirms with a tick.
 ///
 /// The single newest clip in the list renders with `latest: true`: a bigger
-/// preview, a LATEST chip, and a 24 radius. It is the reason the app was
-/// opened — the hierarchy should say so.
+/// preview (three lines instead of two), a larger thumbnail and a 24 radius.
+/// It is the reason the app was opened — the hierarchy should say so.
+///
+/// It carried a "LATEST" chip too; the owner had it removed. The list is
+/// already newest-first, so the badge only restated the row's own position.
+/// The larger clothes stayed, because that emphasis needs no label.
 class _ClipTile extends StatelessWidget {
   final HistoryItem item;
   final bool latest;
@@ -1145,28 +1157,11 @@ class _ClipTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (latest) ...[
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      color:
-                          c.accent.withValues(alpha: c.isDark ? 0.22 : 0.12),
-                      borderRadius: BorderRadius.circular(7),
-                    ),
-                    child: Text(
-                      'LATEST',
-                      style: TextStyle(
-                        fontFamily: appFontFamily,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.9,
-                        color: c.accent,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 7),
-                ],
+                // The LATEST chip is gone at the owner's request. The list is
+                // already newest-first, so the badge restated the row's own
+                // position. The newest clip keeps its larger clothes — more
+                // preview lines and a wider radius — which is emphasis the
+                // eye reads without a label having to say it.
                 Text(
                   item.isImage ? 'Image' : item.text,
                   maxLines: latest ? 3 : 2,
