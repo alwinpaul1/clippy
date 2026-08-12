@@ -64,7 +64,7 @@ class UpdateController {
     );
   }
 
-  /// Silent startup check — surfaces the banner only if not already dismissed.
+  /// Silent startup check, surfaces the banner only if not already dismissed.
   Future<void> checkOnStartup() async {
     final info = await _service.check();
     if (info == null) return;
@@ -158,13 +158,13 @@ class UpdateController {
       throw Exception('In-app update unavailable on this platform');
     }
     // Fail CLOSED: an update with no published hash is not installed. The check
-    // is worthless if it is skipped whenever the hash is missing — a network
+    // is worthless if it is skipped whenever the hash is missing, a network
     // attacker would just strip it. CI always publishes one; its absence means
     // a tampered manifest or a broken build, and the UI falls back to the
     // download page (a browser download over HTTPS).
     final sha = artifactSha256(info);
     if (sha == null || sha.isEmpty) {
-      throw Exception('Update manifest is missing its integrity hash — '
+      throw Exception('Update manifest is missing its integrity hash. '
           'refusing to install. Use the download page instead.');
     }
     await updater.update(url, sha256: sha, onProgress: onProgress);

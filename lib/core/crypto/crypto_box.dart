@@ -2,7 +2,7 @@ import '../models/encrypted_clip.dart';
 import '../models/remote_clip.dart';
 
 /// Encrypts/decrypts clip payloads and computes the echo-guard fingerprint.
-/// The fingerprint is HMAC(key, plaintext) — never a plaintext hash — so a
+/// The fingerprint is HMAC(key, plaintext), never a plaintext hash, so a
 /// stored clip never carries a plaintext oracle. Real AES-256-GCM
 /// implementation arrives in Plan 2; the core depends only on this interface.
 abstract class CryptoBox {
@@ -11,7 +11,7 @@ abstract class CryptoBox {
 
   /// Decrypt several clips at once, returning their plaintexts in the same
   /// order. Exists so an implementation can move the (CPU-bound, pure-Dart)
-  /// decryption of a whole history snapshot OFF the UI isolate in one batch —
+  /// decryption of a whole history snapshot OFF the UI isolate in one batch,
   /// see [AesGcmCryptoBox]. Throws if any clip fails to decrypt.
   Future<List<String>> openAll(List<RemoteClip> clips);
 

@@ -16,7 +16,7 @@ class HistoryStore {
   final int _capacity;
 
   // Decrypted payloads keyed by content hash. Decryption is the load
-  // bottleneck — a large pure-Dart AES-GCM (plus a base64 decode for images) —
+  // bottleneck, a large pure-Dart AES-GCM (plus a base64 decode for images),
   // and the relay re-emits the whole snapshot on every change, so a naive
   // project() re-decrypts all 25 items each time a single clip arrives. The
   // hash is HMAC(plaintext), so a cache hit guarantees identical plaintext;
@@ -40,7 +40,7 @@ class HistoryStore {
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
     // Pass 1: pick the clips to show (collapse consecutive dupes, cap to
-    // capacity) — no decryption yet.
+    // capacity), no decryption yet.
     final chosen = <RemoteClip>[];
     String? previousHash;
     for (final clip in sorted) {

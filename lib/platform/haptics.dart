@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 /// App haptics that actually fire on Samsung. Flutter's HapticFeedback.* maps
 /// to View.performHapticFeedback, which One UI gates behind system
-/// touch-vibration settings — so on Android we drive the Vibrator directly
+/// touch-vibration settings, so on Android we drive the Vibrator directly
 /// (MainActivity's clippy/haptics channel). Elsewhere, HapticFeedback.
 abstract class Haptics {
   static const _channel = MethodChannel('clippy/haptics');
@@ -26,7 +26,7 @@ abstract class Haptics {
         await _channel.invokeMethod<void>(method);
         return;
       } catch (_) {
-        // Channel missing (tests, odd embeddings) — fall through.
+        // Channel missing (tests, odd embeddings), fall through.
       }
     }
     await fallback();

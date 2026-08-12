@@ -26,7 +26,7 @@ class UpdateInfo {
   final String? macosUrl;
   final String? windowsUrl;
   // Expected SHA-256 (hex) of each artifact, from the CI-generated manifest.
-  // The updater refuses to install without a match — see downloadTo.
+  // The updater refuses to install without a match, see downloadTo.
   final String? androidSha256;
   final String? macosSha256;
   final String? windowsSha256;
@@ -73,7 +73,7 @@ class UpdateInfo {
     return build > currentBuild;
   }
 
-  /// A "bug update" has no new features — the changelog shows only
+  /// A "bug update" has no new features, the changelog shows only
   /// improvements and fixes.
   bool get isBugUpdate => features.isEmpty;
 }

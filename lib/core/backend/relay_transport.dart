@@ -15,12 +15,12 @@ class WebSocketRelayTransport implements RelayTransport {
   /// [pingInterval] keeps sync from going stale on a HALF-OPEN socket (Wi-Fi
   /// hop, NAT idle-timeout, wake-from-sleep): such a socket still looks
   /// connected but silently delivers nothing, so a clip / delete / clear-all
-  /// broadcast never arrives until TCP times out — minutes of stale history.
+  /// broadcast never arrives until TCP times out, minutes of stale history.
   /// With the ping, dart:io detects the dead socket and fires onDone, and the
   /// store reconnects + refreshes history. Note dart:io only requires a pong
   /// before the NEXT ping, so worst-case detection is up to ~2× the interval
   /// (~20s here), not ~10s. IOWebSocketChannel because ping frames need
-  /// dart:io — every Clippy target (macOS/Windows/Android) is dart:io; there
+  /// dart:io, every Clippy target (macOS/Windows/Android) is dart:io; there
   /// is no web build.
   WebSocketRelayTransport(Uri url)
       : _channel = IOWebSocketChannel.connect(

@@ -36,7 +36,7 @@ class ClippyApp extends StatelessWidget {
       builder: (context, mode, _) => MaterialApp(
         title: 'Clippy',
         debugShowCheckedModeBanner: false,
-        // Both themes are built once in theme.dart and shipped as equals —
+        // Both themes are built once in theme.dart and shipped as equals,
         // dark is hand-built there, not derived from a seed.
         theme: lightTheme,
         darkTheme: darkTheme,

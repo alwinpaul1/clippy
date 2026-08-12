@@ -8,7 +8,7 @@ import 'theme.dart';
 ///
 /// This screen is dark in BOTH themes and does not read `context.ck`. A camera
 /// preview needs a neutral dark frame to stay legible, and light chrome over a
-/// live viewfinder washes it out — so the canvas is the fixed [scannerBg] and
+/// live viewfinder washes it out, so the canvas is the fixed [scannerBg] and
 /// every mark on it is white. That is a deliberate exception to the app's
 /// theme-aware rule, not an oversight.
 class QrScannerPage extends StatefulWidget {
@@ -71,7 +71,7 @@ class _QrScannerPageState extends State<QrScannerPage> {
               ],
             ),
           ),
-          // Bottom chrome: the hint in a quiet chip, and a torch toggle —
+          // Bottom chrome: the hint in a quiet chip, and a torch toggle,
           // pairing regularly happens in the evening next to a laptop screen,
           // and a QR in the dark is exactly when a torch earns its place.
           Positioned(

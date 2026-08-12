@@ -31,7 +31,7 @@ void clippyServiceCallback() {
 
 class _BackgroundSyncHandler extends TaskHandler {
   // The service stays connected at ALL times (so there is zero handover gap
-  // when the app is swiped from Recents) — this timeout only decides who
+  // when the app is swiped from Recents), this timeout only decides who
   // WRITES the clipboard / scans screenshots: while the UI pings, it owns
   // those; when pings stop, this isolate takes them over. Sized to tolerate
   // two dropped heartbeats (see uiPingInterval below) before flipping.
@@ -49,7 +49,7 @@ class _BackgroundSyncHandler extends TaskHandler {
 
   // Epoch, not now(): until a heartbeat proves the UI isolate is alive,
   // assume it's dead (boot autostart). Worst case both isolates briefly apply
-  // the same incoming text — harmless; the reverse (neither applies) isn't.
+  // the same incoming text, harmless; the reverse (neither applies) isn't.
   DateTime _lastUiPing = DateTime.fromMillisecondsSinceEpoch(0);
   // Screenshot-scan floor. _lastUiPing can't serve: at boot it's the epoch,
   // and without this floor the first scan would upload the phone's ENTIRE
@@ -69,7 +69,7 @@ class _BackgroundSyncHandler extends TaskHandler {
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
-    // Connect immediately and stay connected — a copy made right after the
+    // Connect immediately and stay connected, a copy made right after the
     // app is swiped away must sync with no handover gap.
     unawaited(_ensureRunning());
   }
@@ -79,7 +79,7 @@ class _BackgroundSyncHandler extends TaskHandler {
     if (data == ForegroundServiceManager.uiAlivePing) {
       _lastUiPing = DateTime.now();
       // UI is alive and owns applying incoming clips, so drop any buffered
-      // one — keeping it risks re-applying a stale/superseded clip on a later
+      // one, keeping it risks re-applying a stale/superseded clip on a later
       // swipe-away.
       _skippedWhileUiAlive = null;
     }
@@ -90,19 +90,19 @@ class _BackgroundSyncHandler extends TaskHandler {
     unawaited(_ensureRunning()); // reconnect safety net
     // Drain clips the background AccessibilityService captured (the queue
     // watcher fires instantly; this tick is the fallback).
-    // Keep the disk bounded — UNCONDITIONALLY. Gating this on "my link is
+    // Keep the disk bounded. UNCONDITIONALLY. Gating this on "my link is
     // down" was a real bug: the queue also stops draining while CONNECTED if
-    // the engine is failing (prefs write, crypto, memory — the drain backs off
+    // the engine is failing (prefs write, crypto, memory, the drain backs off
     // and waits), and in exactly that state captures keep landing with nothing
     // pruning them, so the 200-file bound became dead code precisely when it
     // was needed. But run it AFTER our own drain, never beside it: fired side
     // by side, the pruner can win the race, see no drain heartbeat yet, and
-    // delete OLDEST-FIRST — exactly the batch the drain was about to take. (The
+    // delete OLDEST-FIRST, exactly the batch the drain was about to take. (The
     // OTHER isolate's drain is what the heartbeat protects against.)
     unawaited(_drainQueue().whenComplete(ClipQueue.enforceBound));
     if (!_uiAlive) {
       // A clip that arrived while the last heartbeat was stale (UI already
-      // dead but _uiTimeout not yet elapsed) was skipped, not lost — apply
+      // dead but _uiTimeout not yet elapsed) was skipped, not lost, apply
       // it now that the UI is confirmed gone.
       final skipped = _skippedWhileUiAlive;
       _skippedWhileUiAlive = null;
@@ -139,7 +139,7 @@ class _BackgroundSyncHandler extends TaskHandler {
   );
 
   /// Drain the queue the background AccessibilityService writes to. The failure
-  /// policy lives in [QueueDrainer] — see there for why a failure aborts rather
+  /// policy lives in [QueueDrainer], see there for why a failure aborts rather
   /// than burning through the batch.
   Future<void> _drainQueue() async {
     if (_engine == null || _store == null) return;
@@ -164,7 +164,7 @@ class _BackgroundSyncHandler extends TaskHandler {
       try {
         entries = dir.listSync();
       } catch (_) {
-        continue; // permission edge — the app-open path still covers it
+        continue; // permission edge, the app-open path still covers it
       }
       for (final e in entries) {
         if (e is! File) continue;
@@ -187,11 +187,11 @@ class _BackgroundSyncHandler extends TaskHandler {
         }
         try {
           final bytes = await e.readAsBytes();
-          if (bytes.isEmpty) continue; // still being written — retry next tick
+          if (bytes.isEmpty) continue; // still being written, retry next tick
           // Marked only once the read SUCCEEDED: marking up front meant a
           // transient failure (a MediaProvider hiccup, an OEM still
           // recompressing the file) blacklisted that screenshot for the life of
-          // the service — it would never sync, and nothing would ever say so.
+          // the service, it would never sync, and nothing would ever say so.
           _pushedShots.add(e.path);
           final (out, outMime) = ImageClipboard.prepareForRelay(bytes, mime: mime);
           final actions = await engine.onLocalImage(base64Encode(out), mime: outMime);
@@ -205,7 +205,7 @@ class _BackgroundSyncHandler extends TaskHandler {
             }
           }
         } catch (_) {
-          // Unreadable — leave it to the app-open capture.
+          // Unreadable, leave it to the app-open capture.
         }
       }
     }
@@ -216,7 +216,7 @@ class _BackgroundSyncHandler extends TaskHandler {
     _starting = true;
     try {
       final pairing = await const SecureKeyStore().load();
-      if (pairing == null) return; // not paired yet — nothing to sync
+      if (pairing == null) return; // not paired yet, nothing to sync
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload(); // long-lived isolate: skip stale caches
       _deviceName = await resolveDeviceName();
@@ -230,7 +230,7 @@ class _BackgroundSyncHandler extends TaskHandler {
       final store = WebSocketClipStore.connect(Uri.parse(relayUrl), roomToken);
       _store = store;
       // Subscribe BEFORE any await below: the join reply can land during
-      // those awaits, and a broadcast stream doesn't replay missed events —
+      // those awaits, and a broadcast stream doesn't replay missed events,
       // the "drain the moment we're back" promise would silently degrade to
       // the 10s tick.
       _connWatch = store.connected.listen((up) {
@@ -269,7 +269,7 @@ class _BackgroundSyncHandler extends TaskHandler {
       final queueEvents = await ClipQueue.watch();
       _queueWatch = queueEvents?.listen((_) => unawaited(_drainQueue()));
       // Catch-up: if the join reply landed during the awaits above, the
-      // connected event already fired — drain now rather than at the tick.
+      // connected event already fired, drain now rather than at the tick.
       if (store.isConnected) unawaited(_drainQueue());
     } finally {
       _starting = false;
@@ -296,7 +296,7 @@ class _BackgroundSyncHandler extends TaskHandler {
           await cb.write([item]);
         }
       } catch (_) {
-        // Background clipboard write failed — the clip stays in room
+        // Background clipboard write failed, the clip stays in room
         // history and applies on the next app open.
       }
     }
@@ -320,7 +320,7 @@ class _BackgroundSyncHandler extends TaskHandler {
 
 /// Runs an Android foreground service so Clippy keeps syncing when it isn't the
 /// active app (Android otherwise suspends a backgrounded app's network).
-/// No-op on non-Android platforms — desktop apps stay alive anyway.
+/// No-op on non-Android platforms, desktop apps stay alive anyway.
 class ForegroundServiceManager {
   /// Host-test override for the platform gate (same hook style as
   /// [ClipQueue.debugDir]): every method below early-returns off Android, so
@@ -329,7 +329,7 @@ class ForegroundServiceManager {
   static bool? debugIsAndroid;
 
   /// Clear the static machine between tests. Without this, one test's in-flight
-  /// poll or backoff counter silently disables the next one — a suite that
+  /// poll or backoff counter silently disables the next one, a suite that
   /// lies is worse than no suite.
   @visibleForTesting
   static void resetForTests() {
@@ -344,7 +344,7 @@ class ForegroundServiceManager {
   /// How many times the battery-exemption ask has fired (this process).
   /// Counted at the top of [_askBatteryExemption], BEFORE the plugin call:
   /// off Android the plugin answers "exempt" without touching the channel, so
-  /// host tests can only observe that start() decided to ask — which is
+  /// host tests can only observe that start() decided to ask, which is
   /// exactly the regression being pinned (the early-return path used to skip
   /// the decision entirely).
   @visibleForTesting
@@ -356,7 +356,7 @@ class ForegroundServiceManager {
   /// Heartbeat payload the UI isolate sends while it's alive.
   static const uiAlivePing = 'clippy.ui-alive';
 
-  /// Heartbeat cadence — coupled to the service's ownership timeout
+  /// Heartbeat cadence, coupled to the service's ownership timeout
   /// (_uiTimeout = 2 intervals + 2s), so tune them together, here.
   static const uiPingIntervalSeconds = 5;
   static const uiPingInterval = Duration(seconds: uiPingIntervalSeconds);
@@ -367,7 +367,7 @@ class ForegroundServiceManager {
     try {
       FlutterForegroundTask.sendDataToTask(uiAlivePing);
     } catch (_) {
-      // Service not up (yet) — the next ping catches it.
+      // Service not up (yet), the next ping catches it.
     }
   }
 
@@ -381,7 +381,7 @@ class ForegroundServiceManager {
             'Keeps your clipboard syncing across devices in the background.',
         onlyAlertOnce: true,
         // LOW, not MIN: Google discourages IMPORTANCE_MIN for a foreground
-        // service — it can backfire into a system-generated "battery usage"
+        // service, it can backfire into a system-generated "battery usage"
         // nag. LOW keeps it quiet (no sound/badge) and, since we never request
         // POST_NOTIFICATIONS, it stays hidden on Android 13+ regardless.
         channelImportance: NotificationChannelImportance.LOW,
@@ -393,7 +393,7 @@ class ForegroundServiceManager {
         eventAction: ForegroundTaskEventAction.repeat(10000),
         // NO partial wakelock. Measured on a real S23 overnight: the service
         // held ForegroundService:WakeLock for 5h34m of a 5h49m screen-off
-        // window, burning 37m of CPU and 110 mAh — second only to Instagram.
+        // window, burning 37m of CPU and 110 mAh, second only to Instagram.
         // It bought nothing: over the same 7h52m the radio was busy for 12s Rx
         // + 8s Tx (WiFi asleep 99.9% of the time). Incoming socket data wakes
         // the CPU on its own, and Clippy is on the battery-optimisation
@@ -405,7 +405,7 @@ class ForegroundServiceManager {
         // (the service isolate runs the receive loop until the app is opened).
         autoRunOnBoot: true,
         // ...and after an app update. Without this, every in-app update ended
-        // background sync until the user happened to open Clippy again — the
+        // background sync until the user happened to open Clippy again, the
         // process (and its service) dies with the package replace, and nothing
         // restarts it.
         autoRunOnMyPackageReplaced: true,
@@ -418,12 +418,12 @@ class ForegroundServiceManager {
 
   /// Whether the background service is actually up. The relay dot in the UI
   /// only reflects the UI isolate's OWN connection, so a dead service still
-  /// showed a green "Synced" — which is precisely why a six-hour outage went
+  /// showed a green "Synced", which is precisely why a six-hour outage went
   /// unnoticed for weeks. This is the honest signal.
   static final ValueNotifier<bool> backgroundSyncAlive = ValueNotifier(true);
 
   /// Bumped whenever the service's declared type changes. The plugin persists
-  /// serviceTypes in its OWN prefs and replays them on the next boot/restart —
+  /// serviceTypes in its OWN prefs and replays them on the next boot/restart,
   /// so an install carrying a stale type would restart with a type the manifest
   /// no longer declares, and the system kills the service (the very failure
   /// this type change fixes). A version mismatch forces one stop+start, which
@@ -432,7 +432,7 @@ class ForegroundServiceManager {
   //
   // Bump this for ANY ForegroundTaskOptions change, not just serviceTypes.
   // The plugin persists those options and only rewrites them on a stop/start,
-  // and _ensureRunning() returns early when a service is already running —
+  // and _ensureRunning() returns early when a service is already running,
   // so on an existing install the new options are simply never applied.
   // Shipping allowWakeLock:false in 1.0.43 changed nothing on a real device
   // for exactly this reason: autoRunOnMyPackageReplaced restarted the service
@@ -445,7 +445,7 @@ class ForegroundServiceManager {
   static int get serviceOptionsVersion => _serviceTypesVersion;
   static const _typesVersionKey = 'fgs_service_types_version';
 
-  /// Publish liveness, invalidating any health poll already in flight — its
+  /// Publish liveness, invalidating any health poll already in flight, its
   /// answer is older than this one and must not overwrite it.
   static void _publishAlive(bool alive) {
     _healthGen++;
@@ -461,7 +461,7 @@ class ForegroundServiceManager {
   ///
   /// The plugin does not throw either: start/stop return a ServiceRequestResult
   /// with the error folded inside, and they ALREADY wait (5s deadline) for the
-  /// service state to actually flip. Those results must therefore be CHECKED —
+  /// service state to actually flip. Those results must therefore be CHECKED,
   /// a stop that times out leaves the OLD service running, and asking
   /// `isRunningService` afterwards would answer "yes" about the very service we
   /// were trying to replace: we would record the migration as done and strand
@@ -470,9 +470,9 @@ class ForegroundServiceManager {
   /// only the app-launch path passes it. A poll-driven revive must never fire
   /// it: on a phone whose OEM keeps refusing the service, every retry would
   /// throw the dialog back in the user's face, and dismissing it resumes the
-  /// app, which polls, which retries, which opens it again — inescapable.
+  /// app, which polls, which retries, which opens it again, inescapable.
   /// Returns true if the service is up, false if the attempt failed, and NULL
-  /// if no attempt was made because one was already in flight — the caller must
+  /// if no attempt was made because one was already in flight, the caller must
   /// not score that as a failure (the resume path fires ensureRunning() and the
   /// health poll back to back, so it happens on every resume).
   static Future<bool?> start({bool askBatteryExemption = false}) async {
@@ -492,18 +492,18 @@ class ForegroundServiceManager {
           _publishAlive(true);
           // Do NOT skip the launch-path battery ask here. The service survives
           // swipe-away and reboots, so this early return is the COMMON launch
-          // path — returning before the ask below meant the exemption dialog
+          // path, returning before the ask below meant the exemption dialog
           // appeared exactly once ever (first install, mid-onboarding), and a
           // user who dismissed it that one time was never asked again. Without
           // the exemption, Doze suspends this process's network minutes after
           // the screen locks (foreground service or not) and Android 12+
-          // refuses the plugin's background restart alarm — "background sync
+          // refuses the plugin's background restart alarm, "background sync
           // doesn't work unless I open the app", reported on a Pixel 9 Pro +
           // Lenovo tab whose users had done everything Settings asked.
           if (askBatteryExemption) unawaited(_askBatteryExemption());
           return true;
         }
-        // Running under the old persisted type — stop it so the start below
+        // Running under the old persisted type, stop it so the start below
         // rewrites the options with the current one.
         final stopped = await FlutterForegroundTask.stopService();
         if (stopped is! ServiceRequestSuccess) {
@@ -517,8 +517,8 @@ class ForegroundServiceManager {
       final started = await FlutterForegroundTask.startService(
         serviceId: 4242,
         // specialUse, NOT dataSync: Android 15+ stops a dataSync service after
-        // 6 hours per 24h and then refuses to restart it — and bans it from
-        // BOOT_COMPLETED starts outright — so background sync died for the rest
+        // 6 hours per 24h and then refuses to restart it, and bans it from
+        // BOOT_COMPLETED starts outright, so background sync died for the rest
         // of the day AND after every reboot, and clips only moved when the app
         // was opened. Must stay in sync with android:foregroundServiceType in
         // the manifest (CI enforces it) AND with [_serviceTypesVersion] above.
@@ -528,14 +528,14 @@ class ForegroundServiceManager {
         callback: clippyServiceCallback,
       );
       final ok = started is ServiceRequestSuccess;
-      // Record the migration ONLY once the new service actually came up — a
+      // Record the migration ONLY once the new service actually came up, a
       // failed start must be retried next launch, not remembered as done.
       if (ok) await prefs.setInt(_typesVersionKey, _serviceTypesVersion);
       _publishAlive(ok);
       if (askBatteryExemption) unawaited(_askBatteryExemption());
       return ok;
     } catch (_) {
-      // Prefs/channel calls still throw — report, never break app init.
+      // Prefs/channel calls still throw, report, never break app init.
       _publishAlive(false);
       return false;
     } finally {
@@ -545,14 +545,14 @@ class ForegroundServiceManager {
 
   static bool _starting = false;
 
-  /// Ask to be exempted from battery optimization — the exemption is what lifts
+  /// Ask to be exempted from battery optimization, the exemption is what lifts
   /// the background-FGS-start restrictions, so the boot and package-replaced
   /// receivers can revive the service.
   ///
   /// NOT awaited by [start]: this opens a system dialog and the future only
   /// completes when the user answers it. Awaiting it inside start() stalls
-  /// ClipController.init() — which has not yet registered the lifecycle
-  /// observer or the health watch — for as long as that dialog is up, and if
+  /// ClipController.init(), which has not yet registered the lifecycle
+  /// observer or the health watch, for as long as that dialog is up, and if
   /// the user backgrounds Clippy from it, neither ever gets registered.
   ///
   /// (Deliberately NOT requesting notification permission, by contrast: Clippy
@@ -598,19 +598,19 @@ class ForegroundServiceManager {
 
   /// Watch the service's liveness WHILE the app is in the foreground. A kill
   /// can land at any moment (OEM battery manager, platform restriction), not
-  /// just while we were away — and [ensureRunning]'s resume-time check would
+  /// just while we were away, and [ensureRunning]'s resume-time check would
   /// leave the header claiming "Synced" until the next lifecycle transition,
   /// which is the same lie this whole change exists to stop telling.
   ///
   /// Also REPAIRS: a death found here is revived on the spot (the user is
   /// looking at the app, so "reopen Clippy" is not an instruction they can
-  /// follow). Retries back off exponentially — a system that is flatly refusing
-  /// the service must not be fought once per poll forever — and the revive
+  /// follow). Retries back off exponentially, a system that is flatly refusing
+  /// the service must not be fought once per poll forever, and the revive
   /// never asks for the battery exemption, whose system dialog would otherwise
   /// reappear on every attempt.
   static void startHealthWatch() {
     if (!_isAndroid || _healthTimer != null) return;
-    // Check immediately: re-arming (every focus regain — a pulled-down
+    // Check immediately: re-arming (every focus regain, a pulled-down
     // notification shade counts) restarts the interval from zero, so a
     // frequently-refocused app would otherwise never reach its first poll.
     unawaited(_pollHealth());
@@ -635,7 +635,7 @@ class ForegroundServiceManager {
       final alive = await FlutterForegroundTask.isRunningService
           .timeout(const Duration(seconds: 10));
       // Anything published while this call was in flight (a start(), a stop,
-      // a cancelled watch) is NEWER than this reading — never overwrite it.
+      // a cancelled watch) is NEWER than this reading, never overwrite it.
       if (gen != _healthGen) return;
       backgroundSyncAlive.value = alive;
       if (alive) {
@@ -643,7 +643,7 @@ class ForegroundServiceManager {
         _reviveSkips = 0; // a recovery must not leave a stale backoff budget
         return;
       }
-      // Don't just report the death — repair it. The user is LOOKING at the
+      // Don't just report the death, repair it. The user is LOOKING at the
       // app, so "open Clippy to sync" is not an instruction they can follow,
       // and without it the service stays dead for the whole foreground session
       // (resume-time ensureRunning never fires while the app never leaves
@@ -655,10 +655,10 @@ class ForegroundServiceManager {
       }
       // _polling stays TRUE across this await: start() never polls, and
       // releasing the guard here would let the next tick start a second poll
-      // whose finally then clears the flag out from under this one — the very
+      // whose finally then clears the flag out from under this one, the very
       // stacking the guard exists to prevent.
       final outcome = await start();
-      if (outcome == null) return; // a start was already in flight — not a failure
+      if (outcome == null) return; // a start was already in flight, not a failure
       if (outcome) {
         _reviveFailures = 0;
         _reviveSkips = 0;

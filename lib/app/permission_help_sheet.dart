@@ -8,7 +8,7 @@ import 'theme.dart';
 /// Since Android 13, apps installed outside the Play Store (Clippy is a
 /// sideloaded APK) have their Accessibility and display-over-apps toggles
 /// blocked behind an "App was denied access" dialog. There is no way for an app
-/// to bypass it — the user must open App info → ⋮ → "Allow restricted settings"
+/// to bypass it, the user must open App info → ⋮ → "Allow restricted settings"
 /// once. This sheet walks them through that instead of dropping them cold into
 /// Settings where the flow dead-ends. Text-only steps so it holds across
 /// phone brands.
@@ -68,7 +68,7 @@ class _PermissionHelpSheet extends StatelessWidget {
             const SizedBox(height: 12),
             // The explainer scrolls; the two buttons stay pinned. `whatFor` is
             // caller-supplied and the steps are long, so on a short screen this
-            // Column used to overflow rather than scroll — the sheet was built
+            // Column used to overflow rather than scroll, the sheet was built
             // as a fixed min-height Column and had no give at all.
             Flexible(
               child: SingleChildScrollView(
@@ -103,7 +103,8 @@ class _PermissionHelpSheet extends StatelessWidget {
                               c),
                           _Step(
                               3,
-                              "Come back and turn the toggle on — it'll stick.",
+                              'Come back and turn the toggle on. It will '
+                              'stick this time.',
                               c,
                               last: true),
                         ],
@@ -156,8 +157,8 @@ class _PermissionHelpSheet extends StatelessWidget {
   }
 }
 
-/// One step on a connected rail: the numbered badge, and — until the last
-/// step — a thin line running down to the next badge. The line is what makes
+/// One step on a connected rail: the numbered badge, and, until the last
+/// step, a thin line running down to the next badge. The line is what makes
 /// three sentences read as ONE procedure with an order, not three tips.
 class _Step extends StatelessWidget {
   final int n;
