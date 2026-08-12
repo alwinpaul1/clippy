@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -111,12 +112,51 @@ class MainActivity : FlutterActivity() {
                     ) ?: "").split(':')
                         .mapNotNull { ComponentName.unflattenFromString(it) }
                         .any { it == svc }
+                    // Battery exemption is the THIRD leg background sync stands
+                    // on: without it Doze suspends the process's network minutes
+                    // after the screen locks (foreground service or not), and on
+                    // Android 12+ the plugin's restart alarm can't bring a killed
+                    // service back from the background. The Settings screen
+                    // shows it as step 3 so "I did everything the app asked"
+                    // actually covers it.
+                    val pm = getSystemService(POWER_SERVICE) as PowerManager
                     result.success(
                         mapOf(
                             "enabled" to enabled,
                             "overlay" to Settings.canDrawOverlays(this),
+                            "battery" to pm.isIgnoringBatteryOptimizations(packageName),
                         ),
                     )
+                }
+                // Ask to be exempted from battery optimisation ("Allow
+                // background usage"). Already exempt → open the system list so
+                // the user can review/revoke it, mirroring how the other two
+                // rows open their settings once granted.
+                "requestBatteryExemption" -> {
+                    val pm = getSystemService(POWER_SERVICE) as PowerManager
+                    if (pm.isIgnoringBatteryOptimizations(packageName)) {
+                        startActivity(
+                            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    } else {
+                        try {
+                            startActivity(
+                                Intent(
+                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                    Uri.parse("package:$packageName"),
+                                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        } catch (_: Exception) {
+                            // Some OEM builds don't handle the direct dialog —
+                            // fall back to the list (user finds Clippy there).
+                            startActivity(
+                                Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        }
+                    }
+                    result.success(null)
                 }
                 "openA11ySettings" -> {
                     startActivity(

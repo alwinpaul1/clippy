@@ -1,6 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Event types: the copy triggers only. typeNotificationStateChanged is the
+     Samsung "Copied to clipboard." toast; typeAnnouncement and
+     typeWindowStateChanged are how Pixel's (Android 13+) SystemUI clipboard
+     overlay shows up — it posts NO toast, so without these the service never
+     hears about a copy on stock Android.
+
+     packageNames narrows delivery to com.android.systemui AT THE FRAMEWORK:
+     every code gate in ClipboardA11yService already requires that exact
+     package (including the S23-verified toast path — its event demonstrably
+     arrives AS systemui, or the in-code gate would have blocked the verified
+     fix), so this drops the same events one binder hop earlier and the
+     service stops being woken by every window change on the device. Loosen
+     BOTH this filter and the code gates together if an OEM's copy signal ever
+     turns out to come from another package. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeNotificationStateChanged"
+    android:accessibilityEventTypes="typeNotificationStateChanged|typeAnnouncement|typeWindowStateChanged"
+    android:packageNames="com.android.systemui"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagDefault"
     android:canRetrieveWindowContent="false"

@@ -338,7 +338,17 @@ class ForegroundServiceManager {
     _starting = false;
     _reviveFailures = 0;
     _reviveSkips = 0;
+    batteryExemptionAsks = 0;
   }
+
+  /// How many times the battery-exemption ask has fired (this process).
+  /// Counted at the top of [_askBatteryExemption], BEFORE the plugin call:
+  /// off Android the plugin answers "exempt" without touching the channel, so
+  /// host tests can only observe that start() decided to ask — which is
+  /// exactly the regression being pinned (the early-return path used to skip
+  /// the decision entirely).
+  @visibleForTesting
+  static int batteryExemptionAsks = 0;
 
   static bool get _isAndroid =>
       debugIsAndroid ?? (!kIsWeb && Platform.isAndroid);
@@ -480,6 +490,17 @@ class ForegroundServiceManager {
           .timeout(const Duration(seconds: 10))) {
         if (!stale) {
           _publishAlive(true);
+          // Do NOT skip the launch-path battery ask here. The service survives
+          // swipe-away and reboots, so this early return is the COMMON launch
+          // path — returning before the ask below meant the exemption dialog
+          // appeared exactly once ever (first install, mid-onboarding), and a
+          // user who dismissed it that one time was never asked again. Without
+          // the exemption, Doze suspends this process's network minutes after
+          // the screen locks (foreground service or not) and Android 12+
+          // refuses the plugin's background restart alarm — "background sync
+          // doesn't work unless I open the app", reported on a Pixel 9 Pro +
+          // Lenovo tab whose users had done everything Settings asked.
+          if (askBatteryExemption) unawaited(_askBatteryExemption());
           return true;
         }
         // Running under the old persisted type — stop it so the start below
@@ -538,6 +559,7 @@ class ForegroundServiceManager {
   /// posts no real notifications, and on Android 13+ an FGS whose app lacks the
   /// permission runs fine with its required notification simply never shown.)
   static Future<void> _askBatteryExemption() async {
+    batteryExemptionAsks++;
     try {
       if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
         await FlutterForegroundTask.requestIgnoreBatteryOptimization();

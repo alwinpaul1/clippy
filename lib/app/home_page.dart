@@ -38,18 +38,15 @@ class HomePage extends StatelessWidget {
     required this.onUnpair,
   });
 
+  /// One snackbar for the whole screen. The chip and its label both come from
+  /// the theme's `snackBarTheme`, which uses the M3 inverse pair — so the label
+  /// flips with the theme instead of being pinned to one palette's light value.
   static void snack(BuildContext context, String text) {
-    final c = context.ck;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text(text, style: Ct.body(13.5, color: Ck.bg)),
-          backgroundColor: c.snack,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
+          content: Text(text),
           margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         ),
       );
@@ -72,10 +69,10 @@ class HomePage extends StatelessWidget {
     final payload = pairing.toQrPayload();
     showDialog<void>(
       context: context,
-      barrierColor: const Color(0x731E1C15),
+      barrierColor: const Color(0x8C15131A),
       builder: (context) => Dialog(
         backgroundColor: c.dialogBg,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         child: Padding(
           padding: const EdgeInsets.all(26),
           child: Column(
@@ -91,63 +88,40 @@ class HomePage extends StatelessWidget {
               const SizedBox(height: 16),
               Center(
                 child: Container(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
+                    // True white in both themes — a QR needs a real white
+                    // quiet zone to scan reliably.
                     color: Colors.white,
                     border: Border.all(color: c.border),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(22),
                   ),
                   child: QrImageView(data: payload, size: 150),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 13,
-                  vertical: 11,
+                  horizontal: 16,
+                  vertical: 13,
                 ),
                 decoration: BoxDecoration(
                   color: c.bg,
-                  border: Border.all(color: c.border),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(payload, style: Ct.mono(12, color: c.muted2)),
               ),
               const SizedBox(height: 18),
-              Material(
-                color: c.green,
-                borderRadius: BorderRadius.circular(12),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: payload));
-                    Navigator.pop(context);
-                    snack(context, 'Key copied');
-                  },
-                  child: Container(
-                    height: 48,
-                    alignment: Alignment.center,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.content_copy_outlined,
-                          size: 16,
-                          color: c.isDark ? c.bg : Ck.bg,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Copy key',
-                          style: Ct.body(
-                            14,
-                            weight: FontWeight.w500,
-                            color: c.isDark ? c.bg : Ck.bg,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+              // Styled by the filled-button theme, which carries the brand
+              // fill and its matching foreground for both themes.
+              FilledButton.icon(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: payload));
+                  Navigator.pop(context);
+                  snack(context, 'Key copied');
+                },
+                icon: const Icon(Icons.copy_rounded, size: ClipIcons.inline),
+                label: const Text('Copy key'),
               ),
             ],
           ),
@@ -167,7 +141,7 @@ class HomePage extends StatelessWidget {
           listenable: controller,
           builder: (context, _) {
             if (!controller.ready) {
-              return Center(child: CircularProgressIndicator(color: c.green));
+              return Center(child: CircularProgressIndicator(color: c.accent));
             }
             return _HomeBody(
               controller: controller,
@@ -355,24 +329,20 @@ class _HomeBodyState extends State<_HomeBody> {
     final c = context.ck;
     return showDialog<bool>(
       context: context,
-      barrierColor: const Color(0x731E1C15),
+      barrierColor: const Color(0x8C15131A),
       builder: (context) => Dialog(
         backgroundColor: c.dialogBg,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         child: Padding(
           padding: const EdgeInsets.all(26),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: c.rust.withValues(alpha: 0.14),
-                ),
-                child: Icon(Icons.delete_outline, color: c.rust, size: 22),
+              GlyphPlate(
+                icon: Icons.delete_rounded,
+                base: Theme.of(context).colorScheme.error,
+                size: 44,
               ),
               const SizedBox(height: 14),
               Text(title, style: Ct.title(22, color: c.ink)),
@@ -404,7 +374,9 @@ class _HomeBodyState extends State<_HomeBody> {
                     onPressed: () => Navigator.pop(context, true),
                     child: Text(
                       action,
-                      style: Ct.body(14, weight: FontWeight.w500, color: Ck.bg),
+                      style: Ct.body(14,
+                          weight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onError),
                     ),
                   ),
                 ],
@@ -429,7 +401,7 @@ class _HomeBodyState extends State<_HomeBody> {
       children: [
         Positioned.fill(
           child: items.isEmpty
-              ? const _EmptyState()
+              ? _EmptyState(onAddDevice: widget.onDevices)
               : _HistoryList(
                   items: items,
                   topInset: (_selecting ? 76 : 122) +
@@ -449,27 +421,47 @@ class _HomeBodyState extends State<_HomeBody> {
           top: 0,
           left: 0,
           right: 0,
-          child: _selecting
-              ? _SelectionBar(
-                  count: _selected.length,
-                  onClose: _exitSelection,
-                  onSelectAll: () => _selectAll(items),
-                  onDelete: () => _deleteSelected(items),
-                )
-              : _GlassHeader(
-                  reconnecting: reconnecting,
-                  showClearAll: items.isNotEmpty,
-                  showCollapseAll:
-                      items.map(_deviceKey).toSet().length > 1,
-                  allCollapsed: items.isNotEmpty &&
-                      _collapsedDevices.length >=
-                          items.map(_deviceKey).toSet().length,
-                  onToggleCollapseAll: () => _toggleAllDevices(items),
-                  onDevices: widget.onDevices,
-                  onSettings: widget.onSettings,
-                  onUnpair: widget.onUnpair,
-                  onClearAll: _clearAll,
-                ),
+          // Selection is a MODE — the bar swap announces it. A short fade +
+          // drop makes the mode change legible without slowing anyone down;
+          // this is the "containers may enter" budget, spent once.
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, anim) => FadeTransition(
+              opacity: anim,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, -0.06),
+                  end: Offset.zero,
+                ).animate(anim),
+                child: child,
+              ),
+            ),
+            child: _selecting
+                ? _SelectionBar(
+                    key: const ValueKey('selection-bar'),
+                    count: _selected.length,
+                    onClose: _exitSelection,
+                    onSelectAll: () => _selectAll(items),
+                    onDelete: () => _deleteSelected(items),
+                  )
+                : _GlassHeader(
+                    key: const ValueKey('glass-header'),
+                    reconnecting: reconnecting,
+                    showClearAll: items.isNotEmpty,
+                    showCollapseAll:
+                        items.map(_deviceKey).toSet().length > 1,
+                    allCollapsed: items.isNotEmpty &&
+                        _collapsedDevices.length >=
+                            items.map(_deviceKey).toSet().length,
+                    onToggleCollapseAll: () => _toggleAllDevices(items),
+                    onDevices: widget.onDevices,
+                    onSettings: widget.onSettings,
+                    onUnpair: widget.onUnpair,
+                    onClearAll: _clearAll,
+                  ),
+          ),
         ),
         // Screenshot auto-sync can't work with "Select photos" (partial) or
         // denied photo access — a transient snackbar was too easy to miss, so
@@ -529,46 +521,18 @@ class _BgSyncOffBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ck;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
-      decoration: BoxDecoration(
-        color: c.surface,
-        border: Border.all(color: c.rust.withValues(alpha: 0.45)),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.10),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
+    return _WarnBanner(
+      icon: Icons.sync_problem_rounded,
+      message: 'Background sync turned off — the last update reset it.',
+      onFix: () => showPermissionHelpSheet(
+        context,
+        title: 'Enable background sync',
+        whatFor: "Android switches this off whenever Clippy updates. "
+            'Turn it back on and copies will sync again while the app '
+            'is closed.',
+        onOpenSettings: ShareChannel.openA11ySettings,
       ),
-      child: Row(
-        children: [
-          Icon(Icons.sync_problem, size: 18, color: c.rust),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Background sync turned off — the last update reset it.',
-              style: Ct.body(12.5, color: c.ink, height: 1.35),
-            ),
-          ),
-          TextButton(
-            onPressed: () => showPermissionHelpSheet(
-              context,
-              title: 'Enable background sync',
-              whatFor: "Android switches this off whenever Clippy updates. "
-                  'Turn it back on and copies will sync again while the app '
-                  'is closed.',
-              onOpenSettings: ShareChannel.openA11ySettings,
-            ),
-            child: Text(
-              'Fix',
-              style: Ct.body(13.5, weight: FontWeight.w600, color: c.green),
-            ),
-          ),
-        ],
-      ),
+      c: c,
     );
   }
 }
@@ -577,35 +541,52 @@ class _ShotAccessBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ck;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
-      decoration: BoxDecoration(
-        color: c.surface,
-        border: Border.all(color: c.rust.withValues(alpha: 0.45)),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.10),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return _WarnBanner(
+      icon: Icons.screenshot_monitor_rounded,
+      message: "Screenshots won't sync — Clippy needs full photo access.",
+      onFix: ShareChannel.openPhotoSettings,
+      c: c,
+    );
+  }
+}
+
+/// The one pinned-warning shape. Both warnings on this screen were the same
+/// 40 lines with two words changed, so they are one widget now — the next
+/// warning inherits the treatment instead of copying it a third time.
+///
+/// The error tint carries the alarm, so the surface stays the ordinary card:
+/// a fully red banner over the list reads as a crash, and neither of these
+/// states is one. The clip list keeps working while they show.
+class _WarnBanner extends StatelessWidget {
+  final IconData icon;
+  final String message;
+  final VoidCallback onFix;
+  final ClippyColors c;
+  const _WarnBanner({
+    required this.icon,
+    required this.message,
+    required this.onFix,
+    required this.c,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ClipCard(
+      radius: 20,
+      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
       child: Row(
         children: [
-          Icon(Icons.screenshot_monitor, size: 18, color: c.rust),
-          const SizedBox(width: 10),
+          GlyphPlate(icon: icon, base: scheme.error, size: 32),
+          const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              "Screenshots won't sync — Clippy needs full photo access.",
-              style: Ct.body(12.5, color: c.ink, height: 1.35),
-            ),
+            child: Text(message, style: Ct.body(12.5, color: c.ink)),
           ),
           TextButton(
-            onPressed: ShareChannel.openPhotoSettings,
+            onPressed: onFix,
             child: Text(
               'Fix',
-              style: Ct.body(13.5, weight: FontWeight.w600, color: c.green),
+              style: Ct.body(13.5, weight: FontWeight.w700, color: c.accent),
             ),
           ),
         ],
@@ -625,6 +606,7 @@ class _GlassHeader extends StatelessWidget {
   final Future<void> Function() onUnpair;
   final VoidCallback onClearAll;
   const _GlassHeader({
+    super.key,
     required this.reconnecting,
     required this.showClearAll,
     required this.showCollapseAll,
@@ -670,6 +652,11 @@ class _GlassHeader extends StatelessWidget {
             children: [
               Row(
                 children: [
+                  // The header mark and wordmark are kept from the previous
+                  // design at the owner's request: the mascot is plain INK,
+                  // not the brand violet, and the wordmark keeps its serif.
+                  // The violet system runs everywhere else; this one bar is
+                  // the app's own signature and it stays as it was.
                   AnimatedClippyMark(
                     height: 40,
                     clipHex: c.hex(c.ink),
@@ -678,22 +665,22 @@ class _GlassHeader extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text('Clippy', style: Ct.title(27, color: c.ink)),
+                    child: Text('Clippy', style: Ct.wordmark(27, color: c.ink)),
                   ),
                   _HeaderIcon(
-                    icon: Icons.devices_outlined,
+                    icon: Icons.devices_rounded,
                     tooltip: 'Add another device',
                     color: c.ink,
                     onTap: onDevices,
                   ),
                   _HeaderIcon(
-                    icon: Icons.settings_outlined,
+                    icon: Icons.settings_rounded,
                     tooltip: 'Settings',
                     color: c.ink,
                     onTap: onSettings,
                   ),
                   _HeaderIcon(
-                    icon: Icons.logout,
+                    icon: Icons.logout_rounded,
                     tooltip: 'Unpair this device',
                     color: c.ink,
                     onTap: () => onUnpair(),
@@ -728,7 +715,7 @@ class _GlassHeader extends StatelessWidget {
                                 width: 8,
                                 height: 8,
                                 decoration: BoxDecoration(
-                                  color: warn ? c.rust : c.green,
+                                  color: warn ? c.rust : c.syncOk,
                                   shape: BoxShape.circle,
                                 ),
                               ),
@@ -758,7 +745,12 @@ class _GlassHeader extends StatelessWidget {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            border: Border.all(color: c.border),
+                            // borderStrong (M3 `outline`), NOT border
+                            // (`outlineVariant`): this hairline is the ONLY
+                            // thing that draws this control's boundary, so
+                            // WCAG 1.4.11 wants 3:1 and outlineVariant is
+                            // ~1.4:1 on these surfaces. See docs/DESIGN.md.
+                            border: Border.all(color: c.borderStrong),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
@@ -766,8 +758,8 @@ class _GlassHeader extends StatelessWidget {
                             children: [
                               Icon(
                                 allCollapsed
-                                    ? Icons.unfold_more
-                                    : Icons.unfold_less,
+                                    ? Icons.unfold_more_rounded
+                                    : Icons.unfold_less_rounded,
                                 size: 14,
                                 color: c.muted2,
                               ),
@@ -796,14 +788,19 @@ class _GlassHeader extends StatelessWidget {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            border: Border.all(color: c.border),
+                            // borderStrong (M3 `outline`), NOT border
+                            // (`outlineVariant`): this hairline is the ONLY
+                            // thing that draws this control's boundary, so
+                            // WCAG 1.4.11 wants 3:1 and outlineVariant is
+                            // ~1.4:1 on these surfaces. See docs/DESIGN.md.
+                            border: Border.all(color: c.borderStrong),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                Icons.delete_outline,
+                                Icons.delete_rounded,
                                 size: 14,
                                 color: c.rust,
                               ),
@@ -837,6 +834,7 @@ class _SelectionBar extends StatelessWidget {
   final VoidCallback onSelectAll;
   final VoidCallback onDelete;
   const _SelectionBar({
+    super.key,
     required this.count,
     required this.onClose,
     required this.onSelectAll,
@@ -846,31 +844,36 @@ class _SelectionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ck;
-    return Material(
-      color: c.green,
-      elevation: 2,
+    // The gradient's other appearance in the app. Selection is a mode, not a
+    // decoration: the whole bar changing to the brand is what tells you the
+    // list now behaves differently.
+    return DecoratedBox(
+      decoration: const BoxDecoration(gradient: brandGradient),
+      // No SafeArea here: HomePage's body already sits inside one, so the top
+      // inset is spent by the time this bar is built.
       child: SizedBox(
         height: 64,
         child: Row(
           children: [
             IconButton(
-              icon: Icon(Icons.close, color: Ck.bg, size: 22),
+              tooltip: 'Leave selection',
+              icon: Icon(Icons.close_rounded, color: c.onBrand, size: ClipIcons.nav),
               onPressed: onClose,
             ),
             Expanded(
               child: Text(
                 '$count selected',
-                style: Ct.body(20, weight: FontWeight.w500, color: Ck.bg),
+                style: Ct.title(19, color: c.onBrand),
               ),
             ),
             IconButton(
               tooltip: 'Select all',
-              icon: Icon(Icons.done_all, color: Ck.bg, size: 22),
+              icon: Icon(Icons.done_all_rounded, color: c.onBrand, size: ClipIcons.nav),
               onPressed: onSelectAll,
             ),
             IconButton(
               tooltip: 'Delete selected',
-              icon: Icon(Icons.delete_outline, color: Ck.bg, size: 22),
+              icon: Icon(Icons.delete_rounded, color: c.onBrand, size: ClipIcons.nav),
               onPressed: count == 0 ? null : onDelete,
             ),
           ],
@@ -942,56 +945,30 @@ class _HistoryList extends StatelessWidget {
         l.map((i) => i.timestamp).reduce((a, b) => a.isAfter(b) ? a : b);
     final devices = byDevice.keys.toList()
       ..sort((a, b) => newestOf(byDevice[b]!).compareTo(newestOf(byDevice[a]!)));
-    final c = context.ck;
     for (final device in devices) {
       final clips = byDevice[device]!
         ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
       final collapsed = collapsedDevices.contains(device);
-      // Tappable device header: chevron rotates, clip count shown; tapping
-      // folds the group so a big recent group doesn't bury the others.
       children.add(
-        Padding(
-          padding: EdgeInsets.only(
-            top: device == devices.first ? 8 : 18,
-            bottom: 2,
-          ),
-          child: InkWell(
-            onTap: () => onToggleDevice(device),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Row(
-                children: [
-                  AnimatedRotation(
-                    turns: collapsed ? -0.25 : 0,
-                    duration: const Duration(milliseconds: 180),
-                    child: Icon(Icons.keyboard_arrow_down,
-                        size: 18, color: c.muted),
-                  ),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      device.toUpperCase(),
-                      style: Ct.sectionLabel().copyWith(color: c.muted),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text('${clips.length}',
-                      style: Ct.mono(11, color: c.muted2)),
-                ],
-              ),
-            ),
-          ),
+        _DeviceHeader(
+          device: device,
+          count: clips.length,
+          collapsed: collapsed,
+          first: device == devices.first,
+          onTap: () => onToggleDevice(device),
         ),
       );
       if (collapsed) continue;
       for (final item in clips) {
         children.add(
-          _ClipCard(
+          _ClipTile(
             key: ValueKey(item.hash),
             item: item,
+            // The single newest clip in the whole list gets the hero
+            // treatment: it is the clip the user opened the app to paste.
+            // Groups are newest-first, so it is the first row of the first
+            // group — same list slot, same interactions, larger clothes.
+            latest: device == devices.first && item == clips.first,
             selecting: selecting,
             selected: selected.contains(item.hash),
             onTap: () => selecting ? onToggle(item) : onPreview(item),
@@ -1011,23 +988,108 @@ class _HistoryList extends StatelessWidget {
       ),
       itemCount: children.length,
       separatorBuilder: (_, i) =>
-          SizedBox(height: children[i] is _ClipCard ? 10 : 0),
+          SizedBox(height: children[i] is _ClipTile ? 10 : 0),
       itemBuilder: (_, i) => children[i],
     );
   }
 }
 
-class _ClipCard extends StatelessWidget {
+/// A device group's header, redesigned from a bare ALL-CAPS label into an
+/// identity object: the device's tinted circle mark (platform glyph, letter
+/// fallback), its name, a count pill, and the fold chevron moved to the
+/// trailing edge where disclosure lives. The mark's colour is the same one
+/// the group's clip rows repeat on their kind plates — colour says WHERE,
+/// glyph says WHAT.
+class _DeviceHeader extends StatelessWidget {
+  final String device;
+  final int count;
+  final bool collapsed;
+  final bool first;
+  final VoidCallback onTap;
+  const _DeviceHeader({
+    required this.device,
+    required this.count,
+    required this.collapsed,
+    required this.first,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ck;
+    final scheme = Theme.of(context).colorScheme;
+    final glyph = deviceGlyph(device);
+    final letter = device.trim().isEmpty ? '?' : device.trim()[0].toUpperCase();
+    return Padding(
+      padding: EdgeInsets.only(top: first ? 8 : 18, bottom: 2),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+          child: Row(
+            children: [
+              GlyphPlate(
+                icon: glyph,
+                letter: glyph == null ? letter : null,
+                base: deviceTint(scheme, device),
+                size: 26,
+                circle: true,
+              ),
+              const SizedBox(width: 9),
+              Flexible(
+                child: Text(
+                  device,
+                  style: Ct.body(13, weight: FontWeight.w700, color: c.ink),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text('$count', style: Ct.mono(11, color: c.muted2)),
+              ),
+              const Spacer(),
+              AnimatedRotation(
+                turns: collapsed ? -0.25 : 0,
+                duration: const Duration(milliseconds: 180),
+                child: Icon(Icons.keyboard_arrow_down_rounded,
+                    size: 18, color: c.muted),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A clip row as a designed object, not a row of Text: a leading mark that
+/// says what the clip IS (image thumbnail, or a kind glyph on a plate tinted
+/// with the source device's colour), a two-line preview, a legible meta line
+/// (kind · size · age), and a copy button that confirms with a tick.
+///
+/// The single newest clip in the list renders with `latest: true`: a bigger
+/// preview, a LATEST chip, and a 24 radius. It is the reason the app was
+/// opened — the hierarchy should say so.
+class _ClipTile extends StatelessWidget {
   final HistoryItem item;
+  final bool latest;
   final bool selecting;
   final bool selected;
   final VoidCallback onTap;
   final VoidCallback onCopy;
   final VoidCallback onLongPress;
   final VoidCallback onDelete;
-  const _ClipCard({
+  const _ClipTile({
     super.key,
     required this.item,
+    required this.latest,
     required this.selecting,
     required this.selected,
     required this.onTap,
@@ -1039,93 +1101,91 @@ class _ClipCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ck;
-    final card = Material(
-      color: selected ? c.selBg : c.surface,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        onLongPress: onLongPress,
-        child: Ink(
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: selected ? c.green : c.border,
-              width: selected ? 2 : 1,
-            ),
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: c.isDark || selected
-                ? null
-                : const [
-                    BoxShadow(
-                      color: Color(0x0A1E1C15),
-                      blurRadius: 2,
-                      offset: Offset(0, 1),
-                    ),
-                  ],
-          ),
-          padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              if (selecting) ...[
-                _Check(selected: selected),
-                const SizedBox(width: 13),
-              ],
-              if (item.isImage && item.imageBytes != null) ...[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.memory(
-                    item.imageBytes!,
-                    width: 46,
-                    height: 46,
-                    fit: BoxFit.cover,
-                    cacheWidth: 128,
-                    gaplessPlayback: true,
-                  ),
-                ),
-                const SizedBox(width: 13),
-              ],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      item.isImage ? 'Image' : item.text,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: (!item.isImage && _looksLikeCode(item.text))
-                          ? Ct.mono(14, color: c.ink, weight: FontWeight.w500)
-                          : Ct.body(15, weight: FontWeight.w500, color: c.ink),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(_meta(item), style: Ct.mono(11, color: c.muted)),
-                  ],
-                ),
+    final scheme = Theme.of(context).colorScheme;
+    final kind = _kindOf(item);
+    final thumb = item.isImage && item.imageBytes != null;
+    final thumbSide = latest ? 64.0 : 46.0;
+    final card = ClipCard(
+      radius: latest ? 24 : 20,
+      color: selected ? c.selBg : null,
+      highlighted: selected,
+      onTap: onTap,
+      onLongPress: onLongPress,
+      padding: EdgeInsets.fromLTRB(16, latest ? 16 : 14, 14, latest ? 16 : 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (selecting) ...[
+            _Check(selected: selected),
+            const SizedBox(width: 13),
+          ],
+          if (thumb) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(latest ? 14 : 12),
+              child: Image.memory(
+                item.imageBytes!,
+                width: thumbSide,
+                height: thumbSide,
+                fit: BoxFit.cover,
+                cacheWidth: 128,
+                gaplessPlayback: true,
               ),
-              if (!selecting) ...[
-                const SizedBox(width: 14),
-                GestureDetector(
-                  onTap: onCopy,
-                  behavior: HitTestBehavior.opaque,
-                  child: Container(
-                    width: 34,
-                    height: 34,
+            ),
+            const SizedBox(width: 13),
+          ] else ...[
+            GlyphPlate(
+              icon: _kindGlyph(kind),
+              base: deviceTint(scheme, item.device),
+              size: 40,
+            ),
+            const SizedBox(width: 13),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (latest) ...[
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: c.border),
+                      color:
+                          c.accent.withValues(alpha: c.isDark ? 0.22 : 0.12),
+                      borderRadius: BorderRadius.circular(7),
                     ),
-                    child: Icon(
-                      Icons.content_copy_outlined,
-                      size: 15,
-                      color: c.green,
+                    child: Text(
+                      'LATEST',
+                      style: TextStyle(
+                        fontFamily: appFontFamily,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.9,
+                        color: c.accent,
+                      ),
                     ),
                   ),
+                  const SizedBox(height: 7),
+                ],
+                Text(
+                  item.isImage ? 'Image' : item.text,
+                  maxLines: latest ? 3 : 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: kind == _ClipKind.code
+                      ? Ct.mono(14, color: c.ink)
+                      : Ct.body(latest ? 15.5 : 15,
+                          weight: FontWeight.w500, color: c.ink),
                 ),
+                const SizedBox(height: 5),
+                Text(_meta(item, kind), style: Ct.mono(11, color: c.muted)),
               ],
-            ],
+            ),
           ),
-        ),
+          if (!selecting) ...[
+            const SizedBox(width: 14),
+            _CopyButton(onCopy: onCopy),
+          ],
+        ],
       ),
     );
 
@@ -1148,9 +1208,10 @@ class _ClipCard extends StatelessWidget {
         padding: const EdgeInsets.only(right: 22),
         decoration: BoxDecoration(
           color: c.rust,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(latest ? 24 : 20),
         ),
-        child: Icon(Icons.delete_outline, color: Ck.bg, size: 20),
+        child: Icon(Icons.delete_rounded,
+            color: Theme.of(context).colorScheme.onError, size: 20),
       ),
       confirmDismiss: (_) async {
         onDelete();
@@ -1161,60 +1222,159 @@ class _ClipCard extends StatelessWidget {
   }
 }
 
+/// The row's copy affordance. Tapping flashes a tick for a moment — the copy
+/// happens instantly and invisibly, so the button itself is the one place
+/// that can confirm it happened. Motion budget: 180 ms, one icon.
+class _CopyButton extends StatefulWidget {
+  final VoidCallback onCopy;
+  const _CopyButton({required this.onCopy});
+
+  @override
+  State<_CopyButton> createState() => _CopyButtonState();
+}
+
+class _CopyButtonState extends State<_CopyButton> {
+  Timer? _reset;
+  bool _copied = false;
+
+  @override
+  void dispose() {
+    _reset?.cancel();
+    super.dispose();
+  }
+
+  void _tap() {
+    widget.onCopy();
+    setState(() => _copied = true);
+    _reset?.cancel();
+    _reset = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ck;
+    return Tooltip(
+      message: 'Copy',
+      child: GestureDetector(
+        onTap: _tap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: c.accent.withValues(alpha: c.isDark ? 0.18 : 0.09),
+          ),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            transitionBuilder: (child, anim) =>
+                ScaleTransition(scale: anim, child: child),
+            child: Icon(
+              _copied ? Icons.check_rounded : Icons.copy_rounded,
+              key: ValueKey(_copied),
+              size: ClipIcons.inline,
+              color: c.accent,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Check extends StatelessWidget {
   final bool selected;
   const _Check({required this.selected});
   @override
   Widget build(BuildContext context) {
     final c = context.ck;
+    // A FILLED brand chip, so it takes the same fill the filled buttons take —
+    // not `c.accent`, which is the lighter INK violet in dark mode and would
+    // leave a white tick at roughly 2:1 on it.
+    final fill =
+        c.isDark ? primaryFillDark : Theme.of(context).colorScheme.primary;
     return Container(
       width: 24,
       height: 24,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: selected ? c.green : Colors.transparent,
+        color: selected ? fill : Colors.transparent,
         border: Border.all(
-          color: selected ? c.green : c.borderStrong,
+          color: selected ? fill : c.borderStrong,
           width: 2,
         ),
       ),
       child: selected
-          ? Icon(Icons.check, size: 15, color: Ck.bg)
+          ? const Icon(Icons.check_rounded, size: 15, color: Colors.white)
           : null,
     );
   }
 }
 
+/// The designed empty state: mascot, a real title, one honest sentence, and
+/// the one action that actually helps — pairing another device (an empty list
+/// usually means this is the only device in the group). The old copy said
+/// "add one below" and there was nothing below; now the promised control
+/// exists and the copy tells no lies.
 class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  final VoidCallback onAddDevice;
+  const _EmptyState({required this.onAddDevice});
 
   @override
   Widget build(BuildContext context) {
     final c = context.ck;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 52),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Opacity(
-              opacity: 0.4,
-              // Alive like the header mark (gentle bob + blink): an empty
-              // room shouldn't feel dead — Clippy is waiting, not broken.
-              child: AnimatedClippyMark(
-                height: 58,
-                clipHex: c.hex(c.muted2),
-                eyeHex: c.hex(c.muted2),
-                eyeFill: c.hex(c.bg),
+        padding: const EdgeInsets.symmetric(horizontal: 44),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 380),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Opacity(
+                opacity: 0.5,
+                // Alive like the header mark (gentle bob + blink): an empty
+                // room shouldn't feel dead — Clippy is waiting, not broken.
+                child: AnimatedClippyMark(
+                  height: 64,
+                  clipHex: c.hex(c.muted2),
+                  eyeHex: c.hex(c.muted2),
+                  eyeFill: c.hex(c.bg),
+                ),
               ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'Nothing synced yet. Copy something on another device, or add one below.',
-              textAlign: TextAlign.center,
-              style: Ct.body(14, color: c.muted),
-            ),
-          ],
+              const SizedBox(height: 20),
+              Text('Nothing here yet',
+                  textAlign: TextAlign.center,
+                  style: Ct.title(20, color: c.ink)),
+              const SizedBox(height: 8),
+              Text(
+                'Copy something on any paired device and it lands here, '
+                'ready to paste.',
+                textAlign: TextAlign.center,
+                style: Ct.body(14, color: c.muted2),
+              ),
+              const SizedBox(height: 24),
+              ClipCard(
+                radius: 18,
+                onTap: onAddDevice,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.devices_rounded,
+                        size: ClipIcons.inline, color: c.accent),
+                    const SizedBox(width: 10),
+                    Text('Add another device',
+                        style: Ct.body(14.5,
+                            weight: FontWeight.w600, color: c.ink)),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1236,6 +1396,8 @@ class _TextPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ck;
+    final scheme = Theme.of(context).colorScheme;
+    final kind = _kindOf(item);
     final dev = item.device.isEmpty ? '' : '${item.device} · ';
     return Container(
       constraints: BoxConstraints(
@@ -1243,7 +1405,7 @@ class _TextPreview extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: c.dialogBg,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       padding: EdgeInsets.fromLTRB(
         20,
@@ -1255,20 +1417,19 @@ class _TextPreview extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: c.borderStrong,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
+          const SheetGrabber(),
+          // The same mark language as the list row: the clip's kind on the
+          // source device's tint, so the sheet visibly belongs to its row.
           Row(
             children: [
-              Text('TEXT', style: Ct.sectionLabel().copyWith(color: c.muted)),
+              GlyphPlate(
+                icon: _kindGlyph(kind),
+                base: deviceTint(scheme, item.device),
+                size: 28,
+              ),
+              const SizedBox(width: 9),
+              Text(_kindLabel(kind).toUpperCase(),
+                  style: Ct.sectionLabel(color: c.muted)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1281,18 +1442,16 @@ class _TextPreview extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Flexible(
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: c.surface,
-                border: Border.all(color: c.border),
-                borderRadius: BorderRadius.circular(12),
-              ),
+            child: ClipCard(
+              radius: 20,
               padding: const EdgeInsets.all(18),
-              child: SingleChildScrollView(
-                child: SelectableText(
-                  item.text,
-                  style: Ct.body(16, color: c.ink, height: 1.55),
+              child: SizedBox(
+                width: double.infinity,
+                child: SingleChildScrollView(
+                  child: SelectableText(
+                    item.text,
+                    style: Ct.body(16, color: c.ink, height: 1.55),
+                  ),
                 ),
               ),
             ),
@@ -1301,36 +1460,18 @@ class _TextPreview extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Material(
-                  color: c.green,
-                  borderRadius: BorderRadius.circular(12),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      Navigator.pop(context);
-                      onCopy();
-                    },
-                    child: Container(
-                      height: 48,
-                      alignment: Alignment.center,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.content_copy_outlined, size: 16,
-                              color: c.isDark ? c.bg : Ck.bg),
-                          const SizedBox(width: 9),
-                          Text('Copy',
-                              style: Ct.body(14, weight: FontWeight.w500,
-                                  color: c.isDark ? c.bg : Ck.bg)),
-                        ],
-                      ),
-                    ),
-                  ),
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    onCopy();
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: ClipIcons.inline),
+                  label: const Text('Copy'),
                 ),
               ),
               const SizedBox(width: 10),
               _SquareIconBtn(
-                icon: Icons.delete_outline,
+                icon: Icons.delete_rounded,
                 color: c.rust,
                 border: c.rust.withValues(alpha: 0.35),
                 bg: c.surface,
@@ -1360,9 +1501,12 @@ class _ImagePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const bg = Color(0xFF141310);
-    const fg = Color(0xFFF4F1EA);
-    const green = Color(0xFF8FBCA6);
+    // Fixed dark chrome in BOTH themes, like the QR scanner: an image viewer
+    // that repaints its frame white washes out the picture it exists to show.
+    const bg = scannerBg;
+    const fg = Colors.white;
+    const meta = Color(0xFF9590A0); // dark-scheme `outline`
+    const danger = Color(0xFFFFB4AB); // dark-scheme `error`
     final kb = ((item.imageBytes?.length ?? 0) / 1024).round();
     final fmt = item.mime.contains('png') ? 'PNG' : 'JPG';
     final dev = item.device.isEmpty ? '' : '${item.device} · ';
@@ -1376,7 +1520,7 @@ class _ImagePreview extends StatelessWidget {
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.close, color: fg),
+                    icon: const Icon(Icons.close_rounded, color: fg),
                     onPressed: () => Navigator.pop(context),
                   ),
                   Expanded(
@@ -1387,7 +1531,7 @@ class _ImagePreview extends StatelessWidget {
                         Text('Image',
                             style: Ct.body(16, weight: FontWeight.w500, color: fg)),
                         Text('$fmt · $kb KB · $dev${_rel(item.timestamp)}',
-                            style: Ct.mono(10.5, color: const Color(0xFF8A8471))),
+                            style: Ct.mono(10.5, color: meta)),
                       ],
                     ),
                   ),
@@ -1419,27 +1563,29 @@ class _ImagePreview extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
+                    // primaryFillDark, not the dark scheme's `primary`: white
+                    // ink needs 4.5:1 and only the darker fill gives it.
                     child: Material(
-                      color: green,
-                      borderRadius: BorderRadius.circular(12),
+                      color: primaryFillDark,
+                      borderRadius: BorderRadius.circular(18),
+                      clipBehavior: Clip.antiAlias,
                       child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
                         onTap: () {
                           Navigator.pop(context);
                           onCopy();
                         },
                         child: Container(
-                          height: 48,
+                          height: 50,
                           alignment: Alignment.center,
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.content_copy_outlined,
-                                  size: 16, color: bg),
+                              const Icon(Icons.copy_rounded,
+                                  size: ClipIcons.inline, color: fg),
                               const SizedBox(width: 9),
                               Text('Copy image',
-                                  style: Ct.body(14,
-                                      weight: FontWeight.w500, color: bg)),
+                                  style: Ct.body(14.5,
+                                      weight: FontWeight.w600, color: fg)),
                             ],
                           ),
                         ),
@@ -1448,9 +1594,14 @@ class _ImagePreview extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                   _SquareIconBtn(
-                    icon: Icons.delete_outline,
-                    color: const Color(0xFFC97B66),
-                    border: const Color(0xFF4A2E26),
+                    icon: Icons.delete_rounded,
+                    color: danger,
+                    // 0.45, not 0.35: composited over `bg` the fainter ring
+                    // measured 2.36:1 against the 3:1 WCAG 1.4.11 floor, and
+                    // this ring is the delete button's only boundary. Raising
+                    // the alpha fixes it here without moving the `danger`
+                    // token, which the delete GLYPH also uses (10.85:1).
+                    border: danger.withValues(alpha: 0.45),
                     bg: bg,
                     onTap: () {
                       Navigator.pop(context);
@@ -1484,16 +1635,16 @@ class _SquareIconBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: bg,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Ink(
-          width: 48,
-          height: 48,
+          width: 50,
+          height: 50,
           decoration: BoxDecoration(
             border: Border.all(color: border),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(18),
           ),
           child: Icon(icon, size: 18, color: color),
         ),
@@ -1503,6 +1654,36 @@ class _SquareIconBtn extends StatelessWidget {
 }
 
 // --- helpers ---
+
+/// What a clip IS, for the row's mark and meta line. Four kinds only — the
+/// distinctions a user acts on (open a link, run a command, view an image,
+/// paste text). Finer taxonomy would be decoration.
+enum _ClipKind { text, link, code, image }
+
+_ClipKind _kindOf(HistoryItem item) {
+  if (item.isImage) return _ClipKind.image;
+  final t = item.text.trim();
+  if (RegExp(r'^https?://\S+$').hasMatch(t) ||
+      RegExp(r'^www\.\S+$').hasMatch(t)) {
+    return _ClipKind.link;
+  }
+  if (_looksLikeCode(t)) return _ClipKind.code;
+  return _ClipKind.text;
+}
+
+IconData _kindGlyph(_ClipKind kind) => switch (kind) {
+      _ClipKind.text => Icons.notes_rounded,
+      _ClipKind.link => Icons.link_rounded,
+      _ClipKind.code => Icons.terminal_rounded,
+      _ClipKind.image => Icons.image_rounded,
+    };
+
+String _kindLabel(_ClipKind kind) => switch (kind) {
+      _ClipKind.text => 'Text',
+      _ClipKind.link => 'Link',
+      _ClipKind.code => 'Code',
+      _ClipKind.image => 'Image',
+    };
 
 bool _looksLikeCode(String s) {
   final t = s.trim();
@@ -1521,14 +1702,21 @@ String _rel(DateTime t) {
   return '$h:$m ${t.hour < 12 ? 'AM' : 'PM'}';
 }
 
-String _meta(HistoryItem item) {
+String _meta(HistoryItem item, _ClipKind kind) {
   // No device here: the list groups by device, so the section header carries
   // it. (The full-screen / bottom-sheet previews still show the device.)
+  // Kind first, size when it means something, age last — the same order the
+  // eye asks the questions in.
   final rel = _rel(item.timestamp);
   if (item.isImage) {
     final kb = ((item.imageBytes?.length ?? 0) / 1024).round();
     final fmt = item.mime.contains('png') ? 'PNG' : 'JPG';
     return '$fmt · $kb KB · $rel';
   }
-  return rel;
+  final label = _kindLabel(kind);
+  // Length only when the preview visibly truncates — "12 chars" is noise.
+  if (item.text.length >= 100) {
+    return '$label · ${item.text.length} chars · $rel';
+  }
+  return '$label · $rel';
 }

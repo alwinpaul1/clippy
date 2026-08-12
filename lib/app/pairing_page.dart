@@ -9,6 +9,14 @@ import 'theme.dart';
 
 /// First-run pairing. One device creates a group key; other devices join by
 /// scanning its QR or pasting the key.
+///
+/// This screen deliberately keeps its OLD layout — the owner reviewed the
+/// redesigned version and asked for the previous structure back, with only
+/// the colours updated ("revert this to old but keep the same colors like
+/// new"). So: the loose ink mascot with no plate behind it, the old sizes and
+/// spacing, the old bordered key field, and PLAIN outlined/filled action
+/// buttons — the violet system paints them, but the bones are the originals.
+/// The brand gradient does NOT appear here anymore; see docs/DESIGN.md.
 class PairingPage extends StatefulWidget {
   final Future<void> Function(PairingKey) onPaired;
   const PairingPage({super.key, required this.onPaired});
@@ -41,28 +49,20 @@ class _PairingPageState extends State<PairingPage> {
     if (result != null && mounted) _controller.text = result.trim();
   }
 
+  /// One snackbar helper. The chip and its label both come from the theme's
+  /// `snackBarTheme`, which uses the M3 inverse pair — so the label flips with
+  /// the theme instead of being pinned to one palette's light colour.
+  void _toast(String message) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _pair() async {
     PairingKey key;
     try {
       key = PairingKey.fromQrPayload(_controller.text.trim());
     } catch (_) {
-      final c = context.ck;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'That does not look like a valid key.',
-            // The snack chip is dark in BOTH themes, so its label stays the
-            // fixed light cream. Using c.bg here would be dark-on-dark in dark
-            // mode — this is deliberately not migrated to the theme extension.
-            style: Ct.body(13.5, color: Ck.bg),
-          ),
-          backgroundColor: c.snack,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
+      _toast('That does not look like a valid key.');
       return;
     }
     setState(() => _busy = true);
@@ -81,16 +81,27 @@ class _PairingPageState extends State<PairingPage> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 460),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(28, 36, 28, 32),
+                padding: EdgeInsets.fromLTRB(
+                  28,
+                  // Clear the macOS traffic-light buttons: the title bar is
+                  // transparent, so content underlaps them.
+                  defaultTargetPlatform == TargetPlatform.macOS ? 44 : 36,
+                  28,
+                  32,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Center(
-                      // Alive here too — same bob + blink as the home header.
+                      // Alive here too — same bob + blink as the home header,
+                      // and the same INK as the home header: the mascot is one
+                      // face with one colour everywhere.
                       child: AnimatedClippyMark(
                         height: 99,
-                        clipHex: c.hex(c.green),
+                        clipHex: c.hex(c.ink),
+                        eyeHex: c.hex(c.ink),
+                        eyeFill: c.hex(c.bg),
                       ),
                     ),
                     const SizedBox(height: 22),
@@ -111,31 +122,18 @@ class _PairingPageState extends State<PairingPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('GROUP KEY', style: Ct.sectionLabel()),
+                        Text('GROUP KEY', style: Ct.sectionLabel(color: c.muted)),
                         InkWell(
                           onTap: key.isEmpty
                               ? null
                               : () {
                                   Clipboard.setData(ClipboardData(text: key));
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Key copied',
-                                        // Dark chip in both themes — see _pair().
-                                        style: Ct.body(13.5, color: Ck.bg),
-                                      ),
-                                      backgroundColor: c.snack,
-                                      behavior: SnackBarBehavior.floating,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                    ),
-                                  );
+                                  _toast('Key copied');
                                 },
                           child: Icon(
-                            Icons.content_copy_outlined,
-                            size: 16,
-                            color: key.isEmpty ? c.muted : c.green,
+                            Icons.copy_rounded,
+                            size: ClipIcons.inline,
+                            color: key.isEmpty ? c.muted : c.accent,
                           ),
                         ),
                       ],
@@ -143,8 +141,14 @@ class _PairingPageState extends State<PairingPage> {
                     const SizedBox(height: 8),
                     Container(
                       decoration: BoxDecoration(
+                        // The old bordered field, painted with the card
+                        // system's own tokens (surfaceContainerLowest fill,
+                        // outlineVariant hairline) instead of bespoke values.
                         color: c.surface,
-                        border: Border.all(color: c.border),
+                        // borderStrong (M3 `outline`), not the decorative
+                        // outlineVariant: this edge is the only boundary the
+                        // text field has, so it owes 3:1 (WCAG 1.4.11).
+                        border: Border.all(color: c.borderStrong),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: TextField(
@@ -152,21 +156,22 @@ class _PairingPageState extends State<PairingPage> {
                         minLines: 1,
                         maxLines: 3,
                         style: Ct.mono(12.5, color: c.ink),
-                        cursorColor: c.green,
+                        cursorColor: c.accent,
                         decoration: InputDecoration(
                           isDense: true,
+                          filled: false,
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 14,
                           ),
                           border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
                           hintText: 'paste key…',
-                          // muted is only ~3:1 on the dark surface; muted2
-                          // clears AA there. Light mode keeps muted as before.
-                          hintStyle: Ct.mono(
-                            12.5,
-                            color: c.isDark ? c.muted2 : c.muted,
-                          ),
+                          // The violet palette's `muted` is `outline`, audited
+                          // past 4.5:1 on every surface tier in both themes —
+                          // the old per-theme hint branch is no longer needed.
+                          hintStyle: Ct.mono(12.5, color: c.muted),
                         ),
                       ),
                     ),
@@ -189,23 +194,19 @@ class _PairingPageState extends State<PairingPage> {
                       Text(
                         'Scan this on your other device',
                         textAlign: TextAlign.center,
-                        // Same reason as the key-field hint above.
-                        style: Ct.body(
-                          12.5,
-                          color: c.isDark ? c.muted2 : c.muted,
-                        ),
+                        style: Ct.body(12.5, color: c.muted),
                       ),
                     ],
                     const SizedBox(height: 22),
                     _OutlinedAction(
-                      icon: Icons.vpn_key_outlined,
+                      icon: Icons.key_rounded,
                       label: 'Generate a new key',
                       onTap: _busy ? null : _generate,
                     ),
                     if (!_isDesktop) ...[
                       const SizedBox(height: 10),
                       _OutlinedAction(
-                        icon: Icons.qr_code_scanner,
+                        icon: Icons.qr_code_scanner_rounded,
                         label: 'Scan QR code',
                         onTap: _busy ? null : _scan,
                       ),
@@ -249,8 +250,8 @@ class _OutlinedAction extends StatelessWidget {
     return Material(
       color: c.surface,
       borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Ink(
           height: 48,
@@ -261,7 +262,7 @@ class _OutlinedAction extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 17, color: c.green),
+              Icon(icon, size: 17, color: c.accent),
               const SizedBox(width: 10),
               Text(
                 label,
@@ -275,6 +276,10 @@ class _OutlinedAction extends StatelessWidget {
   }
 }
 
+/// The old PLAIN filled button, back at the owner's request — not the
+/// gradient. New paint only: the fill is the theme's filled-button pair
+/// (`primaryFillDark` in dark, `primary` in light) so white ink clears 4.5:1
+/// in both themes.
 class _FilledAction extends StatelessWidget {
   final String label;
   final bool busy;
@@ -288,14 +293,13 @@ class _FilledAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ck;
-    // Dark mode's green is the *lighter* 0xFF8FBCA6, so the on-green
-    // foreground has to flip to the dark background colour to stay legible.
-    final onGreen = c.isDark ? c.bg : Ck.bg;
+    final scheme = Theme.of(context).colorScheme;
+    final fill = c.isDark ? primaryFillDark : scheme.primary;
     return Material(
-      color: c.green,
+      color: fill,
       borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: SizedBox(
           height: 48,
@@ -306,12 +310,13 @@ class _FilledAction extends StatelessWidget {
                     width: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: onGreen,
+                      color: c.onBrand,
                     ),
                   )
                 : Text(
                     label,
-                    style: Ct.body(14, weight: FontWeight.w500, color: onGreen),
+                    style:
+                        Ct.body(14, weight: FontWeight.w500, color: c.onBrand),
                   ),
           ),
         ),

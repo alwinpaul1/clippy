@@ -3,8 +3,14 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'theme.dart';
 
-/// Full-screen camera scanner (dark, corner-bracket viewfinder — matches the
-/// design mockup). Pops with the first decoded QR string.
+/// Full-screen camera scanner with a corner-bracket viewfinder. Pops with the
+/// first decoded QR string.
+///
+/// This screen is dark in BOTH themes and does not read `context.ck`. A camera
+/// preview needs a neutral dark frame to stay legible, and light chrome over a
+/// live viewfinder washes it out — so the canvas is the fixed [scannerBg] and
+/// every mark on it is white. That is a deliberate exception to the app's
+/// theme-aware rule, not an oversight.
 class QrScannerPage extends StatefulWidget {
   const QrScannerPage({super.key});
 
@@ -31,16 +37,16 @@ class _QrScannerPageState extends State<QrScannerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Ck.scannerBg,
+      backgroundColor: scannerBg,
       body: Stack(
         children: [
           Positioned.fill(
             child: MobileScanner(controller: _controller, onDetect: _onDetect),
           ),
-          // Dim overlay for legibility.
+          // Dim overlay for legibility, tinted to the brand's dark floor.
           const Positioned.fill(
             child: DecoratedBox(
-              decoration: BoxDecoration(color: Color(0x40161511)),
+              decoration: BoxDecoration(color: Color(0x4015131A)),
             ),
           ),
           Center(
@@ -54,24 +60,76 @@ class _QrScannerPageState extends State<QrScannerPage> {
             child: Row(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Ck.bg),
+                  icon: const Icon(Icons.arrow_back_rounded,
+                      color: Colors.white),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
                 Text(
                   'Scan pairing QR',
-                  style: Ct.body(18, weight: FontWeight.w500, color: Ck.bg),
+                  style: Ct.title(18, color: Colors.white),
                 ),
               ],
             ),
           ),
+          // Bottom chrome: the hint in a quiet chip, and a torch toggle —
+          // pairing regularly happens in the evening next to a laptop screen,
+          // and a QR in the dark is exactly when a torch earns its place.
           Positioned(
             left: 44,
             right: 44,
-            bottom: 56,
-            child: Text(
-              'Point at the QR shown on your other device.',
-              textAlign: TextAlign.center,
-              style: Ct.body(14, color: const Color(0xBFF4F1EA)),
+            bottom: 40,
+            child: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ValueListenableBuilder<MobileScannerState>(
+                    valueListenable: _controller,
+                    builder: (context, state, _) {
+                      if (state.torchState == TorchState.unavailable) {
+                        return const SizedBox.shrink();
+                      }
+                      final on = state.torchState == TorchState.on;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Material(
+                          color: on
+                              ? Colors.white
+                              : Colors.white.withValues(alpha: 0.14),
+                          shape: const CircleBorder(),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            onTap: _controller.toggleTorch,
+                            child: SizedBox(
+                              width: 52,
+                              height: 52,
+                              child: Icon(
+                                on
+                                    ? Icons.flashlight_on_rounded
+                                    : Icons.flashlight_off_rounded,
+                                size: ClipIcons.nav,
+                                color: on ? scannerBg : Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      'Point at the QR shown on your other device.',
+                      textAlign: TextAlign.center,
+                      style: Ct.body(13.5, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -90,7 +148,7 @@ class _CornerBrackets extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Ck.bg
+      ..color = Colors.white
       ..strokeWidth = 5
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;

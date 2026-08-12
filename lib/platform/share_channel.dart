@@ -70,19 +70,33 @@ abstract class ShareChannel {
     }
   }
 
-  /// Background clipboard-sync status: {enabled: bool, overlay: bool}. Both
-  /// must be true for background capture (the AccessibilityService triggers a
-  /// read; the overlay does the focus-trick to read it).
-  static Future<({bool enabled, bool overlay})> bgSyncStatus() async {
+  /// Background clipboard-sync status: {enabled: bool, overlay: bool,
+  /// battery: bool}. All three must be true for background sync to hold up:
+  /// the AccessibilityService triggers a read, the overlay does the
+  /// focus-trick to read it, and the battery exemption keeps the relay
+  /// connection alive under Doze (and lets the service restart from the
+  /// background on Android 12+).
+  static Future<({bool enabled, bool overlay, bool battery})>
+      bgSyncStatus() async {
     try {
       final m = await _channel.invokeMapMethod<String, dynamic>('bgSyncStatus');
       return (
         enabled: (m?['enabled'] as bool?) ?? false,
         overlay: (m?['overlay'] as bool?) ?? false,
+        battery: (m?['battery'] as bool?) ?? false,
       );
     } catch (_) {
-      return (enabled: false, overlay: false);
+      return (enabled: false, overlay: false, battery: false);
     }
+  }
+
+  /// Ask Android to exempt Clippy from battery optimisation ("Allow background
+  /// usage"). Not exempt → the direct system dialog; already exempt → the
+  /// battery-optimisation settings list (to review or revoke).
+  static Future<void> requestBatteryExemption() async {
+    try {
+      await _channel.invokeMethod<void>('requestBatteryExemption');
+    } catch (_) {}
   }
 
   /// System Accessibility settings (to enable Clippy clipboard sync).

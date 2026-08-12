@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.46+53
+version: 1.4.7+55
 
 environment:
   sdk: ^3.12.2
@@ -43,7 +43,6 @@ dependencies:
   flutter_foreground_task: ^9.2.2
   qr_flutter: ^4.1.0
   mobile_scanner: ^7.2.0
-  google_fonts: ^8.1.0
   flutter_svg: ^2.3.0
   device_info_plus: ^11.5.0
   super_clipboard: ^0.9.0
@@ -86,6 +85,31 @@ flutter:
     - assets/icon/tray_icon.ico
     - assets/icon/tray_icon_blink.ico
     - assets/icon/tray_anim/
+
+  # Bundled in the app — no runtime font fetch (google_fonts used to pull the
+  # UI faces from Google's CDN on first launch). Static instances, not the
+  # variable font: Flutter selects weights from these declarations without
+  # FontVariation plumbing. An OFL licence file sits beside each family; the
+  # SIL licence requires it to travel with the fonts.
+  fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/PlusJakartaSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/PlusJakartaSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/PlusJakartaSans-Bold.ttf
+          weight: 700
+    # WORDMARK ONLY. This is Newsreader instanced to wght=500/opsz=36 and then
+    # SUBSET TO THE SIX LETTERS IN "Clippy" — 451 KB of variable font reduced
+    # to 2 KB. Any other character renders as tofu, so it must never be used
+    # for body text. See `Ct.wordmark` in lib/app/theme.dart.
+    - family: ClippyWordmark
+      fonts:
+        - asset: assets/fonts/Newsreader-Wordmark.ttf
+          weight: 500
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
