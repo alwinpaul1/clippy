@@ -2,9 +2,9 @@
   "version": "1.5.0",
   "notes": {
     "features": [],
-    "improvements": [
-      "A bolder app icon with a white border, on every platform."
-    ],
-    "fixes": []
+    "improvements": [],
+    "fixes": [
+      "macOS showed the old app icon in the Dock and Spotlight after an update."
+    ]
   }
 }

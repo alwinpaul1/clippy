@@ -9,6 +9,42 @@ import 'platform_updater.dart';
 ///    this process to exit, swaps `/Applications/Clippy.app`, and relaunches.
 ///  - Windows: download the Inno Setup installer and run it silently; it
 ///    replaces the install and restarts the app.
+/// The detached helper that swaps the bundle after this process exits.
+///
+/// A top-level function so a test can read the script without downloading an
+/// update. [selfPid] must be Dart's [pid]: a bare `$pid` in the script text is
+/// empty, so the wait loop never runs and `rm -rf` races the still-running app
+/// (the swap fails and the user stays on the old build).
+String macUpdateScript({
+  required int selfPid,
+  required String newAppPath,
+  required String installedApp,
+}) =>
+    '''#!/bin/bash
+set -e
+while kill -0 $selfPid 2>/dev/null; do sleep 0.3; done
+# Brief settle so macOS releases bundle locks after exit.
+sleep 0.5
+rm -rf "$installedApp"
+ditto "$newAppPath" "$installedApp"
+# Clear quarantine so Gatekeeper does not block the relaunch of a swapped app.
+xattr -dr com.apple.quarantine "$installedApp" 2>/dev/null || true
+# Refresh the icon. `ditto` copies the zip's timestamps, so the swapped bundle
+# can carry an mtime OLDER than the one macOS cached for this path. Nothing
+# tells LaunchServices the bundle changed, so the Dock, Finder, Spotlight and
+# Launchpad keep drawing the PREVIOUS release's icon forever — across every
+# later update too, because each one repeats the mistake. Stamp the bundle with
+# the current time, then force a re-registration to drop the cached icon.
+# Both lines end in `|| true`: `set -e` is on, and a failed refresh must never
+# stop the relaunch below. A stale icon is cosmetic; an app that never reopens
+# after an update is not. The lsregister path is spelled out in full — a shell
+# variable would need a `\$` that Dart interpolation eats, the same trap the
+# [selfPid] doc above describes.
+touch "$installedApp" || true
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$installedApp" 2>/dev/null || true
+open "$installedApp"
+''';
+
 class DesktopUpdater implements PlatformUpdater {
   @override
   Future<void> update(Uri artifactUrl,
@@ -46,22 +82,12 @@ class DesktopUpdater implements PlatformUpdater {
     final installedApp = exe.parent.parent.parent.path; // -> Clippy.app
 
     // Detached helper: wait for THIS process to quit, swap the bundle, relaunch.
-    // Must interpolate Dart's [pid], a bare `$pid` in the script is empty, so
-    // the wait loop never runs and `rm -rf` races the still-running app (swap
-    // fails; user stays on the old build).
-    final selfPid = pid;
     final helper = File('${tmp.path}/clippy-update.sh');
-    helper.writeAsStringSync('''#!/bin/bash
-set -e
-while kill -0 $selfPid 2>/dev/null; do sleep 0.3; done
-# Brief settle so macOS releases bundle locks after exit.
-sleep 0.5
-rm -rf "$installedApp"
-ditto "${newApp.path}" "$installedApp"
-# Clear quarantine so Gatekeeper does not block the relaunch of a swapped app.
-xattr -dr com.apple.quarantine "$installedApp" 2>/dev/null || true
-open "$installedApp"
-''');
+    helper.writeAsStringSync(macUpdateScript(
+      selfPid: pid,
+      newAppPath: newApp.path,
+      installedApp: installedApp,
+    ));
     await Process.run('chmod', ['+x', helper.path]);
     await Process.start('/bin/bash', [helper.path], mode: ProcessStartMode.detached);
     exit(0);

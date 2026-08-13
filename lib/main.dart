@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import 'core/pairing/pairing_key.dart';
 import 'platform/desktop_tray.dart';
 import 'platform/foreground_service.dart';
 import 'platform/secure_key_store.dart';
+import 'platform/updater/mac_icon_cache.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +22,10 @@ Future<void> main() async {
   // Desktop: menu-bar / tray icon + hide-on-close so Clippy keeps syncing in
   // the background after its window is closed (no-op on mobile).
   await DesktopTray.instance.init();
+  // macOS only, once per build: tell LaunchServices the bundle changed, or the
+  // Dock and Spotlight keep the icon of the release this one replaced. Not
+  // awaited — the icon can settle a moment after the window opens.
+  unawaited(MacIconCache.refreshForNewBuild());
   final theme = ThemeController();
   await theme.load();
   runApp(ClippyApp(theme: theme));
