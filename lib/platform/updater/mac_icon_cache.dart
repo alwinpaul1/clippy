@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -26,10 +27,22 @@ class MacIconCache {
       '/System/Library/Frameworks/CoreServices.framework/Frameworks'
       '/LaunchServices.framework/Support/lsregister';
 
+  /// Seams for tests. Production reads the real platform and runs the real
+  /// processes. CI runs the app suite on `ubuntu-latest`, so without these the
+  /// tests below would take the `isMacOS` early return and pass while proving
+  /// nothing. Reset each one in a tearDown.
+  @visibleForTesting
+  static Future<ProcessResult> Function(String, List<String>) runProcess =
+      Process.run;
+  @visibleForTesting
+  static bool Function() isMacOS = () => Platform.isMacOS;
+  @visibleForTesting
+  static String Function() resolvedExecutable = () => Platform.resolvedExecutable;
+
   /// Re-registers the bundle once per build number. Safe to call on every
   /// platform and every launch; it does nothing after the first run of a build.
   static Future<void> refreshForNewBuild() async {
-    if (!Platform.isMacOS) return;
+    if (!isMacOS()) return;
     try {
       final info = await PackageInfo.fromPlatform();
       final build = info.buildNumber;
@@ -39,14 +52,24 @@ class MacIconCache {
       if (prefs.getString(_prefsKey) == build) return;
 
       // resolvedExecutable is <app>/Contents/MacOS/clippy.
-      final app = File(Platform.resolvedExecutable).parent.parent.parent.path;
+      final app = File(resolvedExecutable()).parent.parent.parent.path;
       if (!app.endsWith('.app')) return;
 
       // `touch` moves the bundle mtime forward, so the cached icon is stale by
       // date as well as by registration. Only the mtime changes, so the code
       // signature stays valid.
-      await Process.run('touch', [app]);
-      await Process.run(_lsregister, ['-f', app]);
+      await runProcess('touch', [app]);
+      final refresh = await runProcess(_lsregister, ['-f', app]);
+
+      // Process.run does NOT throw on a nonzero exit. It throws only when the
+      // executable cannot be spawned at all. So the exit code must be read: a
+      // silent failure here would still record the build below, and the icon
+      // would stay stale on that install for good — the very bug this class
+      // exists to prevent.
+      //
+      // Only lsregister is gated. A failed `touch` means no write permission
+      // on the bundle, and lsregister alone still drops the cached icon.
+      if (refresh.exitCode != 0) return;
 
       // Recorded last, so a failed refresh runs again on the next launch.
       await prefs.setString(_prefsKey, build);

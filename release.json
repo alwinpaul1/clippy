@@ -4,7 +4,7 @@
     "features": [],
     "improvements": [],
     "fixes": [
-      "macOS showed the old app icon in the Dock and Spotlight after an update."
+      "The macOS icon refresh now retries if it fails once, instead of giving up."
     ]
   }
 }
