@@ -15,6 +15,7 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import java.io.File
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -53,6 +54,10 @@ class ClipboardA11yService : AccessibilityService() {
     private val captureExec = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
     private var pending: Runnable? = null
+    // Held so onDestroy can unregister it. ClipboardManager keeps a strong
+    // reference, so without that the listener outlives the service and keeps
+    // firing into a shut-down executor (see runCapture).
+    private var clipListener: ClipboardManager.OnPrimaryClipChangedListener? = null
 
     // Screenshots taken while the app is swiped-away: the activity's MediaStore
     // observer died with it, and Directory.watch on external storage's FUSE
@@ -66,13 +71,34 @@ class ClipboardA11yService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        cm.addPrimaryClipChangedListener {
+        val listener = ClipboardManager.OnPrimaryClipChangedListener {
             pending?.let { main.removeCallbacks(it) }
             val r = Runnable { onClipChanged(cm) }
             pending = r
             main.postDelayed(r, 120)
         }
+        clipListener = listener
+        cm.addPrimaryClipChangedListener(listener)
         watchScreenshots()
+    }
+
+    // The ONLY way onto captureExec. Every trigger (clip listener, a11y event,
+    // focus-trick callback) reaches the executor through a main-thread hop that
+    // can land AFTER onDestroy has shut it down: the 120ms-delayed clip runnable,
+    // a listener the system fires during teardown, the overlay gaining focus
+    // while its 2s timeout is still pending. ThreadPoolExecutor answers that
+    // with RejectedExecutionException, which took the whole process down
+    // (crash of 2026-09-14, 10:25:42, service restarted under memory pressure).
+    // A capture that arrives after we are destroyed is one nobody wants; drop
+    // it. Returns false when dropped so the caller can clean up its own state.
+    private fun runCapture(block: () -> Unit): Boolean {
+        if (captureExec.isShutdown) return false
+        return try {
+            captureExec.execute(block)
+            true
+        } catch (_: RejectedExecutionException) {
+            false
+        }
     }
 
     private fun watchScreenshots() {
@@ -259,7 +285,7 @@ class ClipboardA11yService : AccessibilityService() {
     private fun attemptRead() {
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         // Off the a11y main thread (capture may read a multi-MB image), serial.
-        captureExec.execute {
+        runCapture {
             if (!capture(cm)) main.post { focusTrickRead(cm) }
         }
     }
@@ -267,9 +293,9 @@ class ClipboardA11yService : AccessibilityService() {
     override fun onInterrupt() {}
 
     private fun onClipChanged(cm: ClipboardManager) {
-        captureExec.execute {
+        runCapture {
             // 1) Direct read — does the AS context have clipboard access in bg?
-            if (capture(cm)) return@execute
+            if (capture(cm)) return@runCapture
             // 2) Fallback: focus-trick overlay (needs SYSTEM_ALERT_WINDOW), armed
             //    on the main thread.
             main.post { focusTrickRead(cm) }
@@ -368,11 +394,14 @@ class ClipboardA11yService : AccessibilityService() {
             // Read on the serial capture thread (a large image must not block the
             // main thread) WHILE this overlay still holds focus, so the cross-app
             // URI read grant applies. Remove the overlay only AFTER the read
-            // completes — the 2s timeout below still bounds a stuck read.
-            captureExec.execute {
+            // completes — the 2s timeout below still bounds a stuck read. If the
+            // service was destroyed in between, there is no read to wait for:
+            // take the overlay down now rather than leaving it up for the 2s.
+            val queued = runCapture {
                 capture(cm)
                 main.post { finish() }
             }
+            if (!queued) finish()
         }
         try {
             wm.addView(view, params)
@@ -423,6 +452,19 @@ class ClipboardA11yService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        // Stop the triggers BEFORE shutting the executor down, in the order they
+        // feed it: the system listener, then the delayed hop it may already have
+        // posted. runCapture still guards anything that slips through (an a11y
+        // event or focus callback already queued on the main looper).
+        clipListener?.let {
+            try {
+                (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                    .removePrimaryClipChangedListener(it)
+            } catch (_: Exception) {}
+        }
+        clipListener = null
+        pending?.let { main.removeCallbacks(it) }
+        pending = null
         shotObserver?.let {
             try {
                 applicationContext.contentResolver.unregisterContentObserver(it)

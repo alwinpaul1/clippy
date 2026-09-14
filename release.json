@@ -4,7 +4,7 @@
     "features": [],
     "improvements": [],
     "fixes": [
-      "The macOS icon refresh now retries if it fails once, instead of giving up."
+      "Android: the background clipboard service no longer crashes if the system restarts it while a copy is being picked up."
     ]
   }
 }
