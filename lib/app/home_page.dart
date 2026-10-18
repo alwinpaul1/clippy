@@ -6,13 +6,19 @@ import 'package:flutter/material.dart';
 
 import '../core/history/history_item.dart';
 import '../core/pairing/pairing_key.dart';
+import '../core/search/clip_search.dart';
+import '../core/signals/clip_signals.dart';
+import '../core/vision/image_index.dart';
 import '../platform/haptics.dart';
+import '../platform/link_opener.dart';
 import '../platform/share_channel.dart';
 import 'clip_controller.dart';
 import 'clip_preview.dart';
+import 'device_filter.dart';
 import 'devices_page.dart';
 import 'permission_help_sheet.dart';
 import 'settings_page.dart';
+import 'signal_ui.dart';
 import 'theme.dart';
 import 'theme_controller.dart';
 import 'ui_kit.dart';
@@ -121,6 +127,8 @@ class _HomeBodyState extends State<_HomeBody> {
   final Set<String> _selected = {};
   bool _selecting = false;
   _Filter _filter = _Filter.all;
+  String? _device; // null = every device
+  StreamSubscription<String>? _pinRejected;
   final _search = TextEditingController();
   String _query = '';
   // Ages ("4 min") are computed at build time; without a periodic rebuild they
@@ -136,6 +144,9 @@ class _HomeBodyState extends State<_HomeBody> {
       const Duration(seconds: 30),
       (_) => mounted ? setState(() {}) : null,
     );
+    _pinRejected = _ctl.pinRejected.listen((_) {
+      if (mounted) HomePage.snack(context, 'You can pin up to 25 clips');
+    });
     _search.addListener(() {
       final q = _search.text.trim().toLowerCase();
       if (q != _query) setState(() => _query = q);
@@ -145,6 +156,7 @@ class _HomeBodyState extends State<_HomeBody> {
   @override
   void dispose() {
     _agesTicker?.cancel();
+    _pinRejected?.cancel();
     _search.dispose();
     super.dispose();
   }
@@ -191,6 +203,9 @@ class _HomeBodyState extends State<_HomeBody> {
             item: item,
             onCopy: () => _copy(item),
             onDelete: () => _deleteOne(item),
+            onTogglePin: () => _togglePin(item),
+            imageText: _ctl.insightOf(item)?.text,
+            onCopyText: (t) => _copyText(t, 'Text copied'),
           ),
         ),
       );
@@ -203,6 +218,11 @@ class _HomeBodyState extends State<_HomeBody> {
           item: item,
           onCopy: () => _copy(item),
           onDelete: () => _deleteOne(item),
+          onTogglePin: () => _togglePin(item),
+          signals: _ctl.signalsOf(item),
+          sensitiveLeft: _ctl.sensitiveLeft(item),
+          onCopyText: _copyText,
+          onOpen: _open,
         ),
       );
     }
@@ -236,8 +256,8 @@ class _HomeBodyState extends State<_HomeBody> {
       context,
       title: 'Clear all clips?',
       body:
-          'This removes every clip from all your devices. Anything not saved '
-          'elsewhere is gone for good.',
+          'This removes every clip from all your devices, except pinned ones. '
+          'Anything not saved elsewhere is gone for good.',
       action: 'Clear all',
     );
     if (ok == true) {
@@ -246,22 +266,72 @@ class _HomeBodyState extends State<_HomeBody> {
     }
   }
 
-  bool _matches(HistoryItem i) {
+  bool _kindOk(HistoryItem i) {
+    if (_device != null && i.device.trim() != _device) return false;
     final kind = clipKindOf(i);
-    final kindOk = switch (_filter) {
+    return switch (_filter) {
       _Filter.all => true,
       _Filter.text => kind == ClipKind.text || kind == ClipKind.code,
       _Filter.links => kind == ClipKind.link,
       _Filter.images => kind == ClipKind.image,
     };
-    if (!kindOk) return false;
-    if (_query.isEmpty) return true;
-    if (i.isImage) {
-      return 'image'.contains(_query) ||
-          i.device.toLowerCase().contains(_query);
+  }
+
+  /// The filter, then the search: ranked best-first when there is a query
+  /// (see clip_search.dart), newest-first otherwise.
+  List<HistoryItem> _visible(List<HistoryItem> all) {
+    final pool = all.where(_kindOk);
+    if (_query.isEmpty) return pool.toList();
+    final now = DateTime.now();
+    final scored = <(HistoryItem, double)>[];
+    for (final i in pool) {
+      final seen = _ctl.insightOf(i);
+      final score = scoreDoc(
+        SearchDoc(
+          text: i.text,
+          device: i.device,
+          isImage: i.isImage,
+          signals: i.isImage ? seen?.signals ?? const [] : _ctl.signalsOf(i),
+          timestamp: i.timestamp,
+          imageText: seen?.text ?? '',
+          imageLabels: seen?.labels ?? const [],
+        ),
+        _query,
+        now: now,
+      );
+      if (score != null) scored.add((i, score));
     }
-    return i.text.toLowerCase().contains(_query) ||
-        i.device.toLowerCase().contains(_query);
+    scored.sort((a, b) => b.$2.compareTo(a.$2));
+    return [for (final e in scored) e.$1];
+  }
+
+  Future<void> _togglePin(HistoryItem item) async {
+    Haptics.tick();
+    await _ctl.setPinned(item, !item.pinned);
+    if (mounted) {
+      HomePage.snack(context, item.pinned ? 'Unpinned' : 'Pinned to the top');
+    }
+  }
+
+  /// Pin every selected clip, or unpin them all when every one is pinned.
+  Future<void> _pinSelected(List<HistoryItem> all) async {
+    final chosen = all.where((i) => _selected.contains(i.hash)).toList();
+    final pin = !chosen.every((i) => i.pinned);
+    Haptics.tick();
+    for (final i in chosen) {
+      if (i.pinned != pin) await _ctl.setPinned(i, pin);
+    }
+    _exitSelection();
+  }
+
+  Future<void> _copyText(String text, String what) async {
+    await _ctl.copyText(text);
+    if (mounted) HomePage.snack(context, what);
+  }
+
+  Future<void> _open(Uri uri) async {
+    final ok = await LinkOpener.open(uri);
+    if (!ok && mounted) HomePage.snack(context, "Couldn't open that here");
   }
 
   @override
@@ -271,7 +341,17 @@ class _HomeBodyState extends State<_HomeBody> {
     final live = all.map((i) => i.hash).toSet();
     _selected.retainAll(live);
     if (_selecting && _selected.isEmpty && all.isEmpty) _selecting = false;
-    final shown = all.where(_matches).toList();
+    // Devices that sent a clip, most recent first, for the device chips.
+    final counts = <String, int>{};
+    for (final i in all) {
+      final d = i.device.trim();
+      if (d.isNotEmpty) counts[d] = (counts[d] ?? 0) + 1;
+    }
+    final sources = [
+      for (final e in counts.entries) (name: e.key, count: e.value),
+    ];
+    if (_device != null && !counts.containsKey(_device)) _device = null;
+    final shown = _visible(all);
     final devices = {
       for (final i in all)
         if (i.device.trim().isNotEmpty) i.device.trim(),
@@ -296,6 +376,12 @@ class _HomeBodyState extends State<_HomeBody> {
                         onClose: _exitSelection,
                         onSelectAll: () => _selectAll(shown),
                         onDelete: () => _deleteSelected(all),
+                        allPinned:
+                            _selected.isNotEmpty &&
+                            all
+                                .where((i) => _selected.contains(i.hash))
+                                .every((i) => i.pinned),
+                        onPin: () => _pinSelected(all),
                       )
                     : _Header(
                         key: const ValueKey('header'),
@@ -314,13 +400,20 @@ class _HomeBodyState extends State<_HomeBody> {
                   filter: _filter,
                   onFilter: (f) => setState(() => _filter = f),
                   onClearAll: _clearAll,
+                  devices: sources,
+                  thisDevice: _ctl.deviceName,
+                  device: _device,
+                  onDevice: (d) => setState(() => _device = d),
                 ),
               ),
             Expanded(
               child: all.isEmpty
                   ? _EmptyState(onAddDevice: widget.onAddDevice)
                   : shown.isEmpty
-                  ? _NoMatches(query: _query)
+                  ? _NoMatches(
+                      query: _query,
+                      readingImages: _query.isEmpty ? 0 : _ctl.images.pending,
+                    )
                   : _Feed(
                       items: shown,
                       selecting: _selecting,
@@ -330,6 +423,14 @@ class _HomeBodyState extends State<_HomeBody> {
                       onToggle: _toggle,
                       onLongPress: _enterSelection,
                       onPreview: _openPreview,
+                      ranked: _query.isNotEmpty,
+                      query: _query,
+                      readingImages: _ctl.images.pending,
+                      insightOf: _ctl.insightOf,
+                      signalsOf: _ctl.signalsOf,
+                      sensitiveLeft: _ctl.sensitiveLeft,
+                      onCopyText: _copyText,
+                      onOpen: _open,
                     ),
             ),
           ],
@@ -339,12 +440,8 @@ class _HomeBodyState extends State<_HomeBody> {
         // Lifted above the floating update card when both show on a phone.
         ValueListenableBuilder<double>(
           valueListenable: UpdateCardHost.occupied,
-          builder: (context, lift, child) => Positioned(
-            left: 16,
-            right: 16,
-            bottom: 16 + lift,
-            child: child!,
-          ),
+          builder: (context, lift, child) =>
+              Positioned(left: 16, right: 16, bottom: 16 + lift, child: child!),
           child: SafeArea(child: _Column(child: _bannerFor(context))),
         ),
       ],
@@ -466,7 +563,17 @@ class _Toolbar extends StatelessWidget {
   final _Filter filter;
   final ValueChanged<_Filter> onFilter;
   final VoidCallback onClearAll;
+
+  /// Devices that sent a clip, newest first; the chips show only for 2+.
+  final List<DeviceCount> devices;
+  final String thisDevice;
+  final String? device;
+  final ValueChanged<String?> onDevice;
   const _Toolbar({
+    required this.devices,
+    required this.thisDevice,
+    required this.device,
+    required this.onDevice,
     required this.search,
     required this.filter,
     required this.onFilter,
@@ -559,6 +666,21 @@ class _Toolbar extends StatelessWidget {
               ),
             ],
           ),
+          if (devices.length >= 2) ...[
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: DeviceFilterButton(
+                devices: devices,
+                value: device,
+                thisDevice: thisDevice,
+                onChanged: (d) {
+                  Haptics.tick();
+                  onDevice(d);
+                },
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -573,8 +695,14 @@ class _SelectionBar extends StatelessWidget {
   final VoidCallback onClose;
   final VoidCallback onSelectAll;
   final VoidCallback onDelete;
+  final VoidCallback onPin;
+
+  /// Every selected clip is already pinned, so the action unpins.
+  final bool allPinned;
   const _SelectionBar({
     super.key,
+    required this.onPin,
+    required this.allPinned,
     required this.count,
     required this.topPad,
     required this.onClose,
@@ -632,6 +760,15 @@ class _SelectionBar extends StatelessWidget {
               onPressed: onSelectAll,
             ),
             IconButton(
+              tooltip: allPinned ? 'Unpin selected' : 'Pin selected',
+              icon: Icon(
+                allPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                color: fg,
+                size: ClipIcons.nav,
+              ),
+              onPressed: count == 0 ? null : onPin,
+            ),
+            IconButton(
               tooltip: 'Delete selected',
               icon: Icon(
                 Icons.delete_outline_rounded,
@@ -659,7 +796,29 @@ class _Feed extends StatelessWidget {
   final void Function(HistoryItem) onToggle;
   final void Function(HistoryItem) onLongPress;
   final void Function(HistoryItem) onPreview;
+
+  /// Search results: one "N matches" group in score order, not day buckets
+  /// (which would re-sort them by time).
+  final bool ranked;
+  final String query;
+
+  /// Image clips whose text is still being read; search results can still
+  /// grow, so the header says so.
+  final int readingImages;
+  final ImageInsight? Function(HistoryItem) insightOf;
+  final List<ClipSignal> Function(HistoryItem) signalsOf;
+  final Duration? Function(HistoryItem) sensitiveLeft;
+  final void Function(String text, String what) onCopyText;
+  final void Function(Uri) onOpen;
   const _Feed({
+    required this.ranked,
+    required this.query,
+    required this.readingImages,
+    required this.insightOf,
+    required this.signalsOf,
+    required this.sensitiveLeft,
+    required this.onCopyText,
+    required this.onOpen,
     required this.items,
     required this.selecting,
     required this.selected,
@@ -685,8 +844,17 @@ class _Feed extends StatelessWidget {
   Widget build(BuildContext context) {
     final rows = <Widget>[];
     String? current;
-    for (final item in items) {
-      final b = _bucket(item.timestamp);
+    // Pinned first (newest pin-holder on top), then the day buckets.
+    final ordered = ranked
+        ? items
+        : [...items.where((i) => i.pinned), ...items.where((i) => !i.pinned)];
+    for (final item in ordered) {
+      final b = ranked
+          ? '${items.length} ${items.length == 1 ? 'match' : 'matches'}'
+                '${readingImages > 0 ? ' · reading ${readingImages == 1 ? '1 image' : '$readingImages images'}' : ''}'
+          : item.pinned
+          ? 'Pinned'
+          : _bucket(item.timestamp);
       if (b != current) {
         rows.add(
           SectionLabel(
@@ -708,6 +876,14 @@ class _Feed extends StatelessWidget {
             onCopy: () => onCopy(item),
             onLongPress: () => onLongPress(item),
             onDelete: () => onDelete(item),
+            signals: signalsOf(item),
+            sensitiveLeft: sensitiveLeft(item),
+            onCopyText: onCopyText,
+            onOpen: onOpen,
+            // Why an image matched, when it matched by its text.
+            imageSnippet: ranked && item.isImage
+                ? imageTextSnippet(insightOf(item)?.text ?? '', query)
+                : null,
           ),
         ),
       );
@@ -746,8 +922,22 @@ class _ClipRow extends StatelessWidget {
   final VoidCallback onCopy;
   final VoidCallback onLongPress;
   final VoidCallback onDelete;
+  final List<ClipSignal> signals;
+
+  /// Non-null for a sensitive clip: the time left before it auto-clears.
+  final Duration? sensitiveLeft;
+  final void Function(String text, String what) onCopyText;
+  final void Function(Uri) onOpen;
+
+  /// The line of an image's text that matched the search, shown under it.
+  final String? imageSnippet;
   const _ClipRow({
     super.key,
+    this.imageSnippet,
+    required this.signals,
+    required this.sensitiveLeft,
+    required this.onCopyText,
+    required this.onOpen,
     required this.item,
     required this.selecting,
     required this.selected,
@@ -765,6 +955,8 @@ class _ClipRow extends StatelessWidget {
     if (kind == ClipKind.image) {
       final kb = ((item.imageBytes?.length ?? 0) / 1024).round();
       parts.add('${imageFormatLabel(item)} $kb KB');
+    } else if (signalMetaLabel(signals) case final label?) {
+      parts.add(label);
     } else if (kind != ClipKind.text) {
       parts.add(clipKindLabel(kind));
     }
@@ -803,6 +995,16 @@ class _ClipRow extends StatelessWidget {
                   style: Ct.meta(color: c.muted),
                 ),
               ),
+              if (item.pinned)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Icon(
+                    Icons.push_pin_rounded,
+                    size: 15,
+                    color: c.muted2,
+                    semanticLabel: 'Pinned',
+                  ),
+                ),
               if (selecting)
                 Padding(
                   padding: const EdgeInsets.all(6),
@@ -831,6 +1033,12 @@ class _ClipRow extends StatelessWidget {
                       ),
                     ),
                   )
+                : sensitiveLeft != null
+                ? SensitiveBody(
+                    text: item.text,
+                    signal: signals.firstWhere((s) => s.isSensitive),
+                    left: sensitiveLeft!,
+                  )
                 : Text(
                     item.text.trim(),
                     maxLines: 4,
@@ -853,6 +1061,41 @@ class _ClipRow extends StatelessWidget {
                     },
                   ),
           ),
+          if (imageSnippet != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(0, 10, 6, 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Icon(Icons.text_fields_rounded, size: 15, color: c.muted),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      imageSnippet!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      semanticsLabel: 'Text in image: $imageSnippet',
+                      style: Ct.body(14, color: c.muted2, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          // One-tap actions (copy the code, open, call, map). Hidden while
+          // selecting, where a tap means "select", and for sensitive clips,
+          // whose only action is the copy button.
+          if (!selecting && sensitiveLeft == null && signals.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: SignalActions(
+                signals: signals,
+                onCopyText: onCopyText,
+                onOpen: onOpen,
+              ),
+            ),
         ],
       ),
     );
@@ -1038,7 +1281,8 @@ class _EmptyState extends StatelessWidget {
 
 class _NoMatches extends StatelessWidget {
   final String query;
-  const _NoMatches({required this.query});
+  final int readingImages;
+  const _NoMatches({required this.query, this.readingImages = 0});
 
   @override
   Widget build(BuildContext context) {
@@ -1054,6 +1298,15 @@ class _NoMatches extends StatelessWidget {
             textAlign: TextAlign.center,
             style: Ct.body(14.5, weight: FontWeight.w500, color: c.muted2),
           ),
+          if (readingImages > 0) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Still reading the text in '
+              '${readingImages == 1 ? '1 image' : '$readingImages images'}…',
+              textAlign: TextAlign.center,
+              style: Ct.body(13.5, color: c.muted),
+            ),
+          ],
         ],
       ),
     );

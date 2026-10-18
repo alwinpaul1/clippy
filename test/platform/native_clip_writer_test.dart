@@ -33,7 +33,20 @@ void main() {
     nativeAnswers(true);
     expect(await NativeClipWriter.writeText('hello'), isTrue);
     expect(calls.single.method, 'writeText');
-    expect(calls.single.arguments, {'text': 'hello'});
+    expect(calls.single.arguments, {'text': 'hello', 'sensitive': false});
+  });
+
+  test('a sensitive write is flagged for the native side', () async {
+    nativeAnswers(true);
+    await NativeClipWriter.writeText('4242 4242 4242 4242', sensitive: true);
+    expect(calls.single.arguments, {'text': '4242 4242 4242 4242', 'sensitive': true});
+  });
+
+  test('clearIfCurrent passes the text to compare against', () async {
+    nativeAnswers(true);
+    expect(await NativeClipWriter.clearIfCurrent('4242'), isTrue);
+    expect(calls.single.method, 'clearIfCurrent');
+    expect(calls.single.arguments, {'text': '4242'});
   });
 
   test('no handler on this engine -> false, so the caller falls back', () async {

@@ -9,8 +9,13 @@ import 'package:super_clipboard/super_clipboard.dart';
 
 import '../app/relay_config.dart';
 import '../core/backend/websocket_clip_store.dart';
+import '../core/history/clipboard_writer.dart' as core;
+import '../core/history/history_item.dart';
+import '../core/history/history_store.dart';
 import '../core/models/clip_event.dart';
 import '../core/models/remote_clip.dart';
+import '../core/signals/clip_signals.dart';
+import '../core/signals/sensitive_sweeper.dart';
 import '../core/state/prefs_state_store.dart';
 import '../core/sync/sync_action.dart';
 import '../core/sync/sync_engine.dart';
@@ -60,6 +65,9 @@ class _BackgroundSyncHandler extends TaskHandler {
   StreamSubscription? _sub;
   StreamSubscription? _queueWatch;
   StreamSubscription? _connWatch;
+  StreamSubscription? _historyWatch;
+  SensitiveSweeper? _sweeper;
+  List<HistoryItem> _textHistory = const [];
   RemoteClip? _skippedWhileUiAlive;
   SyncEngine? _engine;
   bool _starting = false;
@@ -222,8 +230,9 @@ class _BackgroundSyncHandler extends TaskHandler {
       await prefs.reload(); // long-lived isolate: skip stale caches
       _deviceName = await resolveDeviceName();
       final roomToken = await pairing.roomToken();
+      final crypto = await pairing.cryptoBox();
       _engine = SyncEngine(
-        crypto: await pairing.cryptoBox(),
+        crypto: crypto,
         state: await PrefsStateStore.create(),
         selfDeviceId: prefs.getString('clippy.deviceId') ?? 'background',
         clock: DateTime.now,
@@ -237,6 +246,25 @@ class _BackgroundSyncHandler extends TaskHandler {
       _connWatch = store.connected.listen((up) {
         if (up) unawaited(_drainQueue());
       });
+      // Sensitive auto-clear while the UI is closed: a card number copied
+      // on (or sent to) this phone still expires on time. Text clips only;
+      // images are never sensitive and are costly to decode here.
+      final projector = HistoryStore(crypto: crypto, writer: const _NoWriter());
+      _historyWatch = store.history.listen((clips) async {
+        _textHistory =
+            await projector.project(clips.where((c) => c.kind != 'image').toList());
+        unawaited(_sweeper?.sweep());
+      });
+      _sweeper = SensitiveSweeper(
+        clips: () => [
+          for (final i in _textHistory)
+            if (!i.pinned)
+              (hash: i.hash, text: i.text, isImage: false, timestamp: i.timestamp)
+        ],
+        delete: store.deleteHashes,
+        clearClipboard: (t) async => NativeClipWriter.clearIfCurrent(t),
+        signals: SignalCache(),
+      )..start();
       if (kDebugMode) {
         debugPrint('[clippy-bg] receive loop started');
         unawaited(store.history.first.then(
@@ -289,7 +317,8 @@ class _BackgroundSyncHandler extends TaskHandler {
         } else {
           // Native writer first: it marks the write as ours, so the
           // accessibility service does not flash a read-back of it.
-          if (await NativeClipWriter.writeText(a.text)) continue;
+          final sensitive = hasSensitive(detectSignals(a.text));
+          if (await NativeClipWriter.writeText(a.text, sensitive: sensitive)) continue;
           // NOT Clipboard.setData: SystemChannels.platform needs an
           // Activity-backed engine, which this headless service isolate
           // lacks. super_clipboard is a real plugin (registered in the
@@ -309,6 +338,10 @@ class _BackgroundSyncHandler extends TaskHandler {
   void _stop() {
     _connWatch?.cancel();
     _connWatch = null;
+    _historyWatch?.cancel();
+    _historyWatch = null;
+    _sweeper?.stop();
+    _sweeper = null;
     _queueWatch?.cancel();
     _queueWatch = null;
     _sub?.cancel();
@@ -691,4 +724,12 @@ class ForegroundServiceManager {
       await FlutterForegroundTask.stopService();
     }
   }
+}
+
+/// The background isolate projects history only to read it (sensitive
+/// auto-clear); it never applies a clip through HistoryStore.
+class _NoWriter implements core.ClipboardWriter {
+  const _NoWriter();
+  @override
+  Future<void> setText(String text) async {}
 }

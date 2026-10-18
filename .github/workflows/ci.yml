@@ -98,7 +98,11 @@ jobs:
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-        run: flutter build apk --release
+        # ARM only: every Android phone is ARM. The x86_64 copy of the native
+        # libraries (ML Kit OCR alone is ~24 MB of them) only served
+        # emulators, and made up a third of the APK. Still ONE APK, so the
+        # download link and the in-app updater are unchanged.
+        run: flutter build apk --release --target-platform android-arm,android-arm64
       - uses: actions/upload-artifact@v7
         with:
           name: android-apk

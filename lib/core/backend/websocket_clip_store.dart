@@ -189,6 +189,16 @@ class WebSocketClipStore {
             _history.removeWhere((c) => hashes.contains(c.hash));
             _emitHistory();
           }
+        case 'pinned':
+          final h = msg['hash'];
+          final p = msg['pinned'];
+          if (h is String && p is bool) _setLocalPin(h, p);
+        case 'pin-rejected': // over the relay's pin cap: undo the optimistic pin
+          final h = msg['hash'];
+          if (h is String) {
+            _setLocalPin(h, false);
+            _pinRejectedController.add(h);
+          }
         case 'cleared':
           _untrackAllUnacked();
           if (_history.isNotEmpty) {
@@ -297,6 +307,25 @@ class WebSocketClipStore {
     _send(jsonEncode({'type': 'delete', 'hashes': list, 'before': before}));
   }
 
+  /// Pin or unpin a clip for every device. Applied locally at once (the UI
+  /// moves it immediately); the relay's 'pinned' broadcast confirms it, or
+  /// 'pin-rejected' rolls it back when the room is at its pin cap.
+  Future<void> setPinned(String hash, bool pinned) async {
+    _setLocalPin(hash, pinned);
+    _send(jsonEncode({'type': 'pin', 'hash': hash, 'pinned': pinned}));
+  }
+
+  /// Hashes whose pin the relay refused (room at its pin cap).
+  Stream<String> get pinRejected => _pinRejectedController.stream;
+  final _pinRejectedController = StreamController<String>.broadcast();
+
+  void _setLocalPin(String hash, bool pinned) {
+    final i = _history.indexWhere((c) => c.hash == hash);
+    if (i < 0 || _history[i].pinned == pinned) return;
+    _history[i] = _history[i].withPinned(pinned);
+    _emitHistory();
+  }
+
   /// Clear the room for all devices. Watermarked with the moment the user
   /// acted, so it works from ANY state, even a cold offline start where no
   /// snapshot ever arrived, and a late replay clears exactly what existed
@@ -305,10 +334,11 @@ class WebSocketClipStore {
   Future<void> clearAll() async {
     final before = _watermarkIso(); // BEFORE the local clear mutates history
     _untrackAllUnacked(); // cleared clips must never be resent
-    if (_history.isNotEmpty) {
-      _history.clear(); // the UI said "gone for good", reflect it right now
-      _emitHistory();
-    }
+    // The UI said "gone for good": reflect it right now. Pinned clips stay,
+    // as they do on the relay.
+    final had = _history.length;
+    _history.removeWhere((c) => !c.pinned);
+    if (_history.length != had) _emitHistory();
     _send(jsonEncode({'type': 'clear', 'before': before}));
   }
 
@@ -374,6 +404,7 @@ class WebSocketClipStore {
     await _historyController.close();
     await _incomingController.close();
     await _connectedController.close();
+    await _pinRejectedController.close();
   }
 }
 

@@ -1,8 +1,11 @@
 package dev.alwin.clippy
 
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Build
+import android.os.PersistableBundle
 import android.os.SystemClock
 import androidx.core.content.FileProvider
 import io.flutter.plugin.common.BinaryMessenger
@@ -40,13 +43,31 @@ object ClipWriter {
     fun wroteRecently(): Boolean =
         lastWriteAt != 0L && SystemClock.uptimeMillis() - lastWriteAt < SELF_WRITE_WINDOW_MS
 
+    // The text we last KNOW is on the clipboard: our own write, or a user copy
+    // the accessibility service read. Null once anything else (an image, an
+    // unreadable copy) replaced it. Sensitive auto-clear wipes the clipboard
+    // only while it still holds the doomed text, never a newer copy; this is
+    // how it knows without reading the clipboard, which Android forbids from
+    // the background.
+    @Volatile
+    private var knownText: String? = null
+
+    fun noteUserCopy(text: String?) {
+        knownText = text
+    }
+
     fun register(context: Context, messenger: BinaryMessenger) {
         val app = context.applicationContext
         MethodChannel(messenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "writeText" -> {
                     val text = call.argument<String>("text")
-                    result.success(text != null && writeText(app, text))
+                    val sensitive = call.argument<Boolean>("sensitive") ?: false
+                    result.success(text != null && writeText(app, text, sensitive))
+                }
+                "clearIfCurrent" -> {
+                    val text = call.argument<String>("text")
+                    result.success(text != null && clearIfCurrent(app, text))
                 }
                 "writeImage" -> {
                     val bytes = call.argument<ByteArray>("bytes")
@@ -58,11 +79,37 @@ object ClipWriter {
         }
     }
 
-    fun writeText(context: Context, text: String): Boolean = try {
+    fun writeText(context: Context, text: String, sensitive: Boolean = false): Boolean = try {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("clippy", text)
+        // Android 13+ hides a sensitive clip's content in its own "Copied"
+        // preview and clipboard editor (a card number, an IBAN).
+        if (sensitive && Build.VERSION.SDK_INT >= 33) {
+            clip.description.extras = PersistableBundle().apply {
+                putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+            }
+        }
         lastWriteAt = SystemClock.uptimeMillis()
-        cm.setPrimaryClip(ClipData.newPlainText("clippy", text))
+        cm.setPrimaryClip(clip)
+        knownText = text
         true
+    } catch (_: Exception) {
+        false
+    }
+
+    // Wipe the clipboard if it still holds [text] (see knownText). Stamped as
+    // our own write so the accessibility service does not read the change back.
+    fun clearIfCurrent(context: Context, text: String): Boolean = try {
+        if (knownText != text) {
+            false
+        } else {
+            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            lastWriteAt = SystemClock.uptimeMillis()
+            if (Build.VERSION.SDK_INT >= 28) cm.clearPrimaryClip()
+            else cm.setPrimaryClip(ClipData.newPlainText("", ""))
+            knownText = null
+            true
+        }
     } catch (_: Exception) {
         false
     }
@@ -81,6 +128,7 @@ object ClipWriter {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         lastWriteAt = SystemClock.uptimeMillis()
         cm.setPrimaryClip(ClipData.newUri(context.contentResolver, "clippy", uri))
+        knownText = null
         true
     } catch (_: Exception) {
         false

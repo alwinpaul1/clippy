@@ -27,9 +27,9 @@ class HistoryStore {
     required CryptoBox crypto,
     required ClipboardWriter writer,
     int capacity = 25,
-  })  : _crypto = crypto,
-        _writer = writer,
-        _capacity = capacity;
+  }) : _crypto = crypto,
+       _writer = writer,
+       _capacity = capacity;
 
   /// Decrypt + order newest-first + collapse consecutive duplicate hashes +
   /// cap to [_capacity]. Input order is not trusted; we sort defensively.
@@ -40,14 +40,19 @@ class HistoryStore {
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
     // Pass 1: pick the clips to show (collapse consecutive dupes, cap to
-    // capacity), no decryption yet.
+    // capacity), no decryption yet. Pinned clips do not count toward the cap,
+    // exactly as on the relay, so a pin never falls off the bottom.
     final chosen = <RemoteClip>[];
+    var unpinned = 0;
     String? previousHash;
     for (final clip in sorted) {
       if (clip.hash == previousHash) continue; // collapse consecutive dupes
       previousHash = clip.hash;
+      if (!clip.pinned) {
+        if (unpinned >= _capacity) continue;
+        unpinned++;
+      }
       chosen.add(clip);
-      if (chosen.length >= _capacity) break;
     }
 
     // Pass 2: decrypt only the clips we haven't seen before, in ONE batch that
@@ -85,6 +90,7 @@ class HistoryStore {
           mime: clip.mime,
           imageBytes: _decrypted[clip.hash]!.bytes,
           timestamp: clip.timestamp,
+          pinned: clip.pinned,
         ),
     ];
     // Bound the cache to what's currently shown, so it can't grow past capacity

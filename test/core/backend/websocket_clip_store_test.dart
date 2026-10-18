@@ -523,4 +523,49 @@ void main() {
         reason: 'the clip appended while offline must arrive, not vanish');
     await store.close();
   });
+
+  group('pins', () {
+    Future<(WebSocketClipStore, List<List<dynamic>>)> ready() async {
+      final store = build();
+      final seen = <List<dynamic>>[];
+      store.history.listen(seen.add);
+      transports[0].emit(historyMsg(['a', 'b']));
+      await Future<void>.delayed(Duration.zero);
+      return (store, seen);
+    }
+
+    test('setPinned applies at once and tells the relay', () async {
+      final (store, seen) = await ready();
+      await store.setPinned('h:a', true);
+      await Future<void>.delayed(Duration.zero);
+      expect(seen.last.firstWhere((c) => c.hash == 'h:a').pinned, isTrue);
+      expect(jsonDecode(transports[0].sent.last), {'type': 'pin', 'hash': 'h:a', 'pinned': true});
+    });
+
+    test("another device's pin arrives as 'pinned'", () async {
+      final (_, seen) = await ready();
+      transports[0].emit(jsonEncode({'type': 'pinned', 'hash': 'h:b', 'pinned': true}));
+      await Future<void>.delayed(Duration.zero);
+      expect(seen.last.firstWhere((c) => c.hash == 'h:b').pinned, isTrue);
+    });
+
+    test("'pin-rejected' rolls the optimistic pin back and reports it", () async {
+      final (store, seen) = await ready();
+      final rejected = <String>[];
+      store.pinRejected.listen(rejected.add);
+      await store.setPinned('h:a', true);
+      transports[0].emit(jsonEncode({'type': 'pin-rejected', 'hash': 'h:a'}));
+      await Future<void>.delayed(Duration.zero);
+      expect(seen.last.firstWhere((c) => c.hash == 'h:a').pinned, isFalse);
+      expect(rejected, ['h:a']);
+    });
+
+    test('Clear all keeps pinned clips on this device too', () async {
+      final (store, seen) = await ready();
+      await store.setPinned('h:a', true);
+      await store.clearAll();
+      await Future<void>.delayed(Duration.zero);
+      expect(seen.last.map((c) => c.hash), ['h:a']);
+    });
+  });
 }

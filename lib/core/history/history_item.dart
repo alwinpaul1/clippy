@@ -22,6 +22,9 @@ class HistoryItem {
   final Uint8List? imageBytes;
   final DateTime timestamp;
 
+  /// Kept at the top, past the history cap, and exempt from auto-clear.
+  final bool pinned;
+
   const HistoryItem({
     required this.text,
     required this.hash,
@@ -31,6 +34,7 @@ class HistoryItem {
     this.kind = 'text',
     this.mime = '',
     this.imageBytes,
+    this.pinned = false,
   });
 
   bool get isImage => kind == 'image';

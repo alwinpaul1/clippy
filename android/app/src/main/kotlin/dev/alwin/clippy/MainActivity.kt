@@ -87,6 +87,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        ClipVision.register(flutterEngine.dartExecutor.binaryMessenger)
         channel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             channelName,
@@ -224,6 +225,23 @@ class MainActivity : FlutterActivity() {
                 // access from "Select photos" to "Allow all", and to reach the
                 // ⋮ → "Allow restricted settings" gate that Android puts on the
                 // Accessibility / display-over-apps toggles for sideloaded apps.
+                // A clip's link / number / email / map, from its action button.
+                // Dart allows only http(s), tel and mailto through.
+                "openUrl" -> {
+                    val url = call.argument<String>("url")
+                    val ok = try {
+                        url != null && run {
+                            startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                            true
+                        }
+                    } catch (_: Exception) {
+                        false
+                    }
+                    result.success(ok)
+                }
                 "openPhotoSettings", "openAppInfo" -> {
                     startActivity(
                         Intent(

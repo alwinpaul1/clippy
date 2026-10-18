@@ -20,6 +20,9 @@ import 'dart:isolate';
 // rides on this value. (The 1.0.25-era snapshot-as-proof clients that once
 // required 60 here are gone — the fleet is entirely on the ack protocol.)
 const int maxHistory = 25;
+// Pinned clips sit OUTSIDE [maxHistory]: never evicted by new clips, never
+// removed by a clear. Capped so pins cannot grow a room without bound.
+const int maxPinned = 25;
 // Images sync at original quality with no downscaling, so this must fit a
 // full-screen Retina PNG raw: ~36MB image × ~1.78 (base64 → encrypted →
 // base64) ≈ 64M chars. Not const: tests shrink it so the oversized-clip
@@ -42,6 +45,10 @@ abstract class ClipRepository {
 
   /// Drop the whole room's history.
   void clear(String room);
+
+  /// Pin or unpin the clip with [hash]. Returns false when nothing changed:
+  /// unknown hash, already in that state, or the room is at [maxPinned].
+  bool setPinned(String room, String hash, bool pinned);
 
   /// Remove the room entirely (its key too, not just its clips). Used to
   /// reclaim a pairing code that holds no clips and has no connected devices —
@@ -67,11 +74,37 @@ class InMemoryClipRepository implements ClipRepository {
     // duplicate entry. This makes a client's resend of an unacked clip (the
     // ack was lost with the socket) idempotent, and gives a deliberate re-copy
     // its expected move-to-top.
+    final prev = list.where((c) => c['hash'] == clip['hash']).firstOrNull;
     list.removeWhere((c) => c['hash'] == clip['hash']);
+    // A re-copy of a pinned clip moves it up and keeps it pinned.
+    if (prev?['pinned'] == true) clip['pinned'] = true;
     list.add(clip);
-    if (list.length > maxHistory) {
-      list.removeRange(0, list.length - maxHistory);
+    // Evict the oldest UNPINNED clips only; pins do not count toward the cap.
+    var unpinned = list.where((c) => c['pinned'] != true).length;
+    for (var i = 0; i < list.length && unpinned > maxHistory;) {
+      if (list[i]['pinned'] == true) {
+        i++;
+      } else {
+        list.removeAt(i);
+        unpinned--;
+      }
     }
+  }
+
+  @override
+  bool setPinned(String room, String hash, bool pinned) {
+    final list = rooms[room];
+    final clip = list?.where((c) => c['hash'] == hash).firstOrNull;
+    if (clip == null || (clip['pinned'] == true) == pinned) return false;
+    if (pinned && list!.where((c) => c['pinned'] == true).length >= maxPinned) {
+      return false;
+    }
+    if (pinned) {
+      clip['pinned'] = true;
+    } else {
+      clip.remove('pinned');
+    }
+    return true;
   }
 
   @override
@@ -241,6 +274,14 @@ class FileClipRepository extends InMemoryClipRepository {
   void clear(String room) {
     super.clear(room);
     unawaited(flush()); // same resurrection risk as remove()
+  }
+
+  @override
+  bool setPinned(String room, String hash, bool pinned) {
+    final changed = super.setPinned(room, hash, pinned);
+    // An unpinned clip can now be evicted; a pin must survive a redeploy.
+    if (changed) unawaited(flush());
+    return changed;
   }
 
   @override
@@ -489,6 +530,17 @@ DateTime? _watermark(dynamic before) {
 }
 
 /// Hashes in [room]'s history whose server timestamp is at-or-before [cutoff].
+/// What a clear removes: everything at-or-before [cutoff] EXCEPT pinned
+/// clips, which only an explicit delete or unpin can take away.
+Set<String> _clearableBefore(String room, DateTime cutoff) => {
+      for (final h in _hashesBefore(room, cutoff))
+        if (!_isPinned(room, h)) h,
+    };
+
+bool _isPinned(String room, String hash) => repository
+    .recent(room)
+    .any((c) => c['hash'] == hash && c['pinned'] == true);
+
 Set<String> _hashesBefore(String room, DateTime cutoff) => {
       for (final c in repository.recent(room))
         if (c['hash'] is String &&
@@ -625,18 +677,46 @@ void _handleSocket(WebSocket ws) {
           // user never saw but that predate the intent are still cleared.
           final clearCutoff = _watermark(msg['before']);
           if (clearCutoff != null) {
-            final doomed = _hashesBefore(r, clearCutoff);
+            final doomed = _clearableBefore(r, clearCutoff);
             final removed = repository.remove(r, doomed);
             if (removed.isEmpty) return;
             _tombstone(r, removed);
             _broadcast(r, {'type': 'deleted', 'hashes': removed});
             return;
           }
-          // Legacy unscoped clear (pre-1.0.28 clients).
-          _tombstone(
-              r, repository.recent(r).map((c) => c['hash']).whereType<String>());
-          repository.clear(r);
-          _broadcast(r, {'type': 'cleared'});
+          // Legacy unscoped clear (pre-1.0.28 clients). With nothing pinned
+          // it is the old whole-room clear; otherwise pinned clips survive it
+          // too, so it becomes a plain delete of everything unpinned.
+          if (!repository.recent(r).any((c) => c['pinned'] == true)) {
+            _tombstone(r,
+                repository.recent(r).map((c) => c['hash']).whereType<String>());
+            repository.clear(r);
+            _broadcast(r, {'type': 'cleared'});
+            break;
+          }
+          final unpinned = {
+            for (final c in repository.recent(r))
+              if (c['hash'] is String && c['pinned'] != true) c['hash'] as String,
+          };
+          final removed = repository.remove(r, unpinned);
+          if (removed.isEmpty) return;
+          _tombstone(r, removed);
+          _broadcast(r, {'type': 'deleted', 'hashes': removed});
+          break;
+
+        case 'pin':
+          final r = room;
+          if (r == null) return;
+          final hash = msg['hash'];
+          final pinned = msg['pinned'];
+          if (hash is! String || pinned is! bool) return;
+          if (repository.setPinned(r, hash, pinned)) {
+            _broadcast(r, {'type': 'pinned', 'hash': hash, 'pinned': pinned});
+          } else if (pinned && !_isPinned(r, hash)) {
+            // Over the cap (or an unknown clip): tell the sender so its
+            // optimistic pin rolls back instead of lying.
+            _sendTo(ws, {'type': 'pin-rejected', 'hash': hash});
+          }
           break;
       }
     },

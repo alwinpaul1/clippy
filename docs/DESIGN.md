@@ -165,6 +165,48 @@ must not change colour after a Dart upgrade.
   It replaced a home-only bottom banner that lost to two Android warnings, so
   a release could go unseen. It sits above the Navigator, so it has no Overlay:
   never give it a Tooltip.
+- **Smart clips** (`core/signals/`, `signal_ui.dart`). Every text clip is
+  scanned once, on the device and with no model, for signals:
+  - OTP codes, links, phone numbers, emails, addresses and dates;
+  - card numbers (Luhn checksum) and IBANs (mod-97). These count only when
+    the checksum passes, so a random order number isn't flagged.
+
+  Each actionable signal gets one chip, at most three per clip: "Copy 482913"
+  (the one chip in the signal tint, because the code is the point of the
+  clip), then Open, Call, Email and Map. The chips draw 36 dp tall but have
+  48 dp hit areas. Copying a code does not create a new synced clip.
+
+  **Sensitive clips** (card, IBAN) show a lock, the masked value ("Card number
+  •••• 4242") and the original blurred beneath, plus "Clears in N min". Screen
+  readers hear only the masked value. The preview sheet stays blurred until
+  you tap Show.
+
+  `SensitiveSweeper` deletes an expired sensitive clip room-wide and wipes it
+  off the clipboard, but only if the clipboard still holds it. It runs in the
+  app and in Android's background service. The TTL is per device (1 / 5 / 15
+  min, default 5, in Settings).
+
+  `LinkOpener` opens only http(s), tel and mailto. Clip text is untrusted.
+- **Pins**: a pinned clip sits in a "Pinned" group above Today. The relay
+  stores the flag and never evicts a pinned clip to make room (pins are
+  outside the 25-clip cap; up to 25 pins), and a Clear all keeps it. Only an
+  explicit delete or an unpin removes one. Pinned clips are also exempt from
+  sensitive auto-clear, because a pin is the user's explicit "keep this".
+  You can pin from the preview's pin button or from the selection bar.
+- **Device filter**: outlined chips under the kind filter: "All devices",
+  then every device that sent a clip, most recent first. They show only when
+  2 or more devices have sent clips. They are lighter than the ink kind
+  pills, so the two rows read as a filter plus a refinement, not two equal
+  toggles.
+- **Search** (`core/search/clip_search.dart`) is ranked, not just filtered.
+  - Every word must match.
+  - Match quality ranks: whole word > word start > fragment > one typo (two
+    for long words).
+  - A phrase match gets a bonus; recency breaks ties.
+  - Words like `code`, `card`, `phone`, `link` and `address` also match by
+    signal.
+
+  Results show as one "N matches" group in score order, not day buckets.
 - **Previews**: a text clip opens a bottom sheet (selectable text, Copy,
   Delete); an image opens a full-screen dark viewer.
 
