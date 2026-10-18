@@ -14,6 +14,7 @@ import '../platform/link_opener.dart';
 import '../platform/share_channel.dart';
 import 'clip_controller.dart';
 import 'clip_preview.dart';
+import 'device_filter.dart';
 import 'devices_page.dart';
 import 'permission_help_sheet.dart';
 import 'settings_page.dart';
@@ -341,12 +342,15 @@ class _HomeBodyState extends State<_HomeBody> {
     _selected.retainAll(live);
     if (_selecting && _selected.isEmpty && all.isEmpty) _selecting = false;
     // Devices that sent a clip, most recent first, for the device chips.
-    final sources = <String>[];
+    final counts = <String, int>{};
     for (final i in all) {
       final d = i.device.trim();
-      if (d.isNotEmpty && !sources.contains(d)) sources.add(d);
+      if (d.isNotEmpty) counts[d] = (counts[d] ?? 0) + 1;
     }
-    if (_device != null && !sources.contains(_device)) _device = null;
+    final sources = [
+      for (final e in counts.entries) (name: e.key, count: e.value),
+    ];
+    if (_device != null && !counts.containsKey(_device)) _device = null;
     final shown = _visible(all);
     final devices = {
       for (final i in all)
@@ -397,6 +401,7 @@ class _HomeBodyState extends State<_HomeBody> {
                   onFilter: (f) => setState(() => _filter = f),
                   onClearAll: _clearAll,
                   devices: sources,
+                  thisDevice: _ctl.deviceName,
                   device: _device,
                   onDevice: (d) => setState(() => _device = d),
                 ),
@@ -560,11 +565,13 @@ class _Toolbar extends StatelessWidget {
   final VoidCallback onClearAll;
 
   /// Devices that sent a clip, newest first; the chips show only for 2+.
-  final List<String> devices;
+  final List<DeviceCount> devices;
+  final String thisDevice;
   final String? device;
   final ValueChanged<String?> onDevice;
   const _Toolbar({
     required this.devices,
+    required this.thisDevice,
     required this.device,
     required this.onDevice,
     required this.search,
@@ -660,82 +667,21 @@ class _Toolbar extends StatelessWidget {
             ],
           ),
           if (devices.length >= 2) ...[
-            const SizedBox(height: 8),
-            _DeviceChips(devices: devices, value: device, onChanged: onDevice),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// One device's clips at a time: "All devices", then every device that sent
-/// something, newest first. Lighter than the kind filter above it (outlined,
-/// not filled) so the two rows read as filter + refinement, not two equal
-/// toggles. 36dp chips with 48dp hit areas.
-class _DeviceChips extends StatelessWidget {
-  final List<String> devices;
-  final String? value;
-  final ValueChanged<String?> onChanged;
-  const _DeviceChips({
-    required this.devices,
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.ck;
-    final scheme = Theme.of(context).colorScheme;
-    Widget chip(String? d) {
-      final on = d == value;
-      final glyph = d == null
-          ? Icons.devices_rounded
-          : (deviceGlyph(d) ?? Icons.devices_other_rounded);
-      // Center: a horizontal ListView forces its 48dp height onto children,
-      // which would draw a 36dp chip 48 tall.
-      return Padding(
-        padding: const EdgeInsets.only(right: 8),
-        child: Center(child: TextButton.icon(
-          onPressed: () {
-            Haptics.tick();
-            onChanged(on && d != null ? null : d);
-          },
-          icon: Icon(
-            glyph,
-            size: 15,
-            color: on ? c.ink : (d == null ? c.muted2 : deviceTint(scheme, d)),
-          ),
-          label: Text(
-            d ?? 'All devices',
-            style: Ct.body(
-              13,
-              weight: FontWeight.w600,
-              color: on ? c.ink : c.muted2,
-            ),
-          ),
-          style: TextButton.styleFrom(
-            backgroundColor: on ? c.surface : Colors.transparent,
-            shape: StadiumBorder(
-              side: BorderSide(
-                color: on ? c.ink : c.border,
-                width: on ? 1.2 : 1,
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: DeviceFilterButton(
+                devices: devices,
+                value: device,
+                thisDevice: thisDevice,
+                onChanged: (d) {
+                  Haptics.tick();
+                  onDevice(d);
+                },
               ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            minimumSize: const Size(0, 36),
-            tapTargetSize: MaterialTapTargetSize.padded,
-            visualDensity: VisualDensity.compact,
-          ),
-        )),
-      );
-    }
-
-    return SizedBox(
-      height: 48,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [chip(null), for (final d in devices) chip(d)],
+          ],
+        ],
       ),
     );
   }
