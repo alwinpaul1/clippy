@@ -5,51 +5,8 @@ import '../platform/updater/platform_updater.dart';
 import 'theme.dart';
 import 'update_controller.dart';
 
-/// Home-screen banner shown when an update is available. Tapping it opens the
-/// changelog sheet; the trailing × dismisses this version.
-class UpdateBanner extends StatelessWidget {
-  final UpdateInfo info;
-  const UpdateBanner({super.key, required this.info});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.ck;
-    // The same banner anatomy as the home screen's warnings, plate, message,
-    // action, so every pinned strip in the app is one shape. Only the tint
-    // differs: signal orange, because an update is news, not a fault.
-    return ClipCard(
-      radius: 20,
-      highlighted: true,
-      onTap: () => showUpdateSheet(context, info),
-      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
-      child: Row(
-        children: [
-          GlyphPlate(
-            icon: Icons.download_rounded,
-            base: Theme.of(context).colorScheme.secondary,
-            size: 32,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Update available: v${info.version}',
-              style: Ct.body(13.5, weight: FontWeight.w600, color: c.ink),
-            ),
-          ),
-          Text('View',
-              style: Ct.body(13.5, weight: FontWeight.w700, color: c.accent)),
-          IconButton(
-            icon: Icon(Icons.close_rounded, size: 18, color: c.muted),
-            tooltip: 'Dismiss this version',
-            onPressed: () => updater.dismiss(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Opens the changelog sheet with a single Update button.
+/// The full changelog for [info], with its own Update button. Opened from
+/// the floating update card's "See what's new".
 Future<void> showUpdateSheet(BuildContext context, UpdateInfo info) {
   return showModalBottomSheet<void>(
     context: context,

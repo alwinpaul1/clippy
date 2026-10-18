@@ -9,6 +9,7 @@ import 'app/home_page.dart';
 import 'app/pairing_page.dart';
 import 'app/theme.dart';
 import 'app/theme_controller.dart';
+import 'app/update_card.dart';
 import 'app/update_controller.dart';
 import 'core/pairing/pairing_key.dart';
 import 'platform/desktop_tray.dart';
@@ -35,6 +36,8 @@ class ClippyApp extends StatelessWidget {
   final ThemeController theme;
   const ClippyApp({super.key, required this.theme});
 
+  static final _navigatorKey = GlobalKey<NavigatorState>();
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
@@ -47,6 +50,12 @@ class ClippyApp extends StatelessWidget {
         theme: lightTheme,
         darkTheme: darkTheme,
         themeMode: mode,
+        navigatorKey: _navigatorKey,
+        // The update card floats above every screen, not just home.
+        builder: (context, child) => UpdateCardHost(
+          navigatorKey: _navigatorKey,
+          child: child ?? const SizedBox.shrink(),
+        ),
         home: ClippyRoot(theme: theme),
       ),
     );

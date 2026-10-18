@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 
 import '../core/history/history_item.dart';
 import '../core/pairing/pairing_key.dart';
-import '../core/update/update_info.dart';
 import '../platform/haptics.dart';
 import '../platform/share_channel.dart';
 import 'clip_controller.dart';
@@ -17,8 +16,7 @@ import 'settings_page.dart';
 import 'theme.dart';
 import 'theme_controller.dart';
 import 'ui_kit.dart';
-import 'update_controller.dart';
-import 'update_sheet.dart';
+import 'update_card.dart';
 
 /// The main screen: the shared clipboard as a feed.
 ///
@@ -338,10 +336,15 @@ class _HomeBodyState extends State<_HomeBody> {
         ),
         // Pinned banners. Only one shows at a time; the update banner sits in
         // the same slot and is the lowest priority.
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: 16,
+        // Lifted above the floating update card when both show on a phone.
+        ValueListenableBuilder<double>(
+          valueListenable: UpdateCardHost.occupied,
+          builder: (context, lift, child) => Positioned(
+            left: 16,
+            right: 16,
+            bottom: 16 + lift,
+            child: child!,
+          ),
           child: SafeArea(child: _Column(child: _bannerFor(context))),
         ),
       ],
@@ -377,11 +380,9 @@ class _HomeBodyState extends State<_HomeBody> {
         ),
       );
     }
-    return ValueListenableBuilder<UpdateInfo?>(
-      valueListenable: updater.available,
-      builder: (context, info, _) =>
-          info == null ? const SizedBox.shrink() : UpdateBanner(info: info),
-    );
+    // Updates are not here: UpdateCardHost floats its card above every
+    // screen, so a warning above can no longer hide it.
+    return const SizedBox.shrink();
   }
 }
 
@@ -715,14 +716,19 @@ class _Feed extends StatelessWidget {
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: _columnWidth),
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            0,
-            20,
-            96 + MediaQuery.of(context).padding.bottom,
+        // The floating update card covers the bottom on a phone; keep the
+        // last clip scrollable clear of it.
+        child: ValueListenableBuilder<double>(
+          valueListenable: UpdateCardHost.occupied,
+          builder: (context, lift, _) => ListView(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              0,
+              20,
+              96 + lift + MediaQuery.of(context).padding.bottom,
+            ),
+            children: rows,
           ),
-          children: rows,
         ),
       ),
     );

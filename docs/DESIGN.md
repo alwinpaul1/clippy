@@ -150,6 +150,21 @@ must not change colour after a Dart upgrade.
 - **Pairing**: the mascot, "Pair your devices", one card holding the GROUP KEY
   field, "New key" and "Scan QR code", and the QR once a key exists. Below it
   sit the ink "Pair this device" button and the end-to-end note.
+- **The update card** (`update_card.dart`) floats above EVERY screen,
+  mounted from `MaterialApp.builder`, after the Code UI / Orca desktop card.
+  On a window 480 px or wider it is 360 px in the bottom-right corner; on a
+  phone it spans the width with 16 px gutters, and home lifts its own bottom
+  banner and feed padding by `UpdateCardHost.occupied`. It slides in from the
+  right in 200 ms, or appears in place under reduced motion. Its states:
+  - Available: "Update available", "Clippy X is ready…", a "See what's new"
+    link to the changelog sheet, a full-width Update button, and an X that
+    remembers the dismissed version.
+  - Downloading: a progress bar, with no X.
+  - Failed: "Try again".
+
+  It replaced a home-only bottom banner that lost to two Android warnings, so
+  a release could go unseen. It sits above the Navigator, so it has no Overlay:
+  never give it a Tooltip.
 - **Previews**: a text clip opens a bottom sheet (selectable text, Copy,
   Delete); an image opens a full-screen dark viewer.
 
