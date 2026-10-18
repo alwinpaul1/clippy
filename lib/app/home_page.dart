@@ -400,6 +400,10 @@ class _HomeBodyState extends State<_HomeBody> {
                   filter: _filter,
                   onFilter: (f) => setState(() => _filter = f),
                   onClearAll: _clearAll,
+                  onSelect: () => setState(() {
+                    _selecting = true;
+                    _selected.clear();
+                  }),
                   devices: sources,
                   thisDevice: _ctl.deviceName,
                   device: _device,
@@ -558,13 +562,16 @@ class _Header extends StatelessWidget {
   }
 }
 
+enum _ListAction { select, clearAll }
+
 class _Toolbar extends StatelessWidget {
   final TextEditingController search;
   final _Filter filter;
   final ValueChanged<_Filter> onFilter;
   final VoidCallback onClearAll;
+  final VoidCallback onSelect;
 
-  /// Devices that sent a clip, newest first; the chips show only for 2+.
+  /// Devices that sent a clip, newest first; the filter shows only for 2+.
   final List<DeviceCount> devices;
   final String thisDevice;
   final String? device;
@@ -578,6 +585,7 @@ class _Toolbar extends StatelessWidget {
     required this.filter,
     required this.onFilter,
     required this.onClearAll,
+    required this.onSelect,
   });
 
   @override
@@ -596,19 +604,36 @@ class _Toolbar extends StatelessWidget {
               hintText: 'Search clips',
               hintStyle: Ct.body(15, color: c.muted),
               prefixIcon: Icon(Icons.search_rounded, size: 20, color: c.muted2),
-              suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                valueListenable: search,
-                builder: (context, v, _) => v.text.isEmpty
-                    ? const SizedBox.shrink()
-                    : IconButton(
-                        tooltip: 'Clear search',
-                        icon: Icon(
-                          Icons.close_rounded,
-                          size: 18,
-                          color: c.muted2,
-                        ),
-                        onPressed: search.clear,
+              // Trailing edge: clear the query, then the device filter.
+              suffixIconConstraints: const BoxConstraints(minHeight: 44),
+              suffixIcon: Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: search,
+                      builder: (context, v, _) => v.text.isEmpty
+                          ? const SizedBox.shrink()
+                          : IconButton(
+                              tooltip: 'Clear search',
+                              icon: Icon(
+                                Icons.close_rounded,
+                                size: 18,
+                                color: c.muted2,
+                              ),
+                              onPressed: search.clear,
+                            ),
+                    ),
+                    if (devices.length >= 2)
+                      DeviceFilterChip(
+                        devices: devices,
+                        value: device,
+                        thisDevice: thisDevice,
+                        onChanged: onDevice,
                       ),
+                  ],
+                ),
               ),
               contentPadding: const EdgeInsets.symmetric(vertical: 12),
               fillColor: c.surface,
@@ -652,35 +677,54 @@ class _Toolbar extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              TextButton(
-                onPressed: onClearAll,
-                // Quiet here; the confirm dialog carries the warning.
-                style: TextButton.styleFrom(
-                  foregroundColor: c.muted2,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
+              // List actions live one tap away in a menu: Clear all is
+              // rare and destructive, so it should not sit beside the toggle
+              // people tap all day.
+              PopupMenuButton<_ListAction>(
+                tooltip: 'More',
+                icon: Icon(Icons.more_horiz_rounded, color: c.muted2),
+                position: PopupMenuPosition.under,
+                // A hairline and a soft shadow, the card style; the default
+                // M3 elevation drew a hard dark rim on paper.
+                color: c.surface,
+                elevation: 2,
+                shadowColor: Colors.black.withValues(alpha: c.isDark ? 0.5 : 0.12),
+                surfaceTintColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: c.border),
                 ),
-                child: Text(
-                  'Clear all',
-                  style: Ct.body(13, weight: FontWeight.w600, color: c.muted2),
-                ),
+                onSelected: (a) => switch (a) {
+                  _ListAction.select => onSelect(),
+                  _ListAction.clearAll => onClearAll(),
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: _ListAction.select,
+                    height: 48,
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle_outline_rounded, size: 20, color: c.ink),
+                        const SizedBox(width: 12),
+                        Text('Select clips', style: Ct.body(15, color: c.ink)),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: _ListAction.clearAll,
+                    height: 48,
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_sweep_outlined, size: 20, color: c.rust),
+                        const SizedBox(width: 12),
+                        Text('Clear all…', style: Ct.body(15, color: c.rust)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          if (devices.length >= 2) ...[
-            const SizedBox(height: 6),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: DeviceFilterButton(
-                devices: devices,
-                value: device,
-                thisDevice: thisDevice,
-                onChanged: (d) {
-                  Haptics.tick();
-                  onDevice(d);
-                },
-              ),
-            ),
-          ],
         ],
       ),
     );

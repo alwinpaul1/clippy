@@ -6,103 +6,6 @@ import 'theme.dart';
 /// A device that sent clips, with how many of the current history are its.
 typedef DeviceCount = ({String name, int count});
 
-/// The device filter: ONE button, whatever the number of devices. It names
-/// the current choice ("All devices", "SM-S918B") and opens a list to pick
-/// from. A chip per device stopped working past three or four devices: the
-/// row scrolled off screen and hid most of them.
-class DeviceFilterButton extends StatelessWidget {
-  final List<DeviceCount> devices;
-  final String? value; // null = every device
-  final String thisDevice;
-  final ValueChanged<String?> onChanged;
-  const DeviceFilterButton({
-    super.key,
-    required this.devices,
-    required this.value,
-    required this.thisDevice,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.ck;
-    final scheme = Theme.of(context).colorScheme;
-    final on = value != null;
-    final glyph = on
-        ? (deviceGlyph(value!) ?? Icons.devices_other_rounded)
-        : Icons.devices_rounded;
-    final label = value ?? 'All devices';
-    return Row(
-      children: [
-        Flexible(
-          child: Semantics(
-            button: true,
-            label: 'Showing clips from $label. Change device',
-            excludeSemantics: true,
-            child: TextButton(
-              onPressed: () async {
-                Haptics.tick();
-                final picked = await showDeviceFilterSheet(
-                  context,
-                  devices: devices,
-                  value: value,
-                  thisDevice: thisDevice,
-                );
-                if (picked != null) onChanged(picked.device);
-              },
-              style: TextButton.styleFrom(
-                backgroundColor: on ? c.surface : Colors.transparent,
-                shape: StadiumBorder(
-                  side: BorderSide(color: on ? c.ink : c.border, width: on ? 1.2 : 1),
-                ),
-                padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
-                minimumSize: const Size(0, 36),
-                tapTargetSize: MaterialTapTargetSize.padded,
-                visualDensity: VisualDensity.compact,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    glyph,
-                    size: 15,
-                    color: on ? deviceTint(scheme, value!) : c.muted2,
-                  ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Ct.body(13, weight: FontWeight.w600, color: on ? c.ink : c.muted2),
-                    ),
-                  ),
-                  if (!on) ...[
-                    const SizedBox(width: 6),
-                    Text('${devices.length}', style: Ct.body(13, color: c.muted)),
-                  ],
-                  const SizedBox(width: 2),
-                  Icon(Icons.expand_more_rounded, size: 18, color: on ? c.ink : c.muted2),
-                ],
-              ),
-            ),
-          ),
-        ),
-        // A one-tap way back, so a filter is never a dead end.
-        if (on)
-          IconButton(
-            tooltip: 'Show all devices',
-            onPressed: () {
-              Haptics.tick();
-              onChanged(null);
-            },
-            icon: Icon(Icons.close_rounded, size: 18, color: c.muted2),
-          ),
-      ],
-    );
-  }
-}
-
 /// The pick, wrapped so "All devices" (null) differs from a dismissed sheet.
 typedef DevicePick = ({String? device});
 
@@ -284,6 +187,89 @@ class _DeviceRow extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The device filter as it sits INSIDE the search bar: device glyph, a short
+/// name and a chevron, 32 tall with a 48 tall hit area. Both controls narrow
+/// the same list, so they share one field (as Evernote and Garmin place
+/// their filter button at the search field's trailing edge). ONE chip for any
+/// number of devices: a chip per device scrolled off screen past three or
+/// four. It opens a sheet listing them all.
+class DeviceFilterChip extends StatelessWidget {
+  final List<DeviceCount> devices;
+  final String? value; // null = every device
+  final String thisDevice;
+  final ValueChanged<String?> onChanged;
+  const DeviceFilterChip({
+    super.key,
+    required this.devices,
+    required this.value,
+    required this.thisDevice,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ck;
+    final scheme = Theme.of(context).colorScheme;
+    final on = value != null;
+    final label = value ?? 'All devices';
+    return Semantics(
+      button: true,
+      label: 'Showing clips from $label. Change device',
+      excludeSemantics: true,
+      child: TextButton(
+        onPressed: () async {
+          Haptics.tick();
+          final picked = await showDeviceFilterSheet(
+            context,
+            devices: devices,
+            value: value,
+            thisDevice: thisDevice,
+          );
+          if (picked != null) onChanged(picked.device);
+        },
+        style: TextButton.styleFrom(
+          backgroundColor: on ? scheme.primary : scheme.surfaceContainerLow,
+          foregroundColor: on ? scheme.onPrimary : c.muted2,
+          shape: const StadiumBorder(),
+          padding: const EdgeInsets.fromLTRB(10, 0, 6, 0),
+          minimumSize: const Size(0, 32),
+          tapTargetSize: MaterialTapTargetSize.padded,
+          visualDensity: VisualDensity.compact,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              on ? (deviceGlyph(value!) ?? Icons.devices_other_rounded) : Icons.devices_rounded,
+              size: 15,
+              color: on ? scheme.onPrimary : c.muted2,
+            ),
+            const SizedBox(width: 6),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 120),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Ct.body(
+                  12.5,
+                  weight: FontWeight.w600,
+                  color: on ? scheme.onPrimary : c.muted2,
+                ),
+              ),
+            ),
+            Icon(
+              Icons.expand_more_rounded,
+              size: 16,
+              color: on ? scheme.onPrimary : c.muted2,
+            ),
+          ],
         ),
       ),
     );
