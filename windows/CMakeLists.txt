@@ -102,6 +102,30 @@ install(CODE "
 install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
   DESTINATION "${INSTALL_BUNDLE_DATA_DIR}" COMPONENT Runtime)
 
+# Image search labels (runner/clip_vision.cpp): MobileNetV2 from the ONNX
+# model zoo (Apache-2.0), pinned to a commit and checked by hash. Fetched at
+# configure time instead of committed (14 MB). A failed download only warns:
+# the app then searches images by their text alone.
+set(CLIPPY_VISION_MODEL "${CMAKE_BINARY_DIR}/vision/mobilenetv2-7.onnx")
+set(CLIPPY_VISION_SHA256 "c1c513582d56afceff8516c73804e484c81c6a830712ab6d682253f4a3cd042f")
+if(EXISTS "${CLIPPY_VISION_MODEL}")
+  file(SHA256 "${CLIPPY_VISION_MODEL}" CLIPPY_VISION_HAVE)
+endif()
+if(NOT CLIPPY_VISION_HAVE STREQUAL CLIPPY_VISION_SHA256)
+  file(DOWNLOAD
+    "https://media.githubusercontent.com/media/onnx/models/4c46cd00fbdb7cd30b6c1c17ab54f2e1f4f7b177/validated/vision/classification/mobilenet/model/mobilenetv2-7.onnx"
+    "${CLIPPY_VISION_MODEL}" STATUS CLIPPY_VISION_STATUS TIMEOUT 120)
+  if(EXISTS "${CLIPPY_VISION_MODEL}")
+    file(SHA256 "${CLIPPY_VISION_MODEL}" CLIPPY_VISION_HAVE)
+  endif()
+endif()
+if(CLIPPY_VISION_HAVE STREQUAL CLIPPY_VISION_SHA256)
+  install(FILES "${CLIPPY_VISION_MODEL}" "${CMAKE_CURRENT_SOURCE_DIR}/runner/vision/imagenet_labels.txt"
+    DESTINATION "${INSTALL_BUNDLE_DATA_DIR}/vision" COMPONENT Runtime)
+else()
+  message(WARNING "Image-label model unavailable (${CLIPPY_VISION_STATUS}); building without it.")
+endif()
+
 # Install the AOT library on non-Debug builds only.
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release

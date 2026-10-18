@@ -4,8 +4,9 @@
 #include <flutter/binary_messenger.h>
 #include <windows.h>
 
-// On-device OCR for image search ("clippy/vision"), using Windows.Media.Ocr.
-// Recognition runs on a worker thread; the reply is posted back to the
+// On-device image understanding for search ("clippy/vision"): text through
+// Windows.Media.Ocr and content labels through Windows ML (MobileNetV2).
+// Analysis runs on a worker thread; the reply is posted back to the
 // window so Flutter only ever hears from its platform thread.
 namespace clip_vision {
 

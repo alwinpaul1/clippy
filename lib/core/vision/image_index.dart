@@ -18,8 +18,8 @@ class ImageInsight {
   /// Recognised text, one line per line in the image ("" when none).
   final String text;
 
-  /// Lower-case content labels, most confident first. Empty on Windows,
-  /// which has no built-in classifier.
+  /// Lower-case content labels, most confident first ("dog", "receipt").
+  /// On Windows they come from MobileNetV2 via Windows ML.
   final List<String> labels;
 
   /// Signals in [text], so "code" finds a screenshot of a verification code.
