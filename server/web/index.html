@@ -367,9 +367,7 @@
   .masked .n{font-family:'IBM Plex Mono',monospace;font-size:14px;letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
   .clock{display:inline-flex;align-items:center;gap:6px;flex:none;font:500 12.5px 'IBM Plex Mono',monospace;color:var(--accent-text);font-variant-numeric:tabular-nums}
   .clock svg{width:14px;height:14px}
-  .seg{margin-top:10px;display:grid;grid-template-columns:repeat(3,1fr);padding:3px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-size:12.5px;color:var(--muted);text-align:center}
-  .seg span{padding:6px 0;border-radius:999px}
-  .seg .on{background:var(--ink);color:var(--on-ink);font-weight:600}
+  .seg-note{margin-top:10px;font-size:12.5px;color:var(--muted);text-align:center}
 
   /* image search tile */
   .imgsearch{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center}
@@ -604,7 +602,7 @@
             <p>Clippy reads each clip on the device and offers the obvious next step. Nothing is sent anywhere to do it.</p>
             <ol class="steps">
               <li>Verification codes get a Copy 482913 button.</li>
-              <li>Card numbers and IBANs are hidden and wiped after a few minutes.</li>
+              <li>Card numbers and IBANs are hidden and wiped after 5 minutes.</li>
               <li>Search finds "hauptbanhof" even when you typed it wrong.</li>
             </ol>
           </div>
@@ -647,10 +645,10 @@
 
         <div class="tile reveal" style="--i:0" data-live id="sensTile">
           <h3>Card numbers clear themselves</h3>
-          <p>Clippy hides card numbers and IBANs, then removes them from every device after the time you pick.</p>
+          <p>Clippy hides card numbers and IBANs, then removes them from every device after 5 minutes.</p>
           <div class="ui grow" aria-hidden="true">
             <div class="masked"><span class="n">•••• •••• •••• 4821</span><span class="clock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/></svg><span id="clock">4:59</span></span></div>
-            <div class="seg"><span>1 min</span><span class="on">5 min</span><span>15 min</span></div>
+            <div class="seg-note">Wiped from every device and the clipboard after 5 minutes</div>
           </div>
         </div>
 
@@ -728,7 +726,7 @@
       <div class="reveal">
         <details><summary>Can the server read my clips?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>No. Clips are encrypted with AES-256 on your device before they are sent, and the key only exists on devices you paired by scanning the QR code. The relay stores and forwards ciphertext.</p></details>
         <details><summary>Is there an iPhone or Linux version?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>Not yet. Clippy runs on macOS 12 or later, Android 7 or later on an ARM phone, and 64-bit Windows 10 or later.</p></details>
-        <details><summary>How long are clips kept?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>The 25 most recent clips stay in your shared history, plus anything you pin. Delete a clip on one device and it disappears from all of them. Card numbers and IBANs clear themselves after the time you choose.</p></details>
+        <details><summary>How long are clips kept?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>The 25 most recent clips stay in your shared history, plus anything you pin. Delete a clip on one device and it disappears from all of them. Card numbers and IBANs clear themselves after 5 minutes.</p></details>
         <details><summary>Why does Android ask for accessibility access?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>Android stops background apps from reading the clipboard. The accessibility service is how Clippy notices a copy while you're in another app. It reads nothing else. Without it you can still send clips with the quick tile.</p></details>
         <details><summary>Why is the Android app an APK and not on Google Play?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>Clippy is a free side project and ships directly from this site. The APK is signed with one permanent key, and the app updates itself in place when a new version is out.</p></details>
         <details><summary>Does it cost anything?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>No. It's free and MIT licensed, and the source is on GitHub.</p></details>
