@@ -59,27 +59,9 @@ class SettingsPage extends StatelessWidget {
                           onChanged: theme.set,
                         ),
                       ),
-                      _Note("System follows your device's appearance.", c),
-                      const SectionLabel('Sensitive clips'),
-                      _Note(
-                          'Card numbers and IBANs are blurred in the list and '
-                          'removed from every device, and from the clipboard, '
-                          'after 5 minutes. Copying them still works.',
-                          c),
                       if (defaultTargetPlatform == TargetPlatform.android) ...[
                         const SectionLabel('Background sync'),
                         const _BgSyncCard(),
-                        _Note(
-                            // The card states the feature, its status and
-                            // every step; the note carries only what the card
-                            // cannot: the one visible side effect, that the
-                            // last step is not optional, and the fallback.
-                            'Reading a copy briefly flickers the screen. All '
-                            'three steps are needed; without the last one '
-                            'Android pauses sync soon after the phone locks. '
-                            'Missed one? The "Send clipboard" quick-settings '
-                            'tile sends it with one tap.',
-                            c),
                       ],
                       const SectionLabel('Devices'),
                       GroupCard(
@@ -146,18 +128,6 @@ class SettingsPage extends StatelessWidget {
         );
     }
   }
-}
-
-/// The explanatory sentence under a group.
-class _Note extends StatelessWidget {
-  final String text;
-  final ClippyColors c;
-  const _Note(this.text, this.c);
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(4, 10, 4, 0),
-        child: Text(text, style: Ct.body(12.5, color: c.muted2)),
-      );
 }
 
 /// A settings row: a plain glyph (no plate; the grouped card already frames

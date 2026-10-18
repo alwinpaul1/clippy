@@ -33,10 +33,12 @@ class UpdateCardHost extends StatelessWidget {
     return Stack(
       children: [
         child,
-        ValueListenableBuilder<UpdateInfo?>(
+        ValueListenableBuilder<bool>(
+          valueListenable: updateSheetOpen,
+          builder: (context, sheetOpen, _) => ValueListenableBuilder<UpdateInfo?>(
           valueListenable: updater.available,
           builder: (context, info, _) {
-            if (info == null) {
+            if (info == null || sheetOpen) {
               _setOccupied(0);
               return const SizedBox.shrink();
             }
@@ -57,6 +59,7 @@ class UpdateCardHost extends StatelessWidget {
               ),
             );
           },
+          ),
         ),
       ],
     );
