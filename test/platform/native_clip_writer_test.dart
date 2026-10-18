@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:clippy/platform/flutter_clipboard_writer.dart';
 import 'package:clippy/platform/image_clipboard.dart';
 import 'package:clippy/platform/native_clip_writer.dart';
