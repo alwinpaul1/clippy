@@ -445,16 +445,10 @@
   .req{margin-top:12px;font-size:13px;color:var(--muted2)}
 
   /* ---- footer */
-  footer{border-top:1px solid var(--line);padding:56px 0 40px;margin-top:120px}
-  .foot{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:32px}
-  @media (max-width:760px){.foot{grid-template-columns:1fr 1fr}.foot .about{grid-column:1/-1}}
-  .foot h2{margin:0 0 14px;font-size:13px;color:var(--muted2);font-weight:600;letter-spacing:0;line-height:1.4}
-  .foot ul{list-style:none;margin:0;padding:0;display:grid;gap:0;font-size:15px}
-  .foot ul a{display:inline-flex;align-items:center;min-height:44px}
-  .foot a{text-decoration:none;color:var(--ink2)}
-  .foot a:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
-  .foot .about p{color:var(--muted);font-size:15px;max-width:34ch;margin:14px 0 0}
-  .copyright{margin-top:48px;padding-top:24px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;font-size:12.5px;color:var(--muted2)}
+  footer{border-top:1px solid var(--line);padding:8px 0;margin-top:24px}
+  .copyright{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 12px;font-size:12.5px;color:var(--muted2)}
+  .copyright a{display:inline-flex;align-items:center;min-height:44px;color:var(--ink2);text-decoration:none}
+  .copyright a:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
 
   /* ---- scroll reveal (off for reduced motion and without JS) */
   .js .reveal{opacity:0;transform:translateY(18px);transition:opacity .6s var(--ease-out),transform .6s var(--ease-out);transition-delay:calc(var(--i,0) * 60ms)}
@@ -741,16 +735,7 @@
 
 <footer>
   <div class="wrap">
-    <div class="foot">
-      <div class="about">
-        <a class="brand" href="/" translate="no">Clippy</a>
-        <p>Cross-device clipboard sync for Mac, Android and Windows. End-to-end encrypted, no account.</p>
-      </div>
-      <div><h2>Product</h2><ul><li><a href="#features">Features</a></li><li><a href="#compare">Compare</a></li><li><a href="#faq">FAQ</a></li><li><a href="#get">Download</a></li></ul></div>
-      <div><h2>Built with</h2><ul><li><a href="https://flutter.dev" rel="noopener">Flutter</a></li><li><a href="https://dart.dev" rel="noopener">Dart relay</a></li><li><a href="https://github.com/alwinpaul1/clippy/blob/main/LICENSE" rel="noopener">MIT licence</a></li></ul></div>
-      <div><h2>Contact</h2><ul><li><a href="https://github.com/alwinpaul1/clippy/issues" rel="noopener">Report an issue</a></li><li><a href="https://github.com/alwinpaul1/clippy" rel="noopener">GitHub</a></li><li><a href="https://www.instagram.com/alwi._nn" rel="noopener">Instagram</a></li></ul></div>
-    </div>
-    <div class="copyright mono"><span>© 2026 Alwin Paul</span><span>clippy.alwinpaul.me</span></div>
+    <div class="copyright mono"><span>© 2026 Alwin Paul</span><span><a href="https://github.com/alwinpaul1/clippy" rel="noopener">GitHub</a> · <a href="https://www.instagram.com/alwi._nn" rel="noopener">Instagram</a></span></div>
   </div>
 </footer>
 
