@@ -72,8 +72,9 @@ class _ClippyRootState extends State<ClippyRoot> {
     super.initState();
     _bootstrap();
     // Non-blocking: surfaces the update banner on the home screen if a newer
-    // release is out and not already dismissed.
-    updater.checkOnStartup();
+    // release is out and not already dismissed, now and on every return to
+    // the app (see UpdateController.watch).
+    updater.watch();
   }
 
   Future<String> _deviceId() async {

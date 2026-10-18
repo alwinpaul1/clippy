@@ -12,6 +12,8 @@
       "Pairing is simpler, with the key, a new-key button and the scanner in one place.",
       "Better text contrast throughout, in both themes."
     ],
-    "fixes": []
+    "fixes": [
+      "Update notices now appear when you come back to Clippy. Before, the app checked only when it first started, which on a phone or a tray app could be days ago."
+    ]
   }
 }

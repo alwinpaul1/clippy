@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/update/update_info.dart';
@@ -31,7 +34,9 @@ class UpdateController {
   UpdateController({
     UpdateService? service,
     PlatformUpdater? Function()? updaterFactory,
-  })  : _service = service ??
+    DateTime Function()? clock,
+  })  : _clock = clock ?? DateTime.now,
+        _service = service ??
             UpdateService(
               manifestUri: _manifestUri(),
               currentVersion: _currentVersion,
@@ -42,6 +47,7 @@ class UpdateController {
 
   final UpdateService _service;
   final PlatformUpdater? Function() _updaterFactory;
+  final DateTime Function() _clock;
 
   /// The available update, or null when up to date / not yet checked.
   final ValueNotifier<UpdateInfo?> available = ValueNotifier(null);
@@ -66,11 +72,46 @@ class UpdateController {
 
   /// Silent startup check, surfaces the banner only if not already dismissed.
   Future<void> checkOnStartup() async {
+    _lastCheck = _clock();
     final info = await _service.check();
     if (info == null) return;
     if (await _service.isDismissed('${info.version}+${info.build}')) return;
     available.value = info;
   }
+
+  /// Checking only at startup missed every release: Clippy's process almost
+  /// never restarts (Android's background-sync service and the desktop tray
+  /// keep it alive for days), so "opening the app" resumed a process that
+  /// had checked once, possibly while offline, and never again. So check at
+  /// startup, again whenever the app comes back to the foreground, and on a
+  /// slow timer for a desktop window that never leaves the screen.
+  void watch() {
+    unawaited(checkOnStartup());
+    _lifecycle ??= AppLifecycleListener(onResume: () => unawaited(checkIfStale()));
+    _timer ??= Timer.periodic(periodicInterval, (_) => unawaited(checkIfStale()));
+  }
+
+  /// A re-check unless one ran within [minInterval]; a resume every few
+  /// seconds (app switching) must not hammer the relay.
+  Future<void> checkIfStale() async {
+    final last = _lastCheck;
+    if (last != null && _clock().difference(last) < minInterval) return;
+    await checkOnStartup();
+  }
+
+  /// Stops the resume and timer re-checks (tests; the app never stops).
+  void unwatch() {
+    _lifecycle?.dispose();
+    _lifecycle = null;
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  static const minInterval = Duration(minutes: 15);
+  static const periodicInterval = Duration(hours: 6);
+  DateTime? _lastCheck;
+  AppLifecycleListener? _lifecycle;
+  Timer? _timer;
 
   /// Manual check (Settings). Always surfaces the update even if dismissed.
   Future<CheckResult> checkNow() async {
