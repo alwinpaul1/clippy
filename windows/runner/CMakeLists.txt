@@ -35,11 +35,12 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 # dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
-# Image search OCR (clip_vision.cpp): C++/WinRT from the Windows SDK. Its
-# headers are not /W4-clean, so that one file does not treat warnings as
-# errors.
+# Image search (clip_vision.cpp): C++/WinRT from the Windows SDK. Under
+# C++17 its headers pull in <experimental/coroutine>, which current MSVC
+# rejects (STL1011), so that one file builds as C++20. Its headers are not
+# /W4-clean, so it also does not treat warnings as errors.
 target_link_libraries(${BINARY_NAME} PRIVATE "windowsapp.lib")
-set_source_files_properties("clip_vision.cpp" PROPERTIES COMPILE_OPTIONS "/WX-")
+set_source_files_properties("clip_vision.cpp" PROPERTIES COMPILE_OPTIONS "/WX-;/std:c++20")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
