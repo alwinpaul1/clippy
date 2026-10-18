@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatf
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-import '../core/signals/sensitive_sweeper.dart';
 import '../platform/share_channel.dart';
 import 'permission_help_sheet.dart';
 import 'theme.dart';
@@ -62,11 +61,10 @@ class SettingsPage extends StatelessWidget {
                       ),
                       _Note("System follows your device's appearance.", c),
                       const SectionLabel('Sensitive clips'),
-                      const _SensitiveTtlPicker(),
                       _Note(
                           'Card numbers and IBANs are blurred in the list and '
                           'removed from every device, and from the clipboard, '
-                          'after this long. Copying them still works.',
+                          'after 5 minutes. Copying them still works.',
                           c),
                       if (defaultTargetPlatform == TargetPlatform.android) ...[
                         const SectionLabel('Background sync'),
@@ -548,35 +546,4 @@ class _StepBadge extends StatelessWidget {
               style: Ct.mono(11.5, color: c.muted2, weight: FontWeight.w600)),
     );
   }
-}
-
-/// How long a card number or IBAN stays before auto-clear. Stored per device;
-/// the sweeper (app and Android background service) re-reads it every pass.
-class _SensitiveTtlPicker extends StatefulWidget {
-  const _SensitiveTtlPicker();
-  @override
-  State<_SensitiveTtlPicker> createState() => _SensitiveTtlPickerState();
-}
-
-class _SensitiveTtlPickerState extends State<_SensitiveTtlPicker> {
-  int _minutes = SensitiveTtl.defaultMinutes;
-
-  @override
-  void initState() {
-    super.initState();
-    SensitiveTtl.read().then((d) {
-      if (mounted) setState(() => _minutes = d.inMinutes);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => PillSegments<int>(
-        expand: true,
-        options: [for (final m in SensitiveTtl.choices) (m, '$m min')],
-        value: _minutes,
-        onChanged: (m) {
-          setState(() => _minutes = m);
-          SensitiveTtl.write(m);
-        },
-      );
 }
