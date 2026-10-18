@@ -427,7 +427,9 @@
   @keyframes answer{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 
   /* ---- closing cta */
-  #get{padding-top:0}
+  #get{padding:0}
+  .faq-more{margin:24px 0 0;color:var(--muted);font-size:15px}
+  .faq-more a{color:var(--ink);text-underline-offset:3px}
   .closing{position:relative;text-align:center;border:1px solid var(--line);border-radius:32px;padding:clamp(56px,8vw,104px) 24px;background:radial-gradient(70% 90% at 50% 0%,var(--accent-soft),transparent 70%),var(--bg2);overflow:hidden}
   .closing h2{margin:0 auto;font-size:clamp(36px,6vw,72px)}
   .closing .lead{margin:20px auto 0}
@@ -678,6 +680,22 @@
     </div>
   </section>
 
+  <section id="get">
+    <div class="wrap">
+      <div class="closing reveal">
+        <h2>Copy here. Paste there.</h2>
+        <p class="lead">Install it on two devices and scan the code. Takes about a minute.</p>
+        <div class="os-tabs" id="osTabs" role="tablist" aria-label="Platform">
+          <button class="os-opt" role="tab" type="button" data-os="macos" aria-selected="true">macOS</button>
+          <button class="os-opt" role="tab" type="button" data-os="android" aria-selected="false" tabindex="-1">Android</button>
+          <button class="os-opt" role="tab" type="button" data-os="windows" aria-selected="false" tabindex="-1">Windows</button>
+        </div>
+        <div><a class="btn btn-primary" id="getBtn" href="/download/Clippy-macOS.dmg" data-platform="macos"><span id="getIcon" aria-hidden="true"></span><span id="getLabel">Download for macOS</span></a></div>
+        <div class="req mono" id="osReq">Apple Silicon &amp; Intel · macOS 12+</div>
+      </div>
+    </div>
+  </section>
+
   <section id="compare">
     <div class="wrap">
       <span class="eyebrow">Compare</span>
@@ -714,22 +732,7 @@
         <details><summary>Why does Android ask for accessibility access?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>Android stops background apps from reading the clipboard. The accessibility service is how Clippy notices a copy while you're in another app. It reads nothing else. Without it you can still send clips with the quick tile.</p></details>
         <details><summary>Why is the Android app an APK and not on Google Play?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>Clippy is a free side project and ships directly from this site. The APK is signed with one permanent key, and the app updates itself in place when a new version is out.</p></details>
         <details><summary>Does it cost anything?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>No. It's free and MIT licensed, and the source is on GitHub.</p></details>
-      </div>
-    </div>
-  </section>
-
-  <section id="get">
-    <div class="wrap">
-      <div class="closing reveal">
-        <h2>Copy here. Paste there.</h2>
-        <p class="lead">Install it on two devices and scan the code. Takes about a minute.</p>
-        <div class="os-tabs" id="osTabs" role="tablist" aria-label="Platform">
-          <button class="os-opt" role="tab" type="button" data-os="macos" aria-selected="true">macOS</button>
-          <button class="os-opt" role="tab" type="button" data-os="android" aria-selected="false" tabindex="-1">Android</button>
-          <button class="os-opt" role="tab" type="button" data-os="windows" aria-selected="false" tabindex="-1">Windows</button>
-        </div>
-        <div><a class="btn btn-primary" id="getBtn" href="/download/Clippy-macOS.dmg" data-platform="macos"><span id="getIcon" aria-hidden="true"></span><span id="getLabel">Download for macOS</span></a></div>
-        <div class="req mono" id="osReq">Apple Silicon &amp; Intel · macOS 12+</div>
+        <p class="faq-more">Something else? <a href="https://github.com/alwinpaul1/clippy/issues" rel="noopener">Ask on GitHub</a>, or <a href="#get">download Clippy</a>.</p>
       </div>
     </div>
   </section>
