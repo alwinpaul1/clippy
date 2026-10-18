@@ -1,30 +1,16 @@
 import 'dart:async';
 
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'clip_signals.dart';
 
 /// How long a sensitive clip (card number, IBAN) lives before it is removed
-/// from the shared history and from this device's clipboard. A per-device
-/// setting; whichever device's timer fires first deletes it for the room.
+/// from the shared history and from this device's clipboard: 5 minutes on
+/// every device. Settings had a 1 / 5 / 15 min picker until 2026-10-18; a
+/// value an older version saved is ignored.
 abstract class SensitiveTtl {
-  static const prefsKey = 'clippy.sensitive.ttlMin';
-  static const choices = [1, 5, 15];
   static const defaultMinutes = 5;
 
-  static Future<Duration> read() async {
-    final prefs = await SharedPreferences.getInstance();
-    // The background isolate keeps its own prefs cache; pick up a change
-    // made in Settings.
-    await prefs.reload();
-    final m = prefs.getInt(prefsKey) ?? defaultMinutes;
-    return Duration(minutes: choices.contains(m) ? m : defaultMinutes);
-  }
-
-  static Future<void> write(int minutes) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(prefsKey, minutes);
-  }
+  static Future<Duration> read() async =>
+      const Duration(minutes: defaultMinutes);
 }
 
 /// One clip as the sweeper sees it.
