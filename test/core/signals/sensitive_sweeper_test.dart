@@ -53,12 +53,14 @@ void main() {
         Duration.zero);
   });
 
-  test('TTL defaults to 5 min and rejects values outside the choices', () async {
+  // 2026-10-18: the Sensitive clips picker was removed; every device clears after 5 minutes,
+  // including one that saved 1 or 15 minutes before.
+  test('a sensitive clip is cleared after 5 minutes, whatever an older version saved', () async {
     SharedPreferences.setMockInitialValues({});
     expect(await SensitiveTtl.read(), const Duration(minutes: 5));
-    await SensitiveTtl.write(15);
-    expect(await SensitiveTtl.read(), const Duration(minutes: 15));
-    SharedPreferences.setMockInitialValues({SensitiveTtl.prefsKey: 999});
-    expect(await SensitiveTtl.read(), const Duration(minutes: 5));
+    for (final saved in [1, 15, 999]) {
+      SharedPreferences.setMockInitialValues({'clippy.sensitive.ttlMin': saved});
+      expect(await SensitiveTtl.read(), const Duration(minutes: 5));
+    }
   });
 }
