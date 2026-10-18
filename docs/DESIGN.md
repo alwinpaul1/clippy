@@ -183,8 +183,8 @@ must not change colour after a Dart upgrade.
 
   `SensitiveSweeper` deletes an expired sensitive clip room-wide and wipes it
   off the clipboard, but only if the clipboard still holds it. It runs in the
-  app and in Android's background service. The TTL is per device (1 / 5 / 15
-  min, default 5, in Settings).
+  app and in Android's background service. The TTL is a fixed 5 minutes on
+  every device; there is no setting.
 
   `LinkOpener` opens only http(s), tel and mailto. Clip text is untrusted.
 - **Pins**: a pinned clip sits in a "Pinned" group above Today. The relay
