@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../core/history/history_item.dart';
+import '../core/signals/clip_signals.dart';
+import 'signal_ui.dart';
 import 'theme.dart';
 import 'ui_kit.dart';
 
@@ -48,28 +50,48 @@ String imageFormatLabel(HistoryItem item) {
   return 'JPG';
 }
 
-/// Text clip preview: a bottom sheet with the full, selectable content and
-/// Copy (primary) / Delete.
-class TextClipPreview extends StatelessWidget {
+/// Text clip preview: a bottom sheet with the full, selectable content, the
+/// clip's actions, and Copy (primary) / Delete. A sensitive clip stays
+/// blurred until "Show" is tapped: opening the sheet in a café should not
+/// put a card number on screen.
+class TextClipPreview extends StatefulWidget {
   final HistoryItem item;
   final VoidCallback onCopy;
   final VoidCallback onDelete;
+  final List<ClipSignal> signals;
+  final Duration? sensitiveLeft;
+  final void Function(String text, String what) onCopyText;
+  final void Function(Uri) onOpen;
   const TextClipPreview({
     super.key,
     required this.item,
     required this.onCopy,
     required this.onDelete,
+    this.signals = const [],
+    this.sensitiveLeft,
+    required this.onCopyText,
+    required this.onOpen,
   });
+
+  @override
+  State<TextClipPreview> createState() => _TextClipPreviewState();
+}
+
+class _TextClipPreviewState extends State<TextClipPreview> {
+  bool _revealed = false;
 
   @override
   Widget build(BuildContext context) {
     final c = context.ck;
+    final item = widget.item;
     final kind = clipKindOf(item);
+    final left = widget.sensitiveLeft;
+    final sensitive = left != null;
     final meta = [
-      clipKindLabel(kind),
+      signalMetaLabel(widget.signals) ?? clipKindLabel(kind),
       if (item.device.isNotEmpty) item.device,
       relativeAge(item.timestamp),
-      '${item.text.length} chars',
+      if (!sensitive) '${item.text.length} chars',
     ].join(' · ');
     return Container(
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.75),
@@ -83,8 +105,23 @@ class TextClipPreview extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SheetGrabber(),
-          Text(meta.toUpperCase(), style: Ct.meta(color: c.muted)),
-          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: Text(meta.toUpperCase(), style: Ct.meta(color: c.muted))),
+              if (sensitive)
+                TextButton.icon(
+                  onPressed: () => setState(() => _revealed = !_revealed),
+                  icon: Icon(
+                    _revealed ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                    size: 16,
+                    color: c.ink,
+                  ),
+                  label: Text(_revealed ? 'Hide' : 'Show',
+                      style: Ct.body(13.5, weight: FontWeight.w600, color: c.ink)),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
           Flexible(
             child: Container(
               padding: const EdgeInsets.all(16),
@@ -93,15 +130,33 @@ class TextClipPreview extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: SingleChildScrollView(
-                child: SelectableText(
-                  item.text,
-                  style: kind == ClipKind.code
-                      ? Ct.mono(15, color: c.ink)
-                      : Ct.body(16, color: c.ink, height: 1.55),
-                ),
+                child: sensitive
+                    ? SensitiveBody(
+                        text: item.text,
+                        signal: widget.signals.firstWhere((s) => s.isSensitive),
+                        left: left,
+                        revealed: _revealed,
+                      )
+                    : SelectableText(
+                        item.text,
+                        style: kind == ClipKind.code
+                            ? Ct.mono(15, color: c.ink)
+                            : Ct.body(16, color: c.ink, height: 1.55),
+                      ),
               ),
             ),
           ),
+          if (!sensitive && widget.signals.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            SignalActions(
+              signals: widget.signals,
+              onCopyText: (t, w) {
+                Navigator.pop(context);
+                widget.onCopyText(t, w);
+              },
+              onOpen: widget.onOpen,
+            ),
+          ],
           const SizedBox(height: 16),
           Row(
             children: [
@@ -109,7 +164,7 @@ class TextClipPreview extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: () {
                     Navigator.pop(context);
-                    onCopy();
+                    widget.onCopy();
                   },
                   icon: const Icon(Icons.copy_rounded, size: ClipIcons.inline),
                   label: const Text('Copy'),
@@ -123,7 +178,7 @@ class TextClipPreview extends StatelessWidget {
                 fill: c.rust.withValues(alpha: c.isDark ? 0.16 : 0.08),
                 onTap: () {
                   Navigator.pop(context);
-                  onDelete();
+                  widget.onDelete();
                 },
               ),
             ],

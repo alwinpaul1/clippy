@@ -1,20 +1,15 @@
 {
-  "version": "1.7.0",
+  "version": "1.8.0",
   "notes": {
     "features": [
-      "A fresh design: calmer colours, a new typeface, and light and dark themes that both look their best.",
-      "A Devices screen showing every device that shares your clipboard and when it last sent something.",
-      "Search your clips and filter them by text, links or images.",
-      "A new update card that slides in on every screen, on Mac, Windows and Android, with download progress right in the card."
+      "Card numbers and IBANs are blurred and removed from all your devices, and from the clipboard, after 5 minutes. You can pick 1, 5 or 15 minutes in Settings.",
+      "One-time codes get a \"Copy\" button that copies just the code.",
+      "Links, phone numbers, email addresses and street addresses get one-tap Open, Call, Email and Map buttons.",
+      "Smarter search: the best matches come first, small typos are forgiven, and you can search \"code\", \"card\", \"phone\" or \"link\" to find that kind of clip."
     ],
     "improvements": [
-      "Clips are grouped by day, and images show large enough to recognise at a glance.",
-      "Adding a device is one sheet: scan the QR code or copy the key.",
-      "Pairing is simpler, with the key, a new-key button and the scanner in one place.",
-      "Better text contrast throughout, in both themes."
+      "On Android 13 and later, sensitive clips are hidden in the system's own clipboard preview."
     ],
-    "fixes": [
-      "Update notices now appear when you come back to Clippy. Before, the app checked only when it first started, which on a phone or a tray app could be days ago."
-    ]
+    "fixes": []
   }
 }

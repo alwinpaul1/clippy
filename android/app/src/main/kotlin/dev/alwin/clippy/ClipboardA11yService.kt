@@ -371,13 +371,17 @@ class ClipboardA11yService : AccessibilityService() {
             } catch (_: Exception) {
                 null
             } ?: ""
-            if (mime.startsWith("image/")) return emitClipImage(uri, mime)
+            if (mime.startsWith("image/")) {
+                ClipWriter.noteUserCopy(null)
+                return emitClipImage(uri, mime)
+            }
         }
         val text = try {
             item.coerceToText(this)?.toString()?.takeIf { it.isNotBlank() }
         } catch (_: Exception) {
             null
         } ?: return false
+        ClipWriter.noteUserCopy(text)
         emit(text)
         return true
     }

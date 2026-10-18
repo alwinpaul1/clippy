@@ -16,6 +16,8 @@ import '../core/history/history_item.dart';
 import '../core/history/history_store.dart';
 import '../core/models/clip_event.dart';
 import '../core/pairing/pairing_key.dart';
+import '../core/signals/clip_signals.dart';
+import '../core/signals/sensitive_sweeper.dart';
 import '../core/state/prefs_state_store.dart';
 import '../core/sync/sync_action.dart';
 import '../core/sync/sync_engine.dart';
@@ -24,6 +26,8 @@ import '../platform/flutter_clipboard_writer.dart';
 import '../platform/foreground_service.dart';
 import '../platform/image_clipboard.dart';
 import '../platform/mac_screenshot_watcher.dart';
+import '../platform/native_clip_writer.dart';
+import '../platform/sensitive_clipboard.dart';
 import '../platform/share_channel.dart';
 import 'relay_config.dart';
 
@@ -72,6 +76,24 @@ class ClipController extends ChangeNotifier
   bool _incomingImagePending = false;
 
   List<HistoryItem> history = const [];
+
+  /// OTPs, cards, phone numbers... per clip, detected once per content hash.
+  final signals = SignalCache();
+  List<ClipSignal> signalsOf(HistoryItem i) =>
+      signals.of(i.hash, i.text, isImage: i.isImage);
+  bool isSensitive(HistoryItem i) => hasSensitive(signalsOf(i));
+
+  /// How long a sensitive clip lives (Settings → Sensitive clips), re-read
+  /// on every sweep so a change in Settings applies within seconds.
+  Duration sensitiveTtl = const Duration(minutes: SensitiveTtl.defaultMinutes);
+
+  /// Time until [i] is auto-cleared, or null if it is not sensitive.
+  Duration? sensitiveLeft(HistoryItem i) => isSensitive(i)
+      ? SensitiveSweeper.remaining(i.timestamp, sensitiveTtl)
+      : null;
+
+  SensitiveSweeper? _sweeper;
+
   bool ready = false;
   bool connected = false;
   // Android screenshot auto-sync access: 'granted' | 'partial' | 'denied' |
@@ -164,10 +186,23 @@ class ClipController extends ChangeNotifier
     }
 
     _store = WebSocketClipStore.connect(Uri.parse(relayUrl), roomToken);
+    sensitiveTtl = await SensitiveTtl.read();
+    _sweeper = SensitiveSweeper(
+      clips: () => [
+        for (final i in history)
+          (hash: i.hash, text: i.text, isImage: i.isImage, timestamp: i.timestamp)
+      ],
+      delete: (hashes) async => _store?.deleteHashes(hashes),
+      clearClipboard: SensitiveClipboard.clearIfCurrent,
+      signals: signals,
+      ttl: () async => sensitiveTtl = await SensitiveTtl.read(),
+    )..start();
 
     _historySub = _store!.history.listen((clips) async {
       history = await _historyStore!.project(clips);
+      signals.retain(history.map((i) => i.hash));
       notifyListeners();
+      unawaited(_sweeper?.sweep());
       // Refresh the instant-open cache: encrypted clips only, and skip large
       // image payloads so prefs stays small (images stream in on connect).
       final small = clips
@@ -223,6 +258,12 @@ class ClipController extends ChangeNotifier
           }
         } else {
           _handledText = a.text; // suppress the resume/watcher re-read echo
+          // A card number or IBAN is marked sensitive, so Android 13+ hides it
+          // in the system's own clipboard preview.
+          final sensitive = hasSensitive(detectSignals(a.text));
+          if (sensitive && await NativeClipWriter.writeText(a.text, sensitive: true)) {
+            continue;
+          }
           await _writer.setText(a.text);
         }
       }
@@ -513,8 +554,19 @@ class ClipController extends ChangeNotifier
       await ImageClipboard.write(item.imageBytes!);
     } else {
       _handledText = item.text;
+      if (isSensitive(item) &&
+          await NativeClipWriter.writeText(item.text, sensitive: true)) {
+        return;
+      }
       await _historyStore?.applyItem(item);
     }
+  }
+
+  /// Put [text] (an OTP's digits, say) on this device's clipboard WITHOUT
+  /// syncing it as a new clip: it is part of a clip the room already has.
+  Future<void> copyText(String text) async {
+    _handledText = text; // the watcher / resume re-read is our own echo
+    await _writer.setText(text); // native on Android: stamped as our write
   }
 
   /// Delete the given history items (by content hash) everywhere in the room.
@@ -535,6 +587,7 @@ class ClipController extends ChangeNotifier
     WidgetsBinding.instance.removeObserver(this);
     ForegroundServiceManager.stopHealthWatch();
     _uiPing?.cancel();
+    _sweeper?.stop();
     _macShots?.stop();
     ShareChannel.listen();
     if (_watching) {

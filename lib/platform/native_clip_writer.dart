@@ -22,8 +22,16 @@ abstract class NativeClipWriter {
 
   static bool get _isAndroid => debugIsAndroid ?? (!kIsWeb && Platform.isAndroid);
 
-  static Future<bool> writeText(String text) =>
-      _invoke('writeText', {'text': text});
+  /// [sensitive] marks the clip so Android 13+ hides it in its own clipboard
+  /// preview (card numbers, IBANs).
+  static Future<bool> writeText(String text, {bool sensitive = false}) =>
+      _invoke('writeText', {'text': text, 'sensitive': sensitive});
+
+  /// Wipe the clipboard if it still holds [text], i.e. nothing newer was
+  /// copied since. Android cannot read the clipboard from the background, so
+  /// the native side tracks what it last wrote or saw copied.
+  static Future<bool> clearIfCurrent(String text) =>
+      _invoke('clearIfCurrent', {'text': text});
 
   static Future<bool> writeImage(Uint8List bytes, String ext) =>
       _invoke('writeImage', {'bytes': bytes, 'ext': ext});

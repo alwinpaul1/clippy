@@ -6,13 +6,17 @@ import 'package:flutter/material.dart';
 
 import '../core/history/history_item.dart';
 import '../core/pairing/pairing_key.dart';
+import '../core/search/clip_search.dart';
+import '../core/signals/clip_signals.dart';
 import '../platform/haptics.dart';
+import '../platform/link_opener.dart';
 import '../platform/share_channel.dart';
 import 'clip_controller.dart';
 import 'clip_preview.dart';
 import 'devices_page.dart';
 import 'permission_help_sheet.dart';
 import 'settings_page.dart';
+import 'signal_ui.dart';
 import 'theme.dart';
 import 'theme_controller.dart';
 import 'ui_kit.dart';
@@ -203,6 +207,10 @@ class _HomeBodyState extends State<_HomeBody> {
           item: item,
           onCopy: () => _copy(item),
           onDelete: () => _deleteOne(item),
+          signals: _ctl.signalsOf(item),
+          sensitiveLeft: _ctl.sensitiveLeft(item),
+          onCopyText: _copyText,
+          onOpen: _open,
         ),
       );
     }
@@ -246,22 +254,49 @@ class _HomeBodyState extends State<_HomeBody> {
     }
   }
 
-  bool _matches(HistoryItem i) {
+  bool _kindOk(HistoryItem i) {
     final kind = clipKindOf(i);
-    final kindOk = switch (_filter) {
+    return switch (_filter) {
       _Filter.all => true,
       _Filter.text => kind == ClipKind.text || kind == ClipKind.code,
       _Filter.links => kind == ClipKind.link,
       _Filter.images => kind == ClipKind.image,
     };
-    if (!kindOk) return false;
-    if (_query.isEmpty) return true;
-    if (i.isImage) {
-      return 'image'.contains(_query) ||
-          i.device.toLowerCase().contains(_query);
+  }
+
+  /// The filter, then the search: ranked best-first when there is a query
+  /// (see clip_search.dart), newest-first otherwise.
+  List<HistoryItem> _visible(List<HistoryItem> all) {
+    final pool = all.where(_kindOk);
+    if (_query.isEmpty) return pool.toList();
+    final now = DateTime.now();
+    final scored = <(HistoryItem, double)>[];
+    for (final i in pool) {
+      final score = scoreDoc(
+        SearchDoc(
+          text: i.text,
+          device: i.device,
+          isImage: i.isImage,
+          signals: _ctl.signalsOf(i),
+          timestamp: i.timestamp,
+        ),
+        _query,
+        now: now,
+      );
+      if (score != null) scored.add((i, score));
     }
-    return i.text.toLowerCase().contains(_query) ||
-        i.device.toLowerCase().contains(_query);
+    scored.sort((a, b) => b.$2.compareTo(a.$2));
+    return [for (final e in scored) e.$1];
+  }
+
+  Future<void> _copyText(String text, String what) async {
+    await _ctl.copyText(text);
+    if (mounted) HomePage.snack(context, what);
+  }
+
+  Future<void> _open(Uri uri) async {
+    final ok = await LinkOpener.open(uri);
+    if (!ok && mounted) HomePage.snack(context, "Couldn't open that here");
   }
 
   @override
@@ -271,7 +306,7 @@ class _HomeBodyState extends State<_HomeBody> {
     final live = all.map((i) => i.hash).toSet();
     _selected.retainAll(live);
     if (_selecting && _selected.isEmpty && all.isEmpty) _selecting = false;
-    final shown = all.where(_matches).toList();
+    final shown = _visible(all);
     final devices = {
       for (final i in all)
         if (i.device.trim().isNotEmpty) i.device.trim(),
@@ -330,6 +365,11 @@ class _HomeBodyState extends State<_HomeBody> {
                       onToggle: _toggle,
                       onLongPress: _enterSelection,
                       onPreview: _openPreview,
+                      ranked: _query.isNotEmpty,
+                      signalsOf: _ctl.signalsOf,
+                      sensitiveLeft: _ctl.sensitiveLeft,
+                      onCopyText: _copyText,
+                      onOpen: _open,
                     ),
             ),
           ],
@@ -339,12 +379,8 @@ class _HomeBodyState extends State<_HomeBody> {
         // Lifted above the floating update card when both show on a phone.
         ValueListenableBuilder<double>(
           valueListenable: UpdateCardHost.occupied,
-          builder: (context, lift, child) => Positioned(
-            left: 16,
-            right: 16,
-            bottom: 16 + lift,
-            child: child!,
-          ),
+          builder: (context, lift, child) =>
+              Positioned(left: 16, right: 16, bottom: 16 + lift, child: child!),
           child: SafeArea(child: _Column(child: _bannerFor(context))),
         ),
       ],
@@ -659,7 +695,20 @@ class _Feed extends StatelessWidget {
   final void Function(HistoryItem) onToggle;
   final void Function(HistoryItem) onLongPress;
   final void Function(HistoryItem) onPreview;
+
+  /// Search results: one "N matches" group in score order, not day buckets
+  /// (which would re-sort them by time).
+  final bool ranked;
+  final List<ClipSignal> Function(HistoryItem) signalsOf;
+  final Duration? Function(HistoryItem) sensitiveLeft;
+  final void Function(String text, String what) onCopyText;
+  final void Function(Uri) onOpen;
   const _Feed({
+    required this.ranked,
+    required this.signalsOf,
+    required this.sensitiveLeft,
+    required this.onCopyText,
+    required this.onOpen,
     required this.items,
     required this.selecting,
     required this.selected,
@@ -686,7 +735,9 @@ class _Feed extends StatelessWidget {
     final rows = <Widget>[];
     String? current;
     for (final item in items) {
-      final b = _bucket(item.timestamp);
+      final b = ranked
+          ? '${items.length} ${items.length == 1 ? 'match' : 'matches'}'
+          : _bucket(item.timestamp);
       if (b != current) {
         rows.add(
           SectionLabel(
@@ -708,6 +759,10 @@ class _Feed extends StatelessWidget {
             onCopy: () => onCopy(item),
             onLongPress: () => onLongPress(item),
             onDelete: () => onDelete(item),
+            signals: signalsOf(item),
+            sensitiveLeft: sensitiveLeft(item),
+            onCopyText: onCopyText,
+            onOpen: onOpen,
           ),
         ),
       );
@@ -746,8 +801,18 @@ class _ClipRow extends StatelessWidget {
   final VoidCallback onCopy;
   final VoidCallback onLongPress;
   final VoidCallback onDelete;
+  final List<ClipSignal> signals;
+
+  /// Non-null for a sensitive clip: the time left before it auto-clears.
+  final Duration? sensitiveLeft;
+  final void Function(String text, String what) onCopyText;
+  final void Function(Uri) onOpen;
   const _ClipRow({
     super.key,
+    required this.signals,
+    required this.sensitiveLeft,
+    required this.onCopyText,
+    required this.onOpen,
     required this.item,
     required this.selecting,
     required this.selected,
@@ -765,6 +830,8 @@ class _ClipRow extends StatelessWidget {
     if (kind == ClipKind.image) {
       final kb = ((item.imageBytes?.length ?? 0) / 1024).round();
       parts.add('${imageFormatLabel(item)} $kb KB');
+    } else if (signalMetaLabel(signals) case final label?) {
+      parts.add(label);
     } else if (kind != ClipKind.text) {
       parts.add(clipKindLabel(kind));
     }
@@ -831,6 +898,12 @@ class _ClipRow extends StatelessWidget {
                       ),
                     ),
                   )
+                : sensitiveLeft != null
+                ? SensitiveBody(
+                    text: item.text,
+                    signal: signals.firstWhere((s) => s.isSensitive),
+                    left: sensitiveLeft!,
+                  )
                 : Text(
                     item.text.trim(),
                     maxLines: 4,
@@ -853,6 +926,18 @@ class _ClipRow extends StatelessWidget {
                     },
                   ),
           ),
+          // One-tap actions (copy the code, open, call, map). Hidden while
+          // selecting, where a tap means "select", and for sensitive clips,
+          // whose only action is the copy button.
+          if (!selecting && sensitiveLeft == null && signals.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: SignalActions(
+                signals: signals,
+                onCopyText: onCopyText,
+                onOpen: onOpen,
+              ),
+            ),
         ],
       ),
     );
