@@ -49,6 +49,9 @@ class ClipController extends ChangeNotifier
   MacScreenshotWatcher? _macShots;
   Timer? _uiPing;
   String _deviceName = '';
+
+  /// This device's name as other devices see it on its clips.
+  String get deviceName => _deviceName;
   // After we write an incoming image to the clipboard, ignore the watcher's
   // resulting change for a moment (PNG round-trips aren't byte-identical, so a
   // content fingerprint can't catch this echo).

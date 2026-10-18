@@ -3,138 +3,136 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-/// Clippy's design system, the violet Material 3 palette shared with
-/// Walletify. Both apps are the same owner's, so they read as siblings: same
-/// scheme, same face, same card vocabulary. What Clippy keeps of its own is
-/// the paperclip mascot and a lighter hand with motion, because Clippy shows
-/// clipboard entries rather than money.
+/// Clippy's design system: PAPER AND GRAPHITE WITH ONE SIGNAL ORANGE.
 ///
-/// The two [ColorScheme]s below are copied verbatim from Walletify's
-/// `app/lib/core/theme.dart`. They were contrast-audited there on 2026-08-12;
-/// copying the audited values keeps that work instead of re-deriving it. Dark
-/// is HAND-BUILT, not seeded, a `fromSeed` dark scheme desaturates every
-/// accent into mud. Do not replace it with a seed.
-
-/// The bundled family (see `assets/fonts/` and `pubspec.yaml`). Bundled, not
-/// fetched: `google_fonts` used to pull three families over the network on
-/// first launch, which delayed first paint and needed a working connection to
-/// render a clipboard app that is otherwise happy offline.
-const appFontFamily = 'PlusJakartaSans';
-
-/// The header wordmark's serif, kept from the previous design at the owner's
-/// request. It is Newsreader, instanced to wght=500/opsz=36 and **subset to
-/// the six letters of "Clippy"**, 2 KB instead of 451 KB.
+/// Rebuilt 2026-10-18 at the owner's request ("new palette, see Mobbin for
+/// inspiration"), replacing the violet palette Clippy used to share with
+/// Walletify. References: Polestar (graphite + a single vivid orange), Wabi
+/// (soft off-white canvas, ink controls), Notion / Oura (calm charcoal dark).
 ///
-/// **It can draw exactly one word.** Every other character is tofu. Use it
-/// through [Ct.wordmark] and nowhere else; if the app name ever changes, the
-/// subset has to be regenerated with the new letters.
-const wordmarkFontFamily = 'ClippyWordmark';
+/// The rules:
+///  - The canvas is warm paper (light) or graphite (dark); cards sit one step
+///    off it. Content is the colour; chrome stays neutral.
+///  - PRIMARY IS INK. Filled buttons are near-black on paper and near-white on
+///    graphite, the way a clipboard tool should look: quiet, legible, sure.
+///  - ORANGE IS A SIGNAL, never a surface: selection, the copy confirmation,
+///    the pairing moment, the update hero. If orange is everywhere it stops
+///    meaning "look here".
+///  - The sync light stays GREEN / RED. A state light in the brand colour
+///    reads as decoration; green/red needs no legend.
+///
+/// Every pair is gated by `scripts/check_contrast.py` (run it after touching
+/// any colour): body text >= 4.5:1, controls >= 3:1, in BOTH themes, on every
+/// surface tier. Dark is hand-built, not seeded; a seeded dark scheme muddies
+/// every accent.
 
-const brandPurple = Color(0xFF630ED4);
-const brandPurpleBright = Color(0xFF7C3AED);
+/// Instrument Sans, bundled (see `assets/fonts/` and `pubspec.yaml`). It is
+/// the app face AND the wordmark.
+const appFontFamily = 'InstrumentSans';
 
-/// The dark theme's FILLED-BUTTON background, deliberately NOT dark `primary`
-/// (#8B5CF6). `primary` also renders as INK on dark surfaces, where it must
-/// stay light; a solid fill under white text needs the opposite. One value
-/// cannot serve both, so the fill gets its own token.
-const primaryFillDark = Color(0xFF8554F6);
+/// The signal orange, as a FILL (and the gradient's light end). White text on
+/// it measures 5.18:1.
+const signalOrange = Color(0xFFC2410C);
 
-/// Brand violet as TEXT on a dark surface. `primary` measures 4.35:1 there,
-/// fine for an icon or a border (3:1), short of the 4.5:1 body text needs.
-const primaryTextDark = Color(0xFFA98BFF);
+/// The orange as a non-text mark (dots, outlines, the selected edge): brighter
+/// than [signalOrange], which is tuned to carry white text.
+const signalOrangeBright = Color(0xFFFF5A1F);
 
-/// The signature gradient. It marks the app's own moments, the header, the
-/// pair button, the selection bar. It never becomes a general surface.
+/// The gradient's dark end.
+const signalOrangeDeep = Color(0xFFA8360A);
+
+/// The one gradient. It marks MOMENTS (the update hero), never surfaces. Both
+/// ends carry white text at >= 5.18:1.
 const brandGradient = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: [brandPurpleBright, brandPurple],
+  colors: [signalOrange, signalOrangeDeep],
 );
 
 /// The QR scanner's canvas. Fixed in both themes: a camera preview needs a
 /// neutral dark frame, and a light scanner chrome washes the viewfinder out.
-const scannerBg = Color(0xFF15131A);
+const scannerBg = Color(0xFF0F0F0E);
 
-/// The sync status light. GREEN, deliberately not the brand violet.
-///
-/// This dot reports a live system state. A state light painted in the brand
-/// colour stops reading as a signal and starts reading as decoration, and the
-/// header already carries violet on the mascot. Green/red is also the one
-/// colour code a user needs no legend for. The pair is Walletify's audited
-/// positive pair, reused rather than re-derived.
+/// The sync status light. GREEN, deliberately not the brand orange, see the
+/// rules above.
 const syncOkLight = Color(0xFF0B7A45);
 const syncOkDark = Color(0xFF4CCE8A);
 
+/// Signal orange as TEXT/ICON ink, per theme (5.72:1 on a light card, 6.74:1
+/// on a dark one).
+const _accentTextLight = Color(0xFFB93A0A);
+const _accentTextDark = Color(0xFFFF7A45);
+
 const _lightScheme = ColorScheme(
   brightness: Brightness.light,
-  primary: brandPurple,
+  primary: Color(0xFF161614),
   onPrimary: Colors.white,
-  primaryContainer: brandPurpleBright,
-  onPrimaryContainer: Color(0xFFEDE0FF),
-  secondary: Color(0xFF944A00),
+  primaryContainer: Color(0xFFE3E2DC),
+  onPrimaryContainer: Color(0xFF161614),
+  secondary: signalOrange,
   onSecondary: Colors.white,
-  secondaryContainer: Color(0xFFFD933D),
-  onSecondaryContainer: Color(0xFF693300),
-  tertiary: Color(0xFF005091),
+  secondaryContainer: Color(0xFFFFE4D6),
+  onSecondaryContainer: Color(0xFF6A1F02),
+  tertiary: Color(0xFF1D5FD0),
   onTertiary: Colors.white,
-  tertiaryContainer: Color(0xFF0668B9),
-  onTertiaryContainer: Color(0xFFD9E7FF),
-  error: Color(0xFFBA1A1A),
+  tertiaryContainer: Color(0xFFDCE7FF),
+  onTertiaryContainer: Color(0xFF0B2A66),
+  error: Color(0xFFC4291C),
   onError: Colors.white,
-  errorContainer: Color(0xFFFFDAD6),
-  onErrorContainer: Color(0xFF93000A),
-  surface: Color(0xFFFCF8FF),
-  onSurface: Color(0xFF1B1B25),
-  onSurfaceVariant: Color(0xFF4A4455),
+  errorContainer: Color(0xFFFFDAD5),
+  onErrorContainer: Color(0xFF7A0F06),
+  surface: Color(0xFFF5F4F0),
+  onSurface: Color(0xFF161614),
+  onSurfaceVariant: Color(0xFF55534E),
   surfaceContainerLowest: Colors.white,
-  surfaceContainerLow: Color(0xFFF5F2FF),
-  surfaceContainer: Color(0xFFEFECFB),
-  surfaceContainerHigh: Color(0xFFE9E6F5),
-  surfaceContainerHighest: Color(0xFFE3E1EF),
-  outline: Color(0xFF676171),
-  outlineVariant: Color(0xFFCCC3D8),
-  inverseSurface: Color(0xFF302F3A),
-  onInverseSurface: Color(0xFFF2EFFE),
-  inversePrimary: Color(0xFFD2BBFF),
+  surfaceContainerLow: Color(0xFFEFEEEA),
+  surfaceContainer: Color(0xFFE9E8E3),
+  surfaceContainerHigh: Color(0xFFE3E2DC),
+  surfaceContainerHighest: Color(0xFFDCDBD5),
+  outline: Color(0xFF615F59),
+  outlineVariant: Color(0xFFE2E0DA),
+  inverseSurface: Color(0xFF242320),
+  onInverseSurface: Color(0xFFF5F4F0),
+  inversePrimary: Color(0xFFF3F2EE),
   shadow: Colors.black,
   scrim: Colors.black,
-  surfaceTint: Color(0xFF732EE4),
+  surfaceTint: Colors.transparent,
 );
 
 const _darkScheme = ColorScheme(
   brightness: Brightness.dark,
-  primary: Color(0xFF8B5CF6),
-  onPrimary: Colors.white,
-  primaryContainer: Color(0xFF7C3AED),
-  onPrimaryContainer: Color(0xFFEDE0FF),
-  secondary: Color(0xFFFFB783),
-  onSecondary: Color(0xFF2A1400),
-  secondaryContainer: Color(0xFFFD933D),
-  onSecondaryContainer: Color(0xFF2A1400),
-  tertiary: Color(0xFF7CB3FF),
-  onTertiary: Color(0xFF00284D),
-  tertiaryContainer: Color(0xFF066ABC),
-  onTertiaryContainer: Color(0xFFD9E7FF),
-  error: Color(0xFFFFB4AB),
-  onError: Color(0xFF690005),
-  errorContainer: Color(0xFF93000A),
-  onErrorContainer: Color(0xFFFFDAD6),
-  surface: Color(0xFF15131A),
-  onSurface: Color(0xFFE7E2F0),
-  onSurfaceVariant: Color(0xFFA99FBC),
-  surfaceContainerLowest: Color(0xFF1D1B24),
-  surfaceContainerLow: Color(0xFF1A1820),
-  surfaceContainer: Color(0xFF211E2A),
-  surfaceContainerHigh: Color(0xFF272332),
-  surfaceContainerHighest: Color(0xFF2D2939),
-  outline: Color(0xFF9590A0),
-  outlineVariant: Color(0xFF3E3A4A),
-  inverseSurface: Color(0xFFE7E2F0),
-  onInverseSurface: Color(0xFF211E2A),
-  inversePrimary: Color(0xFF630ED4),
+  primary: Color(0xFFF3F2EE),
+  onPrimary: Color(0xFF161614),
+  primaryContainer: Color(0xFF302F2C),
+  onPrimaryContainer: Color(0xFFF3F2EE),
+  secondary: Color(0xFFFF7A45),
+  onSecondary: Color(0xFF2A0D00),
+  secondaryContainer: Color(0xFF4A1E0A),
+  onSecondaryContainer: Color(0xFFFFDCCB),
+  tertiary: Color(0xFF7DA8FF),
+  onTertiary: Color(0xFF0B2A66),
+  tertiaryContainer: Color(0xFF173A7A),
+  onTertiaryContainer: Color(0xFFDCE7FF),
+  error: Color(0xFFFF8A7A),
+  onError: Color(0xFF3A0A05),
+  errorContainer: Color(0xFF7A0F06),
+  onErrorContainer: Color(0xFFFFDAD5),
+  surface: Color(0xFF0F0F0E),
+  onSurface: Color(0xFFF3F2EE),
+  onSurfaceVariant: Color(0xFFABA9A2),
+  surfaceContainerLowest: Color(0xFF1A1A18),
+  surfaceContainerLow: Color(0xFF161615),
+  surfaceContainer: Color(0xFF20201E),
+  surfaceContainerHigh: Color(0xFF282826),
+  surfaceContainerHighest: Color(0xFF302F2C),
+  outline: Color(0xFF9A9893),
+  outlineVariant: Color(0xFF2E2D2A),
+  inverseSurface: Color(0xFFF3F2EE),
+  onInverseSurface: Color(0xFF1A1A18),
+  inversePrimary: Color(0xFF161614),
   shadow: Colors.black,
   scrim: Colors.black,
-  surfaceTint: Color(0xFF8B5CF6),
+  surfaceTint: Colors.transparent,
 );
 
 /// Theme-aware palette, DERIVED from the scheme above rather than hand-listed.
@@ -168,8 +166,7 @@ class ClippyColors extends ThemeExtension<ClippyColors> {
   /// Secondary text, `onSurfaceVariant`.
   final Color muted2;
 
-  /// The brand accent as INK. Light uses `primary`; dark uses
-  /// [primaryTextDark], because dark `primary` is 4.35:1 as text.
+  /// Signal orange as INK (text and icons), tuned per theme for >= 4.5:1.
   final Color accent;
 
   /// Destructive / failing, `error`.
@@ -185,8 +182,9 @@ class ClippyColors extends ThemeExtension<ClippyColors> {
   final Color snack;
   final Color onSnack;
 
-  /// Ink that sits on the brand gradient or a filled brand button. White in
-  /// both themes, because the gradient is dark violet in both.
+  /// Ink on [brandGradient]. White in both themes, because the gradient is
+  /// the same orange in both (white clears 5.18:1 on [signalOrange]). Not
+  /// `onPrimary`: that flips to dark ink in the dark theme.
   final Color onBrand;
 
   final Color dialogBg;
@@ -225,16 +223,14 @@ class ClippyColors extends ThemeExtension<ClippyColors> {
       borderStrong: s.outline,
       muted: s.outline,
       muted2: s.onSurfaceVariant,
-      accent: dark ? primaryTextDark : s.primary,
+      accent: dark ? _accentTextDark : _accentTextLight,
       rust: s.error,
       syncOk: dark ? syncOkDark : syncOkLight,
       snack: s.inverseSurface,
       onSnack: s.onInverseSurface,
       onBrand: Colors.white,
       dialogBg: s.surfaceContainerLowest,
-      selBg: dark
-          ? const Color(0xFF2A2140)
-          : const Color(0xFFF3EDFF),
+      selBg: dark ? const Color(0xFF2C1C14) : const Color(0xFFFFEDE4),
       isDark: dark,
     );
   }
@@ -261,18 +257,16 @@ extension ClippyColorsX on BuildContext {
       Theme.of(this).extension<ClippyColors>() ?? ClippyColors.light;
 }
 
-/// Text helpers over the bundled family. Clippy runs the same Jakarta ramp as
-/// Walletify, 30/38 w700 · 24/32 w700 · 20/28 w600 · 18/24 w600 · 16/24 ·
-/// 14/20 · 12/16 · 11/16, and these helpers exist so a screen names the ROLE
-/// it wants instead of restating a font family at 60 call sites.
+/// Text helpers over Instrument Sans. The ramp: 30/38 w700 · 24/32 w700 ·
+/// 20/28 w600 · 18/24 w600 · 16/24 · 14/20 · 12/16 · 11/16. The helpers exist
+/// so a screen names the ROLE it wants instead of restating a family at 60
+/// call sites.
 ///
 /// `color` is nullable on purpose. Passing null inherits from the enclosing
 /// [DefaultTextStyle], which the theme paints with `onSurface`, so a helper
-/// with no colour is correct in BOTH themes. The old helpers defaulted to a
-/// static light-mode constant, which was invisible on the dark canvas.
+/// with no colour is correct in BOTH themes.
 abstract class Ct {
-  /// Headings. Jakarta bold with the ramp's optical tracking; the old theme
-  /// used a serif here, and it is gone with the rest of the warm palette.
+  /// Headings, with the ramp's optical tracking (tighter as they grow).
   static TextStyle title(double size, {Color? color}) => TextStyle(
         fontFamily: appFontFamily,
         fontSize: size,
@@ -296,12 +290,10 @@ abstract class Ct {
         height: height,
       );
 
-  /// Keys, hashes and other fixed-width strings. Clippy bundles ONE family, so
-  /// this is Jakarta with tabular figures rather than a second mono face,
-  /// `hb-shape --features=tnum` measures every Jakarta digit at exactly 0.600
-  /// em, so figures line up in a column even though the letters do not. A real
-  /// mono would align the letters too; it is not worth a second font file for
-  /// one pairing key. Slight extra tracking keeps a base64 key scannable.
+  /// Keys, hashes and meta labels. ONE family is bundled, so this is
+  /// Instrument Sans with tabular figures: digits line up in a column, which
+  /// is what times, sizes and counts need. Slight tracking keeps a base64 key
+  /// scannable.
   static TextStyle mono(
     double size, {
     Color? color,
@@ -317,15 +309,26 @@ abstract class Ct {
         fontFeatures: const [FontFeature.tabularFigures()],
       );
 
-  /// The header wordmark, and ONLY the header wordmark. The face behind it can
-  /// draw the letters of "Clippy" and nothing else, see [wordmarkFontFamily].
+  /// The header wordmark: Instrument Sans semibold, tightly tracked.
   static TextStyle wordmark(double size, {Color? color}) => TextStyle(
-        fontFamily: wordmarkFontFamily,
+        fontFamily: appFontFamily,
         fontSize: size,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w600,
         color: color,
-        letterSpacing: -0.01 * size,
-        height: 1.18,
+        letterSpacing: -0.035 * size,
+        height: 1.1,
+      );
+
+  /// A clip's meta line ("MACBOOK · 2 MIN"): small caps-tracked label in the
+  /// muted ink, with tabular figures so ages line up row to row.
+  static TextStyle meta({Color? color}) => TextStyle(
+        fontFamily: appFontFamily,
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.9,
+        height: 1.3,
+        color: color,
+        fontFeatures: const [FontFeature.tabularFigures()],
       );
 
   /// The small all-caps rule above a card group.
@@ -435,12 +438,18 @@ int _stableHash(String s) {
   return h;
 }
 
-/// A device's stable identity colour: one of three audited scheme roles,
+/// A device's stable identity colour: one of three measured hues,
 /// picked by name. The header mark introduces the colour; the clip rows under
 /// it repeat the colour on their kind plates, colour says WHERE a clip came
 /// from, the glyph says WHAT it is.
 Color deviceTint(ColorScheme scheme, String device) {
-  final bases = [scheme.primary, scheme.tertiary, scheme.secondary];
+  final dark = scheme.brightness == Brightness.dark;
+  // Never the signal orange: a device is identity, not a call to look.
+  final bases = [
+    scheme.tertiary,
+    dark ? const Color(0xFF5ED3BF) : const Color(0xFF0F766E),
+    dark ? const Color(0xFFB9A4FF) : const Color(0xFF6D4FD1),
+  ];
   return bases[_stableHash(device.trim().toLowerCase()) % bases.length];
 }
 
@@ -488,10 +497,10 @@ class SheetGrabber extends StatelessWidget {
   }
 }
 
-/// The card and surface vocabulary, shared with Walletify:
-/// radius 24, `surfaceContainerLowest`, and **tone plus exactly ONE edge per
-/// theme**, a violet-tinted lift shadow in light, a hairline in dark, where a
-/// shadow on a near-black canvas reads as a smudge. Never both, never neither.
+/// The card vocabulary: `surfaceContainerLowest`, and **tone plus exactly ONE
+/// edge per theme**, a soft neutral lift shadow in light, a hairline in dark,
+/// where a shadow on a near-black canvas reads as a smudge. Never both, never
+/// neither. Selected cards get an orange edge.
 class ClipCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
@@ -527,7 +536,7 @@ class ClipCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final dark = scheme.brightness == Brightness.dark;
     final edge = highlighted
-        ? scheme.primary.withValues(alpha: dark ? 0.55 : 0.45)
+        ? signalOrangeBright.withValues(alpha: dark ? 0.70 : 0.60)
         : scheme.outlineVariant.withValues(alpha: dark ? 0.40 : 0.55);
     return BoxDecoration(
       color: color ?? scheme.surfaceContainerLowest,
@@ -537,9 +546,11 @@ class ClipCard extends StatelessWidget {
           ? null
           : [
               BoxShadow(
-                color: brandPurple.withValues(alpha: highlighted ? 0.16 : 0.07),
-                blurRadius: highlighted ? 20 : 16,
-                offset: const Offset(0, 6),
+                color: highlighted
+                    ? signalOrangeBright.withValues(alpha: 0.14)
+                    : const Color(0xFF161614).withValues(alpha: 0.05),
+                blurRadius: highlighted ? 18 : 12,
+                offset: const Offset(0, 3),
               ),
             ],
     );
@@ -602,7 +613,6 @@ ThemeData _build(ColorScheme scheme) {
       )
       .apply(bodyColor: scheme.onSurface, displayColor: scheme.onSurface);
 
-  final dark = scheme.brightness == Brightness.dark;
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
@@ -612,10 +622,10 @@ ThemeData _build(ColorScheme scheme) {
     extensions: [ClippyColors.of(scheme)],
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: dark ? primaryFillDark : scheme.primary,
+        backgroundColor: scheme.primary,
         foregroundColor: scheme.onPrimary,
-        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
+        shape: const StadiumBorder(),
         textStyle: text.titleMedium?.copyWith(fontSize: 15),
       ),
     ),
@@ -624,6 +634,16 @@ ThemeData _build(ColorScheme scheme) {
       contentTextStyle: text.bodyMedium?.copyWith(color: scheme.onInverseSurface),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ),
+    progressIndicatorTheme: ProgressIndicatorThemeData(color: scheme.onSurface),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? scheme.onPrimary : null),
+    ),
+    textSelectionTheme: TextSelectionThemeData(
+      cursorColor: scheme.onSurface,
+      selectionColor: signalOrangeBright.withValues(alpha: 0.28),
+      selectionHandleColor: signalOrangeBright,
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
@@ -657,8 +677,8 @@ class ClippyMark extends StatelessWidget {
   const ClippyMark({
     super.key,
     this.height = 24,
-    this.clipHex = '630ED4',
-    this.eyeHex = '630ED4',
+    this.clipHex = '161614',
+    this.eyeHex = '161614',
     this.eyeFill = 'ffffff',
   });
 
@@ -688,8 +708,8 @@ class AnimatedClippyMark extends StatefulWidget {
   const AnimatedClippyMark({
     super.key,
     this.height = 24,
-    this.clipHex = '630ED4',
-    this.eyeHex = '630ED4',
+    this.clipHex = '161614',
+    this.eyeHex = '161614',
     this.eyeFill = 'ffffff',
   });
 

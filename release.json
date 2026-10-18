@@ -1,15 +1,17 @@
 {
-  "version": "1.6.0",
+  "version": "1.7.0",
   "notes": {
     "features": [
-      "Android: a \"Send clipboard\" quick-settings tile. One tap sends whatever is on your clipboard, text or image, to your other devices."
+      "A fresh design: calmer colours, a new typeface, and light and dark themes that both look their best.",
+      "A Devices screen showing every device that shares your clipboard and when it last sent something.",
+      "Search your clips and filter them by text, links or images."
     ],
     "improvements": [
-      "Android: clips arriving from your other devices no longer make the screen flicker."
+      "Clips are grouped by day, and images show large enough to recognise at a glance.",
+      "Adding a device is one sheet: scan the QR code or copy the key.",
+      "Pairing is simpler, with the key, a new-key button and the scanner in one place.",
+      "Better text contrast throughout, in both themes."
     ],
-    "fixes": [
-      "Android: copies made in Settings, banking apps and other protected screens now sync. Before, they were silently dropped.",
-      "Android: images sent from your Mac or PC can now be pasted even when Clippy isn't open."
-    ]
+    "fixes": []
   }
 }

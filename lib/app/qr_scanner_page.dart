@@ -46,7 +46,7 @@ class _QrScannerPageState extends State<QrScannerPage> {
           // Dim overlay for legibility, tinted to the brand's dark floor.
           const Positioned.fill(
             child: DecoratedBox(
-              decoration: BoxDecoration(color: Color(0x4015131A)),
+              decoration: BoxDecoration(color: Color(0x400F0F0E)),
             ),
           ),
           Center(

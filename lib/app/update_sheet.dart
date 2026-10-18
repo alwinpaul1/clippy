@@ -16,7 +16,7 @@ class UpdateBanner extends StatelessWidget {
     final c = context.ck;
     // The same banner anatomy as the home screen's warnings, plate, message,
     // action, so every pinned strip in the app is one shape. Only the tint
-    // differs: brand violet, because an update is news, not a fault.
+    // differs: signal orange, because an update is news, not a fault.
     return ClipCard(
       radius: 20,
       highlighted: true,
@@ -26,7 +26,7 @@ class UpdateBanner extends StatelessWidget {
         children: [
           GlyphPlate(
             icon: Icons.download_rounded,
-            base: Theme.of(context).colorScheme.primary,
+            base: Theme.of(context).colorScheme.secondary,
             size: 32,
           ),
           const SizedBox(width: 12),

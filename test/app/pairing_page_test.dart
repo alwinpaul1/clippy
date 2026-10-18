@@ -10,7 +10,7 @@ void main() {
       home: PairingPage(onPaired: (k) async => captured = k),
     ));
 
-    await tester.tap(find.text('Generate a new key'));
+    await tester.tap(find.text('New key'));
     await tester.pump();
 
     final field = tester.widget<TextField>(find.byType(TextField));

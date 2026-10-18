@@ -118,9 +118,8 @@ class _PermissionHelpSheet extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               // No local style: the filled-button theme already carries the
-              // brand fill and its matching foreground for BOTH themes, and
-              // dark uses primaryFillDark rather than primary so white ink
-              // clears 4.5:1 on it. Restating it here is how those two drift.
+              // ink fill and its matching foreground for BOTH themes (dark
+              // inverts to a light pill). Restating it here is how they drift.
               child: FilledButton(
                 onPressed: () async {
                   Navigator.of(context).pop();

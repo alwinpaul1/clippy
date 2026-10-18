@@ -1,5 +1,4 @@
-import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -7,17 +6,14 @@ import '../platform/share_channel.dart';
 import 'permission_help_sheet.dart';
 import 'theme.dart';
 import 'theme_controller.dart';
+import 'ui_kit.dart';
 import 'update_controller.dart';
 import 'update_sheet.dart';
 
-/// Settings: appearance (Light / Dark / System), background sync on Android,
-/// about, and the group actions.
-///
-/// Redesigned from a stack of identical icon-text rows into designed groups:
-/// the theme choice is a segmented control (three peers, one glance), every
-/// action row leads with a [GlyphPlate], and background-sync setup reads as
-/// the SEQUENCE it is, numbered steps under a progress track, built from a
-/// list so the next step slots in without another redesign.
+/// Settings: appearance, background sync (Android), devices, about, and the
+/// one destructive action. Grouped inset cards with tracked section labels;
+/// background-sync setup reads as a checklist (Mobbin reference: Crouton's
+/// sync status), because setup IS a sequence of things to tick off.
 class SettingsPage extends StatelessWidget {
   final ThemeController theme;
   final VoidCallback onAddDevice;
@@ -33,135 +29,91 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ck;
-    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: c.bg,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              // Extra top padding on macOS so the back arrow + title clear
-              // the floating traffic-light window buttons.
-              padding: EdgeInsets.fromLTRB(
-                8,
-                defaultTargetPlatform == TargetPlatform.macOS ? 34 : 10,
-                20,
-                10,
-              ),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: Icon(Icons.arrow_back_rounded,
-                        color: c.ink, size: ClipIcons.nav),
-                    tooltip: 'Back',
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  Text('Settings', style: Ct.title(24, color: c.ink)),
-                ],
-              ),
-            ),
+            const PageHeader(title: 'Settings'),
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
-                children: [
-                  _Label('APPEARANCE', c),
-                  ValueListenableBuilder<ThemeMode>(
-                    valueListenable: theme,
-                    builder: (context, mode, _) => ClipCard(
-                      padding: const EdgeInsets.all(6),
-                      child: Row(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+                    children: [
+                      const SectionLabel('Appearance',
+                          padding: EdgeInsets.fromLTRB(4, 4, 4, 8)),
+                      ValueListenableBuilder<ThemeMode>(
+                        valueListenable: theme,
+                        builder: (context, mode, _) => PillSegments<ThemeMode>(
+                          expand: true,
+                          options: const [
+                            (ThemeMode.light, 'Light'),
+                            (ThemeMode.dark, 'Dark'),
+                            (ThemeMode.system, 'System'),
+                          ],
+                          value: mode,
+                          onChanged: theme.set,
+                        ),
+                      ),
+                      _Note("System follows your device's appearance.", c),
+                      if (defaultTargetPlatform == TargetPlatform.android) ...[
+                        const SectionLabel('Background sync'),
+                        const _BgSyncCard(),
+                        _Note(
+                            // The card states the feature, its status and
+                            // every step; the note carries only what the card
+                            // cannot: the one visible side effect, that the
+                            // last step is not optional, and the fallback.
+                            'Reading a copy briefly flickers the screen. All '
+                            'three steps are needed; without the last one '
+                            'Android pauses sync soon after the phone locks. '
+                            'Missed one? The "Send clipboard" quick-settings '
+                            'tile sends it with one tap.',
+                            c),
+                      ],
+                      const SectionLabel('Devices'),
+                      GroupCard(
                         children: [
-                          _ThemeSeg(
-                            icon: Icons.light_mode_rounded,
-                            label: 'Light',
-                            selected: mode == ThemeMode.light,
-                            onTap: () => theme.set(ThemeMode.light),
-                          ),
-                          _ThemeSeg(
-                            icon: Icons.dark_mode_rounded,
-                            label: 'Dark',
-                            selected: mode == ThemeMode.dark,
-                            onTap: () => theme.set(ThemeMode.dark),
-                          ),
-                          _ThemeSeg(
-                            icon: Icons.brightness_auto_rounded,
-                            label: 'System',
-                            selected: mode == ThemeMode.system,
-                            onTap: () => theme.set(ThemeMode.system),
+                          _Row(
+                            icon: Icons.add_rounded,
+                            label: 'Add another device',
+                            onTap: onAddDevice,
                           ),
                         ],
                       ),
-                    ),
+                      const SectionLabel('About'),
+                      GroupCard(
+                        children: [
+                          const _VersionRow(),
+                          _Row(
+                            icon: Icons.system_update_alt_rounded,
+                            label: 'Check for updates',
+                            onTap: () => _checkForUpdates(context),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 22),
+                      GroupCard(
+                        children: [
+                          _Row(
+                            icon: Icons.logout_rounded,
+                            label: 'Unpair this device',
+                            danger: true,
+                            showChevron: false,
+                            onTap: () async {
+                              Navigator.of(context).pop();
+                              await onUnpair();
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  _Note("System follows your device's appearance "
-                      'automatically.', c),
-                  if (defaultTargetPlatform == TargetPlatform.android) ...[
-                    const SizedBox(height: 26),
-                    _Label('BACKGROUND SYNC', c),
-                    const _BgSyncCard(),
-                    _Note(
-                        // Seven lines cut to two. The card above now states
-                        // the feature, its status and every step by name, so
-                        // the note only has to carry what the card cannot:
-                        // the one surprising side effect, and the fact that
-                        // the last step is not optional, that was the bug.
-                        'Reading the clipboard briefly flickers the screen. '
-                        'All three steps are needed. Without the last one, '
-                        'Android pauses sync soon after the phone locks.',
-                        c),
-                  ],
-                  const SizedBox(height: 26),
-                  _Label('ABOUT', c),
-                  ClipCard(
-                    child: Column(
-                      children: [
-                        const _VersionRow(),
-                        _Divider(c),
-                        _ActionRow(
-                          c,
-                          icon: Icons.download_rounded,
-                          base: scheme.primary,
-                          label: 'Check for updates',
-                          labelColor: c.ink,
-                          trailing: Icon(Icons.chevron_right_rounded,
-                              size: ClipIcons.row, color: c.muted),
-                          onTap: () => _checkForUpdates(context),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 26),
-                  _Label('GROUP', c),
-                  ClipCard(
-                    child: Column(
-                      children: [
-                        _ActionRow(
-                          c,
-                          icon: Icons.devices_rounded,
-                          base: scheme.primary,
-                          label: 'Add another device',
-                          labelColor: c.ink,
-                          trailing: Icon(Icons.chevron_right_rounded,
-                              size: ClipIcons.row, color: c.muted),
-                          onTap: onAddDevice,
-                        ),
-                        _Divider(c),
-                        _ActionRow(
-                          c,
-                          icon: Icons.logout_rounded,
-                          base: scheme.error,
-                          label: 'Unpair this device',
-                          labelColor: c.rust,
-                          onTap: () async {
-                            Navigator.of(context).pop();
-                            await onUnpair();
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ],
@@ -190,19 +142,7 @@ class SettingsPage extends StatelessWidget {
   }
 }
 
-class _Label extends StatelessWidget {
-  final String text;
-  final ClippyColors c;
-  const _Label(this.text, this.c);
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(left: 4, bottom: 10),
-        child: Text(text, style: Ct.sectionLabel(color: c.muted)),
-      );
-}
-
-/// The explanatory sentence under a card group. Its own widget so every note
-/// in the screen keeps one indent and one colour.
+/// The explanatory sentence under a group.
 class _Note extends StatelessWidget {
   final String text;
   final ClippyColors c;
@@ -210,116 +150,44 @@ class _Note extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(4, 10, 4, 0),
-        child: Text(text, style: Ct.body(12.5, color: c.muted)),
+        child: Text(text, style: Ct.body(12.5, color: c.muted2)),
       );
 }
 
-class _Divider extends StatelessWidget {
-  final ClippyColors c;
-  const _Divider(this.c);
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(left: 66),
-        child: Container(height: 1, color: c.border.withValues(alpha: 0.55)),
-      );
-}
-
-/// One cell of the appearance control. A theme choice is one pick from three
-/// visible peers, a segmented control shows all three states in one glance,
-/// where the old three radio rows spent a whole card saying the same thing.
-class _ThemeSeg extends StatelessWidget {
+/// A settings row: a plain glyph (no plate; the grouped card already frames
+/// it), the label, and a chevron when it leads somewhere.
+class _Row extends StatelessWidget {
   final IconData icon;
   final String label;
-  final bool selected;
   final VoidCallback onTap;
-  const _ThemeSeg({
+  final bool danger;
+  final bool showChevron;
+  const _Row({
     required this.icon,
     required this.label,
-    required this.selected,
     required this.onTap,
+    this.danger = false,
+    this.showChevron = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = context.ck;
-    final scheme = Theme.of(context).colorScheme;
-    return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOutCubic,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: selected ? c.selBg : Colors.transparent,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: selected
-                    ? scheme.primary.withValues(alpha: c.isDark ? 0.55 : 0.45)
-                    : Colors.transparent,
-              ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon,
-                    size: ClipIcons.row,
-                    color: selected ? c.accent : c.muted2),
-                const SizedBox(height: 6),
-                Text(
-                  label,
-                  style: Ct.body(12.5,
-                      weight: selected ? FontWeight.w700 : FontWeight.w500,
-                      color: selected ? c.accent : c.muted2),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ActionRow extends StatelessWidget {
-  final ClippyColors c;
-  final IconData icon;
-
-  /// The plate's identity colour, a scheme role, per [GlyphPlate].
-  final Color base;
-  final String label;
-  final Color labelColor;
-  final Widget? trailing;
-  final VoidCallback onTap;
-  const _ActionRow(
-    this.c, {
-    required this.icon,
-    required this.base,
-    required this.label,
-    required this.labelColor,
-    required this.onTap,
-    this.trailing,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+    final tone = danger ? c.rust : c.ink;
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
         child: Row(
           children: [
-            GlyphPlate(icon: icon, base: base, size: 36),
-            const SizedBox(width: 14),
+            Icon(icon, size: 21, color: tone),
+            const SizedBox(width: 23),
             Expanded(
-                child: Text(label,
-                    style: Ct.body(15,
-                        weight: FontWeight.w500, color: labelColor))),
-            ?trailing,
+              child: Text(label,
+                  style: Ct.body(15, weight: FontWeight.w500, color: tone)),
+            ),
+            if (showChevron)
+              Icon(Icons.chevron_right_rounded, size: 20, color: c.muted),
           ],
         ),
       ),
@@ -327,8 +195,8 @@ class _ActionRow extends StatelessWidget {
   }
 }
 
-/// The running app's version, shown in the About card. Loaded asynchronously
-/// via package_info_plus, the same source the updater compares against.
+/// The running app's version, from package_info_plus, the same source the
+/// updater compares against.
 class _VersionRow extends StatefulWidget {
   const _VersionRow();
   @override
@@ -349,19 +217,18 @@ class _VersionRowState extends State<_VersionRow> {
   @override
   Widget build(BuildContext context) {
     final c = context.ck;
-    final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
       child: Row(
         children: [
-          GlyphPlate(
-              icon: Icons.info_rounded, base: scheme.tertiary, size: 36),
-          const SizedBox(width: 14),
+          Icon(Icons.info_outline_rounded, size: 21, color: c.ink),
+          const SizedBox(width: 23),
           Expanded(
-              child: Text('Version',
-                  style: Ct.body(15, weight: FontWeight.w500, color: c.ink))),
+            child: Text('Version',
+                style: Ct.body(15, weight: FontWeight.w500, color: c.ink)),
+          ),
           // Tabular so the number does not shuffle when it changes.
-          Text(_version, style: Ct.mono(13.5, color: c.muted)),
+          Text(_version, style: Ct.mono(13.5, color: c.muted2)),
         ],
       ),
     );
@@ -534,39 +401,36 @@ class _BgSyncCardState extends State<_BgSyncCard> with WidgetsBindingObserver {
             : '$done of ${steps.length} done, $left more '
                 '${left == 1 ? 'step' : 'steps'}';
     return ClipCard(
+      radius: 20,
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
             child: Row(
               children: [
-                GlyphPlate(
-                  icon: all ? Icons.sync_rounded : Icons.sync_disabled_rounded,
-                  base: scheme.primary,
-                  size: 36,
-                ),
-                const SizedBox(width: 14),
+                Icon(all ? Icons.sync_rounded : Icons.sync_disabled_rounded,
+                    size: 21, color: all ? c.syncOk : c.ink),
+                const SizedBox(width: 23),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Background sync',
-                          style: Ct.body(15,
-                              weight: FontWeight.w600, color: c.ink)),
+                          style: Ct.body(15, weight: FontWeight.w600, color: c.ink)),
                       const SizedBox(height: 2),
                       Text(summary,
-                          style: Ct.body(12.5,
-                              color: all ? c.accent : c.muted2)),
+                          style: Ct.body(12.5, color: all ? c.syncOk : c.muted2)),
                     ],
                   ),
                 ),
               ],
             ),
           ),
-          // The progress track: one segment per step. Setup IS a sequence;
-          // the track says how far along it is before a single row is read.
+          // The progress track: one segment per step, green as each is
+          // granted. Setup IS a sequence; the track says how far along it is
+          // before a single row is read.
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 6),
             child: Row(
               children: [
                 for (final step in steps) ...[
@@ -576,9 +440,7 @@ class _BgSyncCardState extends State<_BgSyncCard> with WidgetsBindingObserver {
                       curve: Curves.easeOutCubic,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: step.granted
-                            ? c.accent
-                            : c.border.withValues(alpha: 0.7),
+                        color: step.granted ? c.syncOk : scheme.surfaceContainerHigh,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -588,9 +450,8 @@ class _BgSyncCardState extends State<_BgSyncCard> with WidgetsBindingObserver {
               ],
             ),
           ),
-          const SizedBox(height: 4),
           for (var i = 0; i < steps.length; i++) ...[
-            if (i > 0) _Divider(c),
+            if (i > 0) Divider(height: 1, thickness: 1, indent: 62, color: c.border),
             _StepRow(index: i + 1, step: steps[i]),
           ],
         ],
@@ -629,25 +490,22 @@ class _StepRow extends StatelessWidget {
         );
       },
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         child: Row(
           children: [
             _StepBadge(index: index, granted: step.granted),
-            const SizedBox(width: 14),
-            Icon(step.icon,
-                size: ClipIcons.row,
-                color: step.granted ? c.accent : c.muted2),
-            const SizedBox(width: 10),
+            const SizedBox(width: 20),
             Expanded(
               child: Text(
                 step.granted ? step.doneLabel : step.setupLabel,
                 style: Ct.body(14.5,
-                    weight: step.granted ? FontWeight.w600 : FontWeight.w400,
-                    color: step.granted ? c.accent : c.ink),
+                    weight: step.granted ? FontWeight.w500 : FontWeight.w600,
+                    color: step.granted ? c.muted2 : c.ink),
               ),
             ),
-            Icon(Icons.chevron_right_rounded,
-                size: ClipIcons.row, color: c.muted),
+            Icon(step.icon, size: 18, color: c.muted),
+            const SizedBox(width: 6),
+            Icon(Icons.chevron_right_rounded, size: 20, color: c.muted),
           ],
         ),
       ),
@@ -664,10 +522,8 @@ class _StepBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.ck;
     final scheme = Theme.of(context).colorScheme;
-    // Filled brand chip when done, same fill as the filled buttons, because
-    // `accent` is the lighter INK violet in dark mode and a white tick on it
-    // would sit near 2:1.
-    final fill = c.isDark ? primaryFillDark : scheme.primary;
+    // Green when granted: this is a state light, like the sync pill.
+    final fill = c.syncOk;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       width: 24,
@@ -679,7 +535,7 @@ class _StepBadge extends StatelessWidget {
         border: granted ? null : Border.all(color: c.borderStrong, width: 1.5),
       ),
       child: granted
-          ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
+          ? Icon(Icons.check_rounded, size: 15, color: scheme.surface)
           : Text('$index',
               style: Ct.mono(11.5, color: c.muted2, weight: FontWeight.w600)),
     );
