@@ -453,8 +453,30 @@
   .copyright a:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
 
   /* ---- scroll reveal (off for reduced motion and without JS) */
-  .js .reveal{opacity:0;transform:translateY(18px);transition:opacity .6s var(--ease-out),transform .6s var(--ease-out);transition-delay:calc(var(--i,0) * 60ms)}
-  .js .reveal.in{opacity:1;transform:none}
+  .js .reveal{opacity:0;transform:translateY(24px);filter:blur(6px);transition:opacity .8s var(--ease-out),transform .8s var(--ease-out),filter .8s var(--ease-out);transition-delay:calc(var(--i,0) * 70ms)}
+  .js .reveal.in{opacity:1;transform:none;filter:none}
+  /* The hero shot is too large to blur cheaply; it settles in 3D instead. */
+  .js .shot.reveal{filter:none}
+
+  /* Headings reveal word by word (beUI text reveal): each word lifts out of
+     a short blur, 32ms apart, so a line reads in the order it is written. */
+  .js .split.reveal{opacity:1;transform:none;filter:none}
+  .split .w{display:inline-block;white-space:pre}
+  .js .split .w{opacity:0;transform:translateY(.42em);filter:blur(8px);transition:opacity .9s var(--ease-out),transform .9s var(--ease-out),filter .9s var(--ease-out);transition-delay:calc(var(--w) * 32ms + var(--i,0) * 70ms)}
+  .js .split.in .w{opacity:1;transform:none;filter:none}
+
+  /* One statement is scrubbed by scroll instead: words light up as you read. */
+  .js .scrub .w{opacity:var(--o,.16);transition:opacity .12s linear}
+
+  /* The hero shot leans back and settles flat as it scrolls into view;
+     the phone drifts a little slower than the desktop behind it. */
+  .shot{perspective:1400px}
+  .js .shot .desk{transform-origin:50% 0;transform:rotateX(calc(var(--tilt,0) * 14deg)) scale(calc(1 - var(--tilt,0) * .06));will-change:transform}
+  .js .shot .phone{translate:0 calc(var(--tilt,0) * 56px)}
+
+  /* Reading progress along the top edge. Last in the DOM, so it paints over
+     the sticky nav without a z-index. */
+  .progress{position:fixed;left:0;right:0;top:0;height:2px;background:var(--accent);transform-origin:0 50%;transform:scaleX(var(--p,0));pointer-events:none}
 
   /* Theme wipe (after beUI theme-toggle): the new theme grows from the button. */
   ::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}
@@ -463,7 +485,11 @@
      drop travel, scale, blur, parallax and loops. */
   @media (prefers-reduced-motion: reduce){
     html{scroll-behavior:auto}
-    .js .reveal{transform:none;transition:opacity .2s linear}
+    .js .reveal{transform:none;filter:none;transition:opacity .2s linear}
+    .js .split .w{transform:none;filter:none;transition:opacity .2s linear;transition-delay:0s}
+    .js .scrub .w{opacity:1}
+    .js .shot .desk{transform:none}
+    .js .shot .phone{translate:none}
     .js .rise{animation:fade .2s linear both}
     @keyframes fade{from{opacity:0}to{opacity:1}}
     .link .wire,.is-live .link .wire{animation:none}
@@ -549,7 +575,7 @@
   <section id="features">
     <div class="wrap">
       <span class="eyebrow">Features</span>
-      <h2 class="reveal">One clipboard on every device you own. <span class="dim">Private, searchable, and set up in a minute.</span></h2>
+      <h2 class="scrub">One clipboard on every device you own. <span class="dim">Private, searchable, and set up in a minute.</span></h2>
 
       <div class="rows">
         <div class="row reveal">
@@ -741,6 +767,7 @@
     <div class="copyright mono"><span>© 2026 Alwin Paul</span><span class="social"><a href="https://github.com/alwinpaul1/clippy" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 00-3.6 22.4c.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 015.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.9 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6A11.5 11.5 0 0012 .5z"/></svg>GitHub</a><a href="https://www.instagram.com/alwi._nn" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>Instagram</a></span></div>
   </div>
 </footer>
+<div class="progress" id="progress" aria-hidden="true"></div>
 
 <script>
   var DL = {
@@ -1133,6 +1160,68 @@
     frame();
     window.addEventListener('scroll', function(){ if(!ticking){ ticking = true; requestAnimationFrame(frame); } }, {passive:true});
     nav.addEventListener('focusin', function(){ nav.classList.remove('hidden'); });
+  })();
+
+  // Split headings into word spans for the word reveal and the scrub. Only
+  // text nodes are wrapped, so inner spans like .dim keep their colour.
+  function splitWords(el){
+    var n = 0;
+    (function walk(node){
+      Array.prototype.slice.call(node.childNodes).forEach(function(ch){
+        if(ch.nodeType === 1){ walk(ch); return; }
+        if(ch.nodeType !== 3 || !ch.textContent.trim()) return;
+        var frag = document.createDocumentFragment();
+        ch.textContent.split(/(\s+)/).forEach(function(part){
+          if(!part) return;
+          if(/^\s+$/.test(part)){ frag.appendChild(document.createTextNode(part)); return; }
+          var w = document.createElement('span');
+          w.className = 'w'; w.textContent = part; w.style.setProperty('--w', n++);
+          frag.appendChild(w);
+        });
+        node.replaceChild(frag, ch);
+      });
+    })(el);
+    return el.querySelectorAll('.w');
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('main section h2:not(.scrub)'), function(h){
+    splitWords(h); h.classList.add('split', 'reveal');
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('main .eyebrow'), function(e){ e.classList.add('reveal'); });
+
+  // Scroll-linked motion: the scrubbed statement, the hero shot settling flat,
+  // and the progress line. One rAF per scroll; the shot eases toward its
+  // target so a flick of the wheel still lands smoothly.
+  (function(){
+    var root = document.documentElement;
+    var bar = document.getElementById('progress');
+    var scrub = document.querySelector('.scrub');
+    var words = scrub ? splitWords(scrub) : [];
+    var shot = document.getElementById('shot');
+    var tilt = reduce ? 0 : 1, target = tilt, ticking = false;
+    function clamp(v){ return v < 0 ? 0 : v > 1 ? 1 : v; }
+    function frame(){
+      ticking = false;
+      var vh = window.innerHeight, max = root.scrollHeight - vh;
+      bar.style.setProperty('--p', max > 0 ? (window.scrollY / max).toFixed(4) : 0);
+      if(reduce) return;
+      if(words.length){
+        var r = scrub.getBoundingClientRect();
+        var p = clamp((vh * .88 - r.top) / (vh * .5)) * words.length;
+        for(var i = 0; i < words.length; i++){
+          words[i].style.setProperty('--o', (.16 + .84 * clamp(p - i)).toFixed(3));
+        }
+      }
+      if(shot){
+        target = clamp(shot.getBoundingClientRect().top / (vh * .8));
+        tilt += (target - tilt) * .16;
+        if(Math.abs(target - tilt) < .001) tilt = target; else request();
+        shot.style.setProperty('--tilt', tilt.toFixed(4));
+      }
+    }
+    function request(){ if(!ticking){ ticking = true; requestAnimationFrame(frame); } }
+    frame();
+    window.addEventListener('scroll', request, {passive:true});
+    window.addEventListener('resize', request);
   })();
 
   // Scroll reveal.
