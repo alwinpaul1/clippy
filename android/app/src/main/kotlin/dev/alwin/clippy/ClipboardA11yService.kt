@@ -3,11 +3,13 @@ package dev.alwin.clippy
 import android.accessibilityservice.AccessibilityService
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.database.ContentObserver
 import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.util.Log
 import android.view.View
@@ -30,13 +32,35 @@ import java.util.concurrent.atomic.AtomicInteger
  * service drains and syncs (engine dedup absorbs repeats).
  */
 class ClipboardA11yService : AccessibilityService() {
+    companion object {
+        // The live service, for ClipReadActivity and SendClipTileService (same
+        // process). Main-thread writes only; read from the main thread too.
+        @Volatile
+        var instance: ClipboardA11yService? = null
+            private set
+
+        // An overlay that has not gained focus by now never will (a screen
+        // hiding overlays): focus normally lands ~50-80 ms after addView.
+        private const val OVERLAY_FOCUS_WAIT_MS = 500L
+
+        // How long a copy no read could reach (no focus at all) stays owed. It
+        // is retried on the next app switch, when the blocking screen is gone.
+        private const val RETRY_WINDOW_MS = 60_000L
+    }
+
     // The last text / image we queued, for consecutive-duplicate dedup. Written
     // and read only on the a11y main thread (clipboard capture is synchronous;
     // the screenshot observer's worker calls emitImage but never touches these),
     // so no cross-thread synchronization is needed.
     private var lastText: String? = null
     private var lastImageKey: String? = null
+    // A read is in flight (overlay or read activity). Main thread only.
     private var busy = false
+    // Uptime deadline of an owed retry, 0 = none; the app that was in front
+    // when the read failed; the app most recently in front. Main thread only.
+    private var retryUntil = 0L
+    private var retryBlockedPkg: String? = null
+    private var lastAppPkg: String? = null
     // Guarantees unique queue filenames: emitImage is reachable from the capture
     // executor (clipboard capture) and the screenshot-observer worker, so two
     // images produced in the same millisecond would otherwise write the same
@@ -70,6 +94,7 @@ class ClipboardA11yService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        instance = this
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val listener = ClipboardManager.OnPrimaryClipChangedListener {
             pending?.let { main.removeCallbacks(it) }
@@ -205,6 +230,22 @@ class ClipboardA11yService : AccessibilityService() {
         // accessibility events as the "user just copied" trigger, then read the
         // clipboard via the focus-trick overlay.
         val t = event?.eventType ?: return
+        val pkg = event.packageName?.toString()
+        // A copy no read could reach is owed: retry it once the user switches
+        // to a DIFFERENT app than the one that blocked the read (moving between
+        // Settings screens must not re-fire a read that is bound to fail and
+        // flash). This is why a11y_config no longer narrows delivery to
+        // com.android.systemui: app switches arrive from every package.
+        if (t == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && pkg != null &&
+            pkg != "com.android.systemui" && pkg != packageName) {
+            if (retryUntil != 0L && pkg != retryBlockedPkg) {
+                val owed = SystemClock.uptimeMillis() < retryUntil
+                retryUntil = 0L
+                if (owed) main.postDelayed({ attemptRead() }, 300)
+            }
+            lastAppPkg = pkg
+            return
+        }
         // PRIMARY trigger: copying text posts a system Toast ("Copied.") from
         // com.android.systemui. It's the ONLY signal a copy from Chrome's address
         // bar (an EditText) produces — Chrome emits no selection-change or click
@@ -283,6 +324,10 @@ class ClipboardA11yService : AccessibilityService() {
     }
 
     private fun attemptRead() {
+        // Our own write of an incoming clip posts the same "Copied" toast a user
+        // copy does. Reading it back only flashed the screen to re-capture what
+        // we just received (and echoed it), so skip it.
+        if (ClipWriter.wroteRecently()) return
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         // Off the a11y main thread (capture may read a multi-MB image), serial.
         runCapture {
@@ -293,6 +338,7 @@ class ClipboardA11yService : AccessibilityService() {
     override fun onInterrupt() {}
 
     private fun onClipChanged(cm: ClipboardManager) {
+        if (ClipWriter.wroteRecently()) return
         runCapture {
             // 1) Direct read — does the AS context have clipboard access in bg?
             if (capture(cm)) return@runCapture
@@ -407,9 +453,60 @@ class ClipboardA11yService : AccessibilityService() {
             wm.addView(view, params)
         } catch (_: Exception) {
             finish()
+            launchReadActivity()
             return
         }
+        // No focus by now means the screen in front hides overlays (see
+        // ClipReadActivity): drop the overlay and read through the activity.
+        main.postDelayed({
+            if (!readStarted && !done) {
+                finish()
+                launchReadActivity()
+            }
+        }, OVERLAY_FOCUS_WAIT_MS)
         main.postDelayed({ finish() }, 2000)
+    }
+
+    private fun launchReadActivity() {
+        if (busy) return
+        busy = true
+        try {
+            startActivity(
+                Intent(this, ClipReadActivity::class.java).addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_NO_ANIMATION or
+                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS,
+                ),
+            )
+        } catch (_: Exception) {
+            onReadActivityDone(gotFocus = false)
+        }
+    }
+
+    // ClipReadActivity holds focus; read now, on the capture thread like every
+    // read, and call [done] on the main thread once it completes. [manual] (the
+    // tile) clears the dedup guards first: a tap means "send this", even if it
+    // is the same clip as the last one. Returns false if the read was dropped.
+    fun readWhileFocused(manual: Boolean, done: () -> Unit): Boolean {
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        return runCapture {
+            if (manual) {
+                lastText = null
+                lastImageKey = null
+            }
+            capture(cm)
+            main.post(done)
+        }
+    }
+
+    // A read through ClipReadActivity ended. If it never even got focus the copy
+    // is still unread: owe a retry on the next switch to another app.
+    fun onReadActivityDone(gotFocus: Boolean) {
+        busy = false
+        if (!gotFocus && retryUntil == 0L) {
+            retryUntil = SystemClock.uptimeMillis() + RETRY_WINDOW_MS
+            retryBlockedPkg = lastAppPkg
+        }
     }
 
     private fun emit(text: String) {
@@ -452,6 +549,7 @@ class ClipboardA11yService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        if (instance === this) instance = null
         // Stop the triggers BEFORE shutting the executor down, in the order they
         // feed it: the system listener, then the delayed hop it may already have
         // posted. runCapture still guards anything that slips through (an a11y

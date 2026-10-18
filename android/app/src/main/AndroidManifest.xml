@@ -29,7 +29,7 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application
         android:label="clippy"
-        android:name="${applicationName}"
+        android:name=".ClippyApp"
         android:icon="@mipmap/ic_launcher">
         <!-- Grants the system installer read access to the downloaded APK. -->
         <provider
@@ -105,6 +105,28 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Maintains the persistent encrypted WebSocket that syncs the clipboard between the user's own paired devices; the connection must stay live for a copy on another device to arrive." />
+        </service>
+        <!-- Invisible focus-holder for a clipboard read: the fallback when the
+             overlay is hidden (Settings, banking apps), and the tile's read.
+             noHistory + excludeFromRecents + its own task affinity keep it out
+             of Recents and out of whatever task the user is in. -->
+        <activity
+            android:name=".ClipReadActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity="dev.alwin.clippy.read"
+            android:theme="@style/ClipReadTheme" />
+        <!-- Quick-settings "Send clipboard" tile. -->
+        <service
+            android:name=".SendClipTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_send"
+            android:label="@string/tile_send_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
         </service>
         <!-- Background clipboard capture (opt-in): an AccessibilityService keeps
              a privileged, long-lived process that can capture copies without

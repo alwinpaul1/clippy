@@ -1,10 +1,15 @@
 {
-  "version": "1.5.0",
+  "version": "1.6.0",
   "notes": {
-    "features": [],
-    "improvements": [],
+    "features": [
+      "Android: a \"Send clipboard\" quick-settings tile. One tap sends whatever is on your clipboard, text or image, to your other devices."
+    ],
+    "improvements": [
+      "Android: clips arriving from your other devices no longer make the screen flicker."
+    ],
     "fixes": [
-      "Android: the background clipboard service no longer crashes if the system restarts it while a copy is being picked up."
+      "Android: copies made in Settings, banking apps and other protected screens now sync. Before, they were silently dropped.",
+      "Android: images sent from your Mac or PC can now be pasted even when Clippy isn't open."
     ]
   }
 }
