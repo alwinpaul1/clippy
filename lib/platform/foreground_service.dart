@@ -18,6 +18,7 @@ import 'clip_queue.dart';
 import 'queue_drainer.dart';
 import 'device_name.dart';
 import 'image_clipboard.dart';
+import 'native_clip_writer.dart';
 import 'secure_key_store.dart';
 
 /// Entry point for the foreground-service isolate. The handler keeps a relay
@@ -286,6 +287,9 @@ class _BackgroundSyncHandler extends TaskHandler {
         if (clip.kind == 'image') {
           await ImageClipboard.write(base64Decode(a.text));
         } else {
+          // Native writer first: it marks the write as ours, so the
+          // accessibility service does not flash a read-back of it.
+          if (await NativeClipWriter.writeText(a.text)) continue;
           // NOT Clipboard.setData: SystemChannels.platform needs an
           // Activity-backed engine, which this headless service isolate
           // lacks. super_clipboard is a real plugin (registered in the

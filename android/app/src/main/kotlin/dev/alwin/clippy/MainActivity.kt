@@ -220,35 +220,6 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                 }
-                // Writes an image to the system clipboard via a FileProvider
-                // content URI — the reliable native path. super_clipboard's own
-                // image write serves an EMPTY file to paste targets on Android
-                // (its DataProvider returns no bytes), so images it put on the
-                // clipboard couldn't be pasted into other apps.
-                "writeClipImage" -> {
-                    val bytes = call.argument<ByteArray>("bytes")
-                    val ext = call.argument<String>("ext") ?: "png"
-                    if (bytes == null || bytes.isEmpty()) {
-                        result.success(false)
-                    } else {
-                        try {
-                            val dir = java.io.File(cacheDir, "clip_out").apply { mkdirs() }
-                            val file = java.io.File(dir, "image.$ext")
-                            file.writeBytes(bytes)
-                            val uri = androidx.core.content.FileProvider.getUriForFile(
-                                this, "$packageName.fileprovider", file,
-                            )
-                            val cm = getSystemService(CLIPBOARD_SERVICE)
-                                as android.content.ClipboardManager
-                            cm.setPrimaryClip(
-                                android.content.ClipData.newUri(contentResolver, "image", uri),
-                            )
-                            result.success(true)
-                        } catch (_: Exception) {
-                            result.success(false)
-                        }
-                    }
-                }
                 // Deep-link to Clippy's App info page. Used both to switch photo
                 // access from "Select photos" to "Allow all", and to reach the
                 // ⋮ → "Allow restricted settings" gate that Android puts on the
@@ -265,6 +236,9 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        // Incoming-clip writes (text + images). The service engine registers
+        // the same handler in ClippyApp, so Dart calls it from either isolate.
+        ClipWriter.register(this, flutterEngine.dartExecutor.binaryMessenger)
         // Direct Vibrator haptics: Samsung gates View.performHapticFeedback
         // (all of Flutter's HapticFeedback.*) behind system touch-vibration
         // settings, so app haptics silently die. VibrationEffect doesn't.

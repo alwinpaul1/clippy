@@ -3,9 +3,10 @@ import 'dart:io' show Platform;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:super_clipboard/super_clipboard.dart';
+
+import 'native_clip_writer.dart';
 
 /// System-clipboard image read/write via super_clipboard. Incoming images are
 /// put on the clipboard in their own format (bytes verbatim, instant and
@@ -13,7 +14,6 @@ import 'package:super_clipboard/super_clipboard.dart';
 /// Android, …); returns null / no-ops elsewhere.
 abstract class ImageClipboard {
   static SystemClipboard? get _cb => SystemClipboard.instance;
-  static const _androidChannel = MethodChannel('clippy/share');
 
   /// Read an image off the clipboard as raw bytes, or null if there's none.
   /// Tries several formats (macOS screenshots land as PNG; other apps may use
@@ -62,22 +62,11 @@ abstract class ImageClipboard {
   /// URI, so a JPEG/webp/… pastes into any app as-is. Unrecognized bytes fall
   /// back to a one-off PNG transcode.
   static Future<void> write(Uint8List bytes) async {
-    // Android: write via the native ClipboardManager + FileProvider URI.
+    // Android: write via the native ClipboardManager + FileProvider URI
+    // (NativeClipWriter, registered on both the UI and the service engine).
     // super_clipboard's own image write serves an EMPTY file to paste targets
-    // (its DataProvider returns no bytes), so images it wrote could not be
-    // pasted into other apps. The native path lives on the UI-isolate engine's
-    // channel; from a background isolate the call throws (no handler) and we
-    // fall back to super_clipboard.
-    if (!kIsWeb && Platform.isAndroid) {
-      try {
-        final ok = await _androidChannel.invokeMethod<bool>(
-          'writeClipImage', {'bytes': bytes, 'ext': _extFor(bytes)},
-        );
-        if (ok == true) return;
-      } catch (_) {
-        // No handler (background isolate), fall through to super_clipboard.
-      }
-    }
+    // (its DataProvider returns no bytes), so it is only the last resort.
+    if (await NativeClipWriter.writeImage(bytes, _extFor(bytes))) return;
     final cb = _cb;
     if (cb == null) return;
     final fmt = imageFormatFor(bytes);
