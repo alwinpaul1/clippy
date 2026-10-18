@@ -529,7 +529,7 @@
         </a>
         <a class="btn btn-ghost" href="#features">See how it works<span class="go" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg></span></a>
       </div>
-      <div class="links rise" style="--i:5"><a href="#get">Other platforms</a> · macOS 12+, Android 6+, Windows 10+</div>
+      <div class="links rise" style="--i:5"><a href="#get">Other platforms</a> · macOS 12+, Android 7+, Windows 10+</div>
       <div class="chips mono rise" style="--i:5">
         <span class="chip"><span class="dot"></span>Mac · Android · Windows</span>
         <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>AES-256, end to end</span>
@@ -713,7 +713,7 @@
       </div>
       <div class="reveal">
         <details><summary>Can the server read my clips?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>No. Clips are encrypted with AES-256 on your device before they are sent, and the key only exists on devices you paired by scanning the QR code. The relay stores and forwards ciphertext.</p></details>
-        <details><summary>Is there an iPhone or Linux version?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>Not yet. Clippy runs on macOS 12 or later, Android 6 or later, and 64-bit Windows 10 or later.</p></details>
+        <details><summary>Is there an iPhone or Linux version?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>Not yet. Clippy runs on macOS 12 or later, Android 7 or later on an ARM phone, and 64-bit Windows 10 or later.</p></details>
         <details><summary>How long are clips kept?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>The 25 most recent clips stay in your shared history, plus anything you pin. Delete a clip on one device and it disappears from all of them. Card numbers and IBANs clear themselves after the time you choose.</p></details>
         <details><summary>Why does Android ask for accessibility access?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>Android stops background apps from reading the clipboard. The accessibility service is how Clippy notices a copy while you're in another app. It reads nothing else. Without it you can still send clips with the quick tile.</p></details>
         <details><summary>Why is the Android app an APK and not on Google Play?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>Clippy is a free side project and ships directly from this site. The APK is signed with one permanent key, and the app updates itself in place when a new version is out.</p></details>
@@ -762,7 +762,7 @@
   };
   var REQS = {
     macos:'Apple Silicon & Intel · macOS 12+',
-    android:'Android 6+ · sideload APK',
+    android:'Android 7+ · sideload APK',
     windows:'Windows 10+ · 64-bit'
   };
   // currentColor, so the icons follow the button's theme colour.
