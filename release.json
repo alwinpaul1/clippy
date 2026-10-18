@@ -3,7 +3,9 @@
   "notes": {
     "features": [],
     "improvements": [
-      "Card numbers and IBANs are now always cleared after 5 minutes on every device, so the minutes setting is gone from Settings."
+      "The All / Text / Links / Images switch now slides smoothly from one choice to the next.",
+      "The device filter sits inside the search bar, so the list starts higher on the screen.",
+      "Clear all and Select clips are in the ⋯ menu next to the filters, away from the switch you tap most."
     ],
     "fixes": []
   }

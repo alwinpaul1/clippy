@@ -110,10 +110,26 @@ class SyncStatusPill extends StatelessWidget {
   }
 }
 
+/// Motion for controls (beUI motion guides): a filter is a FREQUENT action,
+/// so everything stays well under 300ms. The indicator is a surface already
+/// on screen moving between positions, so it eases in and out; a press is
+/// immediate feedback.
+abstract class ClipMotion {
+  static const slide = Duration(milliseconds: 220);
+  static const slideCurve = Curves.easeInOutCubic;
+  static const press = Duration(milliseconds: 120);
+}
+
 /// A horizontal pill toggle: the home filter (All / Text / Links / Images)
 /// and the add-device QR / Key switch. Selected = ink fill, the rest are bare
 /// labels, so the choice reads at a glance without colour.
-class PillSegments<T> extends StatelessWidget {
+///
+/// ONE ink indicator slides from the old choice to the new one (layout
+/// continuity: the same surface travels, it is not a fade-out here and a
+/// fade-in there), and each label turns on-ink exactly where the moving ink
+/// covers it. With reduced motion the indicator jumps; the state change is
+/// still instant and obvious, just without travel.
+class PillSegments<T> extends StatefulWidget {
   final List<(T, String)> options;
   final T value;
   final ValueChanged<T> onChanged;
@@ -127,47 +143,172 @@ class PillSegments<T> extends StatelessWidget {
   });
 
   @override
+  State<PillSegments<T>> createState() => _PillSegmentsState<T>();
+}
+
+class _PillSegmentsState<T> extends State<PillSegments<T>> {
+  final _stack = GlobalKey();
+  late List<GlobalKey> _keys = _newKeys();
+  Rect? _rect; // the selected pill, in the stack's coordinates
+  T? _pressed;
+
+  List<GlobalKey> _newKeys() => [for (final _ in widget.options) GlobalKey()];
+
+  @override
+  void didUpdateWidget(PillSegments<T> old) {
+    super.didUpdateWidget(old);
+    if (old.options.length != widget.options.length) _keys = _newKeys();
+  }
+
+  /// Measure the selected pill after layout; rebuild only when it moved.
+  void _measure() {
+    final i = widget.options.indexWhere((o) => o.$1 == widget.value);
+    final stack = _stack.currentContext?.findRenderObject();
+    final pill = i < 0 ? null : _keys[i].currentContext?.findRenderObject();
+    if (stack is! RenderBox || pill is! RenderBox || !pill.hasSize) return;
+    final r = pill.localToGlobal(Offset.zero, ancestor: stack) & pill.size;
+    if (r != _rect && mounted) setState(() => _rect = r);
+  }
+
+  Widget _labels(Color Function(T v) color, {bool interactive = false}) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: widget.expand ? MainAxisSize.max : MainAxisSize.min,
+      children: [
+        for (final (i, (v, label)) in widget.options.indexed)
+          _wrap(_pill(i, v, label, color(v), interactive, scheme)),
+      ],
+    );
+  }
+
+  Widget _pill(int i, T v, String label, Color fg, bool interactive, ColorScheme scheme) {
+    final text = Center(
+      widthFactor: widget.expand ? null : 1,
+      heightFactor: 1,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        child: Text(label, style: Ct.body(13, weight: FontWeight.w600, color: fg)),
+      ),
+    );
+    if (!interactive) return text;
+    return Semantics(
+      button: true,
+      selected: v == widget.value,
+      child: GestureDetector(
+        key: _keys[i],
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = v),
+        onTapCancel: () => setState(() => _pressed = null),
+        onTap: () {
+          setState(() => _pressed = null);
+          widget.onChanged(v);
+        },
+        // Press feedback is a quick tint, not a scale: the label is drawn
+        // twice (see build), and both copies must stay in register.
+        child: AnimatedContainer(
+          duration: ClipMotion.press,
+          curve: Curves.easeOut,
+          decoration: BoxDecoration(
+            color: _pressed == v && v != widget.value
+                ? scheme.surfaceContainerHigh
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: text,
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final c = context.ck;
     final scheme = Theme.of(context).colorScheme;
-    final pills = [
-      for (final (v, label) in options)
-        _wrap(
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => onChanged(v),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              curve: Curves.easeOutCubic,
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: v == value ? scheme.primary : Colors.transparent,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                label,
-                style: Ct.body(
-                  13,
-                  weight: FontWeight.w600,
-                  color: v == value ? scheme.onPrimary : c.muted2,
-                ),
-              ),
-            ),
-          ),
-        ),
-    ];
+    final reduce = MediaQuery.of(context).disableAnimations;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+
+    final r = _rect;
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Row(mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min, children: pills),
+      // Painted in order, no z-index: the ink indicator, the muted labels
+      // (which take the taps), then the same labels in the on-ink colour,
+      // clipped to wherever the indicator is right now. So every label is
+      // exactly as readable mid-slide as at rest: white where the ink
+      // covers it, grey where it does not.
+      child: Stack(
+        key: _stack,
+        children: [
+          if (r != null)
+            Positioned.fill(
+              child: TweenAnimationBuilder<Rect?>(
+                tween: RectTween(end: r),
+                duration: reduce ? Duration.zero : ClipMotion.slide,
+                curve: ClipMotion.slideCurve,
+                builder: (context, rect, _) => CustomPaint(
+                  painter: _IndicatorPainter(rect ?? r, scheme.primary),
+                ),
+              ),
+            ),
+          _labels((_) => c.muted2, interactive: true),
+          if (r != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ExcludeSemantics(
+                  child: TweenAnimationBuilder<Rect?>(
+                    tween: RectTween(end: r),
+                    duration: reduce ? Duration.zero : ClipMotion.slide,
+                    curve: ClipMotion.slideCurve,
+                    builder: (context, rect, child) => ClipPath(
+                      clipper: _PillClip(rect ?? r),
+                      child: child,
+                    ),
+                    child: OverflowBox(
+                      alignment: Alignment.topLeft,
+                      child: _labels((_) => scheme.onPrimary),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
-  Widget _wrap(Widget w) => expand ? Expanded(child: w) : w;
+  Widget _wrap(Widget w) => widget.expand ? Expanded(child: w) : w;
+}
+
+class _IndicatorPainter extends CustomPainter {
+  final Rect rect;
+  final Color color;
+  _IndicatorPainter(this.rect, this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, Radius.circular(rect.height / 2)),
+      Paint()..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_IndicatorPainter old) => old.rect != rect || old.color != color;
+}
+
+class _PillClip extends CustomClipper<Path> {
+  final Rect rect;
+  _PillClip(this.rect);
+
+  @override
+  Path getClip(Size size) =>
+      Path()..addRRect(RRect.fromRectAndRadius(rect, Radius.circular(rect.height / 2)));
+
+  @override
+  bool shouldReclip(_PillClip old) => old.rect != rect;
 }
 
 /// The small tracked label above a group ("TODAY", "THIS DEVICE").

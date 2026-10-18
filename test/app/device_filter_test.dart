@@ -13,7 +13,7 @@ void main() {
     await t.pumpWidget(MaterialApp(
       theme: lightTheme,
       home: Scaffold(
-        body: DeviceFilterButton(
+        body: DeviceFilterChip(
           devices: devices,
           value: value,
           thisDevice: 'Device 3',
@@ -55,9 +55,13 @@ void main() {
     expect(picks, isEmpty);
   });
 
-  testWidgets('a filtered view has a one-tap way back', (t) async {
+  testWidgets('a filtered chip names the device; All devices goes back', (t) async {
     final picks = await pump(t, value: 'Device 5');
-    await t.tap(find.byTooltip('Show all devices'));
+    expect(find.text('Device 5'), findsOneWidget);
+    await t.tap(find.text('Device 5'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('All devices'));
+    await t.pumpAndSettle();
     expect(picks, [null]);
   });
 }
