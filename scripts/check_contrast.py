@@ -1,21 +1,17 @@
 #!/usr/bin/env python3
 """WCAG 2.1 contrast gate for every colour pair Clippy's Flutter app composites.
 
-docs/DESIGN.md's *Contrast* section records this as open work: Clippy's violet
-scheme is copied from Walletify (`app/scripts/check_contrast.py`), which
-audited it there, but any colour introduced in CLIPPY ITSELF was checked BY
-HAND. This script closes that gap for this repo, ported from Walletify's
-script (same WCAG maths, same "parse the real file, never hand-copy a
-colour" rule) and extended with Clippy's own tokens Walletify's script has
-never seen: `syncOkLight/Dark`, `primaryFillDark`, `primaryTextDark`, the
-`ClippyColors.of` derived roles, and the QR-scanner / image-viewer chrome
-that is fixed dark in BOTH themes.
+Ported from Walletify's script (same WCAG maths, same "parse the real file,
+never hand-copy a colour" rule) and re-pointed on 2026-10-18 at Clippy's own
+paper-graphite-orange palette: the two schemes, `syncOkLight/Dark`, the
+signal-orange gradient stops, the `ClippyColors.of` derived roles, and the
+QR-scanner / image-viewer chrome that is fixed dark in BOTH themes.
 
 Every colour is READ OUT OF `lib/app/theme.dart` (the two `ColorScheme`
 literals, the named top-level consts, and the `ClippyColors.of` factory
 body), plus the two screens that hardcode fixed-dark chrome
-(`lib/app/qr_scanner_page.dart`, and the `_ImagePreview` block of
-`lib/app/home_page.dart`), never copied into this file. A private copy is
+(`lib/app/qr_scanner_page.dart`, and `ImageClipPreview` in
+`lib/app/clip_preview.dart`), never copied into this file. A private copy is
 exactly how a gate like this goes stale the first time someone tunes a
 colour and forgets the script. If a role is renamed or a file's shape
 changes, this script fails loudly (`sys.exit`) rather than silently scoring
@@ -43,7 +39,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 LIB = REPO_ROOT / "lib"
 THEME = LIB / "app" / "theme.dart"
 QR_SCANNER = LIB / "app" / "qr_scanner_page.dart"
-HOME_PAGE = LIB / "app" / "home_page.dart"
+IMAGE_VIEWER = LIB / "app" / "clip_preview.dart"
 
 TEXT_MIN = 4.5   # WCAG 1.4.3, body / label text
 MARK_MIN = 3.0   # WCAG 1.4.11, icons, borders, dots, chart-style marks
@@ -53,28 +49,10 @@ MARK_MIN = 3.0   # WCAG 1.4.11, icons, borders, dots, chart-style marks
 #: failing on a pair nothing renders would leave the gate permanently red and
 #: therefore ignored, and an ignored gate catches nothing.
 #:
-#: The two colour schemes are copied VERBATIM from Walletify's contrast-audited
-#: theme so the sibling apps cannot drift (see docs/DESIGN.md). Nudging a value
-#: here to green a pair nobody draws would buy a passing number with real drift.
-#:
 #: THE CONDITION THAT MAKES EACH ONE FATAL IS WRITTEN BELOW. If you are about to
 #: render one of these, you own fixing it FIRST, delete its entry, watch the
 #: gate go red, and fix it properly.
-LATENT_PAIRS = {
-    ("onPrimary", "primary"): (
-        "LATENT (dark), white on raw dark `primary` is 4.23:1. Nothing renders "
-        "it: every filled surface routes through `primaryFillDark` (4.57:1) via "
-        "the FilledButton theme, and `primary` appears in dark only as a BORDER "
-        "(ClipCard highlighted), where 3:1 applies and it passes. Becomes fatal "
-        "the moment white text or a white icon is drawn on `scheme.primary` in "
-        "dark, use `primaryFillDark` for that instead of minting a third violet."
-    ),
-    ("onTertiaryContainer", "tertiaryContainer"): (
-        "LATENT (dark), 4.43:1. Neither role has a call site; only the bare "
-        "`scheme.tertiary` is used. Becomes fatal on first use of the container "
-        "role; the fix is to darken tertiaryContainer #066ABC to about #0668B9."
-    ),
-}
+LATENT_PAIRS: dict[tuple[str, str], str] = {}
 
 #: The six M3 surface tiers `outline` / `onSurfaceVariant` (and, here, a few
 #: of Clippy's own tokens) get swept across. Walletify's own audit found
@@ -91,6 +69,7 @@ SURFACE_TIERS = [
 _NAMED_FLUTTER_COLORS = {
     "Colors.white": "FFFFFFFF",
     "Colors.black": "FF000000",
+    "Colors.transparent": "00000000",
 }
 
 
@@ -320,7 +299,7 @@ def clippy_token_pairs(
     for surf in SURFACE_TIERS:
         pairs.append(Pair(
             f"{sync_name} on {surf}", sync_hex, scheme[surf], "mark",
-            "WCAG 1.4.11, non-text status dot (theme.dart: 'GREEN, deliberately not the brand violet')",
+            "WCAG 1.4.11, non-text status dot (theme.dart: 'GREEN, deliberately not the brand orange')",
         ))
 
     def derived(field: str) -> str:
@@ -328,13 +307,13 @@ def clippy_token_pairs(
             derived_raw[field], scheme=scheme, named=named, is_dark=is_dark, context=field,
         )
 
-    # accent renders as real text (the "LATEST" chip label, the "Fix"
-    # banner link) as well as an icon, so it is scored at the stricter 4.5:1.
+    # accent renders as real text (the banner "Fix"/"View" links, the
+    # update sheet's bullets) as well as an icon, so it is scored at 4.5:1.
     accent_hex = derived("accent")
     for surf in ("surface", "surfaceContainerLowest"):
         pairs.append(Pair(
             f"ClippyColors.accent on {surf}", accent_hex, scheme[surf], "text",
-            "WCAG 1.4.3, renders as text (LATEST chip label, banner 'Fix' link)",
+            "WCAG 1.4.3, renders as text (banner 'Fix' / 'View' links)",
         ))
 
     # ink (=onSurface) is already scored against `surface` by
@@ -402,22 +381,18 @@ def clippy_token_pairs(
     ))
 
     onbrand_hex = derived("onBrand")
-    for stop_name in ("brandPurpleBright", "brandPurple"):
+    for stop_name in ("signalOrange", "signalOrangeDeep"):
         pairs.append(Pair(
             f"ClippyColors.onBrand on {stop_name} (gradient stop)", onbrand_hex, named[stop_name], "text",
-            "WCAG 1.4.3, '<n> selected' title / FilledButton label on the brand gradient",
+            "WCAG 1.4.3, the update hero's version number on the gradient",
         ))
-
-    if is_dark:
-        pairs.append(Pair(
-            "onPrimary(white) on primaryFillDark", named["Colors.white"], named["primaryFillDark"], "text",
-            "WCAG 1.4.3, dark FilledButton's real fill (theme.dart _build: NOT dark `primary`, see its own doc comment)",
-        ))
-        for surf in SURFACE_TIERS:
-            pairs.append(Pair(
-                f"primaryTextDark on {surf}", named["primaryTextDark"], scheme[surf], "text",
-                "WCAG 1.4.3, brand-violet body text on dark surfaces (theme.dart: dark `primary` alone is only 4.35:1)",
-            ))
+    # The selection checkbox: a white tick on the signal-orange fill.
+    pairs.append(Pair(
+        "white tick on signalOrange (selection checkbox)", named["Colors.white"], named["signalOrange"], "mark",
+        "WCAG 1.4.11, the selected-row checkbox",
+    ))
+    # Filled buttons and the selected pill segment: onPrimary on primary is
+    # already scored by scheme_role_pairs (ink pill in light, light pill in dark).
 
     return pairs
 
@@ -492,73 +467,57 @@ def qr_scanner_pairs(named: dict[str, str]) -> list[Pair]:
 
 
 def image_viewer_pairs(named: dict[str, str], dark_scheme: dict[str, str]) -> list[Pair]:
-    """`_ImagePreview` in home_page.dart: fixed dark chrome in BOTH themes,
-    like the scanner. `bg`/`fg`/`meta`/`danger` are parsed straight out of
-    the file (they are that block's own source of truth), anchored on the
-    doc comment that introduces them so a shape change fails loudly.
+    """`ImageClipPreview` in clip_preview.dart: fixed dark chrome in BOTH
+    themes, like the scanner. `fg`/`meta`/`danger` are parsed straight out
+    of the file (they are that block's own source of truth); the canvas is
+    `scannerBg`, asserted from the Scaffold so a change fails loudly.
     """
-    # NOTE: matched against the COMMENT-STRIPPED text, the block's own doc
-    # comment ("Fixed dark chrome in BOTH themes...") is not a usable anchor
-    # because _strip_comments removes it along with every other comment.
-    # `const bg = scannerBg;` is unique in the file on its own, so it anchors
-    # the block without needing the comment.
-    src = _strip_comments(HOME_PAGE.read_text(encoding="utf-8"))
+    src = _strip_comments(IMAGE_VIEWER.read_text(encoding="utf-8"))
     m = re.search(
-        r"const bg = (\w+);\s*"
-        r"const fg = ([\w.]+);\s*"
+        r"const fg = (Color\(0x[0-9A-Fa-f]{8}\));\s*"
         r"const meta = (Color\(0x[0-9A-Fa-f]{8}\));\s*"
         r"const danger = (Color\(0x[0-9A-Fa-f]{8}\));",
         src, re.S,
     )
     if not m:
-        sys.exit(f"check_contrast: could not find the _ImagePreview bg/fg/meta/danger block in {HOME_PAGE}, the shape changed")
-    bg_expr, fg_expr, meta_expr, danger_expr = m.groups()
+        sys.exit(f"check_contrast: could not find the ImageClipPreview fg/meta/danger block in {IMAGE_VIEWER}, the shape changed")
+    if "backgroundColor: scannerBg" not in src:
+        sys.exit(f"check_contrast: ImageClipPreview no longer paints scannerBg in {IMAGE_VIEWER}, the shape changed")
+    fg = _resolve_color_expr(m.group(1), context="ImageClipPreview.fg")
+    meta = _resolve_color_expr(m.group(2), context="ImageClipPreview.meta")
+    danger = _resolve_color_expr(m.group(3), context="ImageClipPreview.danger")
+    bg = named["scannerBg"]
 
-    local_named = dict(named)
-    bg = _resolve_color_expr(bg_expr, context="_ImagePreview.bg", named=local_named)
-    fg = _resolve_color_expr(fg_expr, context="_ImagePreview.fg", named=local_named)
-    meta = _resolve_color_expr(meta_expr, context="_ImagePreview.meta")
-    danger = _resolve_color_expr(danger_expr, context="_ImagePreview.danger")
+    fill = re.search(r"const fill = (Color\(0x[0-9A-Fa-f]{8}\));|danger\.withValues\(alpha: ([\d.]+)\)", src)
+    if not fill or not fill.group(2):
+        sys.exit(f"check_contrast: could not find the delete button's fill alpha in {IMAGE_VIEWER}, the shape changed")
+    alpha = float(fill.group(2))
+    danger_fill = composite_stack(bg, f"{round(alpha * 255):02X}{danger[2:]}")
 
-    (border_alpha,) = re.search(r"border: danger\.withValues\(alpha: ([\d.]+)\)", src).groups() \
-        if re.search(r"border: danger\.withValues\(alpha: ([\d.]+)\)", src) else (None,)
-    if border_alpha is None:
-        sys.exit(f"check_contrast: could not find danger's border alpha in {HOME_PAGE}, the shape changed")
-    danger_border = f"{round(float(border_alpha) * 255):02X}{danger[2:]}"
-    danger_border_effective = composite_stack(bg, danger_border)
+    cm = re.search(r"backgroundColor: fg,\s*foregroundColor: (const )?(Color\(0x[0-9A-Fa-f]{8}\))", src)
+    if not cm:
+        sys.exit(f"check_contrast: could not find the 'Copy image' button colours in {IMAGE_VIEWER}, the shape changed")
+    copy_ink = _resolve_color_expr(cm.group(2), context="ImageClipPreview copy ink")
 
     pairs = [
-        Pair("fg(white) text on bg (scannerBg)", fg, bg, "text",
-             "WCAG 1.4.3, 'Image' label / 'Copy image' button label"),
-        Pair("fg(white) icon on bg (scannerBg)", fg, bg, "mark",
-             "WCAG 1.4.11, close / copy icon buttons"),
+        Pair("fg icon on bg (scannerBg)", fg, bg, "mark", "WCAG 1.4.11, close icon"),
         Pair("meta text on bg (scannerBg)", meta, bg, "text",
-             "WCAG 1.4.3, 'PNG · 240 KB · device · 2m' line"),
-        Pair("danger icon on bg (scannerBg)", danger, bg, "mark",
-             "WCAG 1.4.11, delete icon"),
-        # Label reads the alpha it actually parsed, a hardcoded "35%" here
-        # would keep printing 35 after someone changed the Dart to 45.
-        Pair(f"danger border ({round(float(border_alpha) * 100)}% alpha, composited) on bg",
-             danger_border_effective, bg, "mark",
-             "WCAG 1.4.11, delete button's own outline"),
-        Pair("fg(white) label on primaryFillDark", fg, named["primaryFillDark"], "text",
-             "WCAG 1.4.3, 'Copy image' button fill (same token as the dark FilledButton)"),
-        Pair("fg(white) icon on primaryFillDark", fg, named["primaryFillDark"], "mark",
-             "WCAG 1.4.11, 'Copy image' button's leading icon"),
+             "WCAG 1.4.3, 'PNG · 240 KB · device · 2 min' line"),
+        Pair(f"danger icon on its own {round(alpha * 100)}% fill", danger, danger_fill, "mark",
+             "WCAG 1.4.11, delete button glyph"),
+        Pair("'Copy image' label on its fg fill", copy_ink, fg, "text",
+             "WCAG 1.4.3, the primary action's label"),
     ]
 
-    # Drift check: meta/danger are documented in home_page.dart's own
-    # comments as copies of the dark scheme's outline/error. If theme.dart's
-    # dark scheme ever moves and these don't, they silently stop matching
-    # what they claim to be, exactly the duplicate-value failure mode the
-    # user's own workflow guidance calls out. Not a contrast failure, so it
-    # does not affect the exit code; printed as its own line either way.
+    # Drift check: meta/danger are documented in clip_preview.dart as copies
+    # of the dark scheme's outline/error. Not a contrast failure, so it does
+    # not affect the exit code; printed as its own line either way.
     drift = []
     if meta != dark_scheme["outline"]:
         drift.append(f"meta {meta} != dark ColorScheme.outline {dark_scheme['outline']}")
     if danger != dark_scheme["error"]:
         drift.append(f"danger {danger} != dark ColorScheme.error {dark_scheme['error']}")
-    print("  [drift check] home_page.dart's `meta`/`danger` vs. theme.dart's dark scheme: "
+    print("  [drift check] clip_preview.dart's `meta`/`danger` vs. theme.dart's dark scheme: "
           + ("OK, still match" if not drift else "DRIFTED, " + "; ".join(drift)))
 
     return pairs
@@ -606,7 +565,7 @@ def run_section(title: str, pairs: list[Pair]) -> int:
 def main() -> int:
     theme_named_raw = read_named_exprs(THEME)
     required_consts = [
-        "brandPurple", "brandPurpleBright", "primaryFillDark", "primaryTextDark",
+        "signalOrange", "signalOrangeDeep", "_accentTextLight", "_accentTextDark",
         "scannerBg", "syncOkLight", "syncOkDark",
     ]
     missing = [n for n in required_consts if n not in theme_named_raw]
@@ -636,8 +595,7 @@ def main() -> int:
             "outline / onSurfaceVariant across all six surface tiers", surface_sweep_pairs(scheme),
         )
         fails += run_section(
-            "Clippy-specific tokens (syncOk, ClippyColors.of derived roles"
-            + (", dark-only primaryFillDark/primaryTextDark" if is_dark else "") + ")",
+            "Clippy-specific tokens (syncOk, ClippyColors.of derived roles, gradient)",
             clippy_token_pairs(scheme, named=named, derived_raw=derived_raw, is_dark=is_dark),
         )
         print(f"\n  -> {theme_name}: {fails} pair(s) below threshold" + ("" if fails else ". PASS"))
@@ -648,7 +606,7 @@ def main() -> int:
     print("Not theme-scoped: these two screens never read context.ck and render the same in light mode.")
     fails = 0
     fails += run_section("QR scanner, lib/app/qr_scanner_page.dart", qr_scanner_pairs(named))
-    fails += run_section("Image viewer, lib/app/home_page.dart _ImagePreview", image_viewer_pairs(named, dark))
+    fails += run_section("Image viewer, lib/app/clip_preview.dart ImageClipPreview", image_viewer_pairs(named, dark))
     print(f"\n  -> FIXED CHROME: {fails} pair(s) below threshold" + ("" if fails else ". PASS"))
     if fails:
         exit_code = 1
