@@ -8,6 +8,7 @@ import '../core/history/history_item.dart';
 import '../core/pairing/pairing_key.dart';
 import '../core/search/clip_search.dart';
 import '../core/signals/clip_signals.dart';
+import '../core/vision/image_index.dart';
 import '../platform/haptics.dart';
 import '../platform/link_opener.dart';
 import '../platform/share_channel.dart';
@@ -202,6 +203,8 @@ class _HomeBodyState extends State<_HomeBody> {
             onCopy: () => _copy(item),
             onDelete: () => _deleteOne(item),
             onTogglePin: () => _togglePin(item),
+            imageText: _ctl.insightOf(item)?.text,
+            onCopyText: (t) => _copyText(t, 'Text copied'),
           ),
         ),
       );
@@ -281,13 +284,16 @@ class _HomeBodyState extends State<_HomeBody> {
     final now = DateTime.now();
     final scored = <(HistoryItem, double)>[];
     for (final i in pool) {
+      final seen = _ctl.insightOf(i);
       final score = scoreDoc(
         SearchDoc(
           text: i.text,
           device: i.device,
           isImage: i.isImage,
-          signals: _ctl.signalsOf(i),
+          signals: i.isImage ? seen?.signals ?? const [] : _ctl.signalsOf(i),
           timestamp: i.timestamp,
+          imageText: seen?.text ?? '',
+          imageLabels: seen?.labels ?? const [],
         ),
         _query,
         now: now,
@@ -399,7 +405,10 @@ class _HomeBodyState extends State<_HomeBody> {
               child: all.isEmpty
                   ? _EmptyState(onAddDevice: widget.onAddDevice)
                   : shown.isEmpty
-                  ? _NoMatches(query: _query)
+                  ? _NoMatches(
+                      query: _query,
+                      readingImages: _query.isEmpty ? 0 : _ctl.images.pending,
+                    )
                   : _Feed(
                       items: shown,
                       selecting: _selecting,
@@ -410,6 +419,9 @@ class _HomeBodyState extends State<_HomeBody> {
                       onLongPress: _enterSelection,
                       onPreview: _openPreview,
                       ranked: _query.isNotEmpty,
+                      query: _query,
+                      readingImages: _ctl.images.pending,
+                      insightOf: _ctl.insightOf,
                       signalsOf: _ctl.signalsOf,
                       sensitiveLeft: _ctl.sensitiveLeft,
                       onCopyText: _copyText,
@@ -842,12 +854,21 @@ class _Feed extends StatelessWidget {
   /// Search results: one "N matches" group in score order, not day buckets
   /// (which would re-sort them by time).
   final bool ranked;
+  final String query;
+
+  /// Image clips whose text is still being read; search results can still
+  /// grow, so the header says so.
+  final int readingImages;
+  final ImageInsight? Function(HistoryItem) insightOf;
   final List<ClipSignal> Function(HistoryItem) signalsOf;
   final Duration? Function(HistoryItem) sensitiveLeft;
   final void Function(String text, String what) onCopyText;
   final void Function(Uri) onOpen;
   const _Feed({
     required this.ranked,
+    required this.query,
+    required this.readingImages,
+    required this.insightOf,
     required this.signalsOf,
     required this.sensitiveLeft,
     required this.onCopyText,
@@ -884,6 +905,7 @@ class _Feed extends StatelessWidget {
     for (final item in ordered) {
       final b = ranked
           ? '${items.length} ${items.length == 1 ? 'match' : 'matches'}'
+                '${readingImages > 0 ? ' · reading ${readingImages == 1 ? '1 image' : '$readingImages images'}' : ''}'
           : item.pinned
           ? 'Pinned'
           : _bucket(item.timestamp);
@@ -912,6 +934,10 @@ class _Feed extends StatelessWidget {
             sensitiveLeft: sensitiveLeft(item),
             onCopyText: onCopyText,
             onOpen: onOpen,
+            // Why an image matched, when it matched by its text.
+            imageSnippet: ranked && item.isImage
+                ? imageTextSnippet(insightOf(item)?.text ?? '', query)
+                : null,
           ),
         ),
       );
@@ -956,8 +982,12 @@ class _ClipRow extends StatelessWidget {
   final Duration? sensitiveLeft;
   final void Function(String text, String what) onCopyText;
   final void Function(Uri) onOpen;
+
+  /// The line of an image's text that matched the search, shown under it.
+  final String? imageSnippet;
   const _ClipRow({
     super.key,
+    this.imageSnippet,
     required this.signals,
     required this.sensitiveLeft,
     required this.onCopyText,
@@ -1085,6 +1115,29 @@ class _ClipRow extends StatelessWidget {
                     },
                   ),
           ),
+          if (imageSnippet != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(0, 10, 6, 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Icon(Icons.text_fields_rounded, size: 15, color: c.muted),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      imageSnippet!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      semanticsLabel: 'Text in image: $imageSnippet',
+                      style: Ct.body(14, color: c.muted2, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // One-tap actions (copy the code, open, call, map). Hidden while
           // selecting, where a tap means "select", and for sensitive clips,
           // whose only action is the copy button.
@@ -1282,7 +1335,8 @@ class _EmptyState extends StatelessWidget {
 
 class _NoMatches extends StatelessWidget {
   final String query;
-  const _NoMatches({required this.query});
+  final int readingImages;
+  const _NoMatches({required this.query, this.readingImages = 0});
 
   @override
   Widget build(BuildContext context) {
@@ -1298,6 +1352,15 @@ class _NoMatches extends StatelessWidget {
             textAlign: TextAlign.center,
             style: Ct.body(14.5, weight: FontWeight.w500, color: c.muted2),
           ),
+          if (readingImages > 0) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Still reading the text in '
+              '${readingImages == 1 ? '1 image' : '$readingImages images'}…',
+              textAlign: TextAlign.center,
+              style: Ct.body(13.5, color: c.muted),
+            ),
+          ],
         ],
       ),
     );

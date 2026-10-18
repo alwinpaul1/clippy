@@ -21,11 +21,13 @@ import '../core/signals/sensitive_sweeper.dart';
 import '../core/state/prefs_state_store.dart';
 import '../core/sync/sync_action.dart';
 import '../core/sync/sync_engine.dart';
+import '../core/vision/image_index.dart';
 import '../platform/device_name.dart';
 import '../platform/flutter_clipboard_writer.dart';
 import '../platform/foreground_service.dart';
 import '../platform/image_clipboard.dart';
 import '../platform/mac_screenshot_watcher.dart';
+import '../platform/clip_vision.dart';
 import '../platform/native_clip_writer.dart';
 import '../platform/sensitive_clipboard.dart';
 import '../platform/share_channel.dart';
@@ -93,6 +95,16 @@ class ClipController extends ChangeNotifier
       : null;
 
   SensitiveSweeper? _sweeper;
+
+  /// Text and labels per image clip, read on this device for search.
+  late final images = ImageIndex(
+    analyze: ClipVision.analyze,
+    onChange: () {
+      if (!_disposed) notifyListeners();
+    },
+  );
+  ImageInsight? insightOf(HistoryItem i) =>
+      i.isImage ? images.of(i.hash) : null;
 
   bool ready = false;
   bool connected = false;
@@ -204,6 +216,11 @@ class ClipController extends ChangeNotifier
     _historySub = _store!.history.listen((clips) async {
       history = await _historyStore!.project(clips);
       signals.retain(history.map((i) => i.hash));
+      images.sync([
+        for (final i in history)
+          if (i.isImage && i.imageBytes != null)
+            (hash: i.hash, bytes: i.imageBytes!),
+      ]);
       notifyListeners();
       unawaited(_sweeper?.sweep());
       // Refresh the instant-open cache: encrypted clips only, and skip large
@@ -601,6 +618,7 @@ class ClipController extends ChangeNotifier
     ForegroundServiceManager.stopHealthWatch();
     _uiPing?.cancel();
     _sweeper?.stop();
+    images.dispose();
     _macShots?.stop();
     ShareChannel.listen();
     if (_watching) {

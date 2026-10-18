@@ -4,6 +4,9 @@
 /// A few words also name a KIND of clip ("otp", "card", "phone"...), and match
 /// any clip carrying that signal as well as clips that contain the word.
 ///
+/// Image clips are searched by what they contain: the text in a screenshot
+/// and the labels the OS classifier gave a photo (see image_index.dart).
+///
 /// Recency only breaks near-ties: a strong match from last week still beats a
 /// weak one from a minute ago.
 library;
@@ -47,12 +50,18 @@ class SearchDoc {
   final bool isImage;
   final List<ClipSignal> signals;
   final DateTime timestamp;
+
+  /// For an image: the text recognised in it, and its content labels.
+  final String imageText;
+  final List<String> imageLabels;
   const SearchDoc({
     required this.text,
     required this.device,
     required this.isImage,
     required this.signals,
     required this.timestamp,
+    this.imageText = '',
+    this.imageLabels = const [],
   });
 }
 
@@ -67,7 +76,7 @@ List<String> queryTokens(String query) => query
 double? scoreDoc(SearchDoc doc, String query, {DateTime? now}) {
   final tokens = queryTokens(query);
   if (tokens.isEmpty) return 0;
-  final text = doc.isImage ? '' : doc.text.toLowerCase();
+  final text = (doc.isImage ? doc.imageText : doc.text).toLowerCase();
   final words = _words(text);
   final device = doc.device.toLowerCase();
   final kinds = {for (final s in doc.signals) s.kind};
@@ -77,6 +86,10 @@ double? scoreDoc(SearchDoc doc, String query, {DateTime? now}) {
     var best = _matchText(t, text, words);
     if (device.contains(t)) best = best > 1.2 ? best : 1.2;
     if (doc.isImage && _imageWords.contains(t)) best = best > 3 ? best : 3;
+    if (doc.isImage) {
+      final l = _matchLabel(t, doc.imageLabels);
+      if (l > best) best = l;
+    }
     final want = signalKeywords[t];
     if (want != null && want.any(kinds.contains)) best = best > 3 ? best : 3;
     if (best == 0) return null; // every word must match
@@ -106,6 +119,51 @@ double _matchText(String t, String text, List<String> words) {
     }
   }
   return 0;
+}
+
+/// A label is a word or two ("dog", "credit card"): a whole label word
+/// counts nearly as much as a word in the text, the start of one a little
+/// less. No fragments or typos, labels are too short for those to mean much.
+double _matchLabel(String t, List<String> labels) {
+  var best = 0.0;
+  for (final label in labels) {
+    for (final w in label.toLowerCase().split(' ')) {
+      if (w == t || (t.endsWith('s') && w == t.substring(0, t.length - 1))) {
+        return 2.5;
+      }
+      if (t.length >= 3 && w.startsWith(t)) best = 1.8;
+    }
+  }
+  return best;
+}
+
+/// The line of an image's text that best shows why it matched [query], cut
+/// to about [max] characters around the first hit; null when no line holds
+/// any query word (it matched by label or kind instead).
+String? imageTextSnippet(String imageText, String query, {int max = 80}) {
+  final tokens = queryTokens(query);
+  if (tokens.isEmpty || imageText.trim().isEmpty) return null;
+  String? bestLine;
+  var bestHits = 0;
+  for (final raw in imageText.split('\n')) {
+    final line = raw.trim();
+    if (line.isEmpty) continue;
+    final lower = line.toLowerCase();
+    final hits = tokens.where(lower.contains).length;
+    if (hits > bestHits) {
+      bestHits = hits;
+      bestLine = line;
+    }
+  }
+  if (bestLine == null) return null;
+  if (bestLine.length <= max) return bestLine;
+  final at = bestLine.toLowerCase().indexOf(
+    tokens.firstWhere(bestLine.toLowerCase().contains),
+  );
+  final start = (at - max ~/ 3).clamp(0, bestLine.length - max);
+  final end = start + max;
+  return '${start > 0 ? '…' : ''}${bestLine.substring(start, end).trim()}'
+      '${end < bestLine.length ? '…' : ''}';
 }
 
 List<String> _words(String text) => text

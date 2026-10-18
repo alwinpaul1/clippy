@@ -72,3 +72,10 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Image search: on-device OCR and image labels, models bundled in the
+    // APK (no Play services download, works offline). See ClipVision.kt.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.mlkit:image-labeling:17.0.9")
+}

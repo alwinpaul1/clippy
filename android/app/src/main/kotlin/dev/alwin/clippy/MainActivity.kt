@@ -87,6 +87,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        ClipVision.register(flutterEngine.dartExecutor.binaryMessenger)
         channel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             channelName,

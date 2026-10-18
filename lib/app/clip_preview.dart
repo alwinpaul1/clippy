@@ -209,12 +209,19 @@ class ImageClipPreview extends StatelessWidget {
   final VoidCallback onCopy;
   final VoidCallback onDelete;
   final VoidCallback onTogglePin;
+
+  /// The text read from the image on this device, or null while it has not
+  /// been read (or there is none). Offers "Copy text" when present.
+  final String? imageText;
+  final void Function(String text)? onCopyText;
   const ImageClipPreview({
     super.key,
     required this.item,
     required this.onCopy,
     required this.onDelete,
     required this.onTogglePin,
+    this.imageText,
+    this.onCopyText,
   });
 
   @override
@@ -270,6 +277,28 @@ class ImageClipPreview extends StatelessWidget {
                     : const SizedBox.shrink(),
               ),
             ),
+            if (imageText != null &&
+                imageText!.trim().isNotEmpty &&
+                onCopyText != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: fg,
+                      side: BorderSide(color: fg.withValues(alpha: 0.28)),
+                      minimumSize: const Size(0, 48),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      onCopyText!(imageText!.trim());
+                    },
+                    icon: const Icon(Icons.text_fields_rounded, size: ClipIcons.inline),
+                    label: const Text('Copy text from image'),
+                  ),
+                ),
+              ),
             Padding(
               padding: EdgeInsets.fromLTRB(20, 12, 20, 16 + MediaQuery.of(context).padding.bottom),
               child: Row(

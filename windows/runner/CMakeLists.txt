@@ -7,6 +7,7 @@ project(runner LANGUAGES CXX)
 #
 # Any new source files that you add to the application should be added here.
 add_executable(${BINARY_NAME} WIN32
+  "clip_vision.cpp"
   "flutter_window.cpp"
   "main.cpp"
   "utils.cpp"
@@ -34,6 +35,11 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 # dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
+# Image search OCR (clip_vision.cpp): C++/WinRT from the Windows SDK. Its
+# headers are not /W4-clean, so that one file does not treat warnings as
+# errors.
+target_link_libraries(${BINARY_NAME} PRIVATE "windowsapp.lib")
+set_source_files_properties("clip_vision.cpp" PROPERTIES COMPILE_OPTIONS "/WX-")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

@@ -7,7 +7,8 @@
       "Card numbers and IBANs are blurred and removed from all your devices, and from the clipboard, after 5 minutes. You can pick 1, 5 or 15 minutes in Settings.",
       "One-time codes get a \"Copy\" button that copies just the code.",
       "Links, phone numbers, email addresses and street addresses get one-tap Open, Call, Email and Map buttons.",
-      "Smarter search: the best matches come first, small typos are forgiven, and you can search \"code\", \"card\", \"phone\" or \"link\" to find that kind of clip."
+      "Smarter search: the best matches come first, small typos are forgiven, and you can search \"code\", \"card\", \"phone\" or \"link\" to find that kind of clip.",
+      "Search images and screenshots by the text in them. On Mac and Android you can also search photos by what they show, like \"dog\" or \"receipt\". The images are read on your own device, and \"Copy text from image\" copies the text out."
     ],
     "improvements": [
       "On Android 13 and later, sensitive clips are hidden in the system's own clipboard preview.",
