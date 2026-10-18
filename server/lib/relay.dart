@@ -376,6 +376,11 @@ const _webAssets = {
   'og.png': 'image/png',
   'apple-touch-icon.png': 'image/png',
   'favicon-32.png': 'image/png',
+  // App screenshots on the landing page (light and dark).
+  'shot-desktop-light.jpg': 'image/jpeg',
+  'shot-desktop-dark.jpg': 'image/jpeg',
+  'shot-phone-light.jpg': 'image/jpeg',
+  'shot-phone-dark.jpg': 'image/jpeg',
   // Google Search Console site verification (keep permanently).
   'googlec1e15c16fccdc2a5.html': 'text/html; charset=utf-8',
 };
@@ -395,7 +400,7 @@ Future<bool> _serveWebAsset(HttpRequest req) async {
         ..headers.contentType = ContentType(parts[0], parts[1])
         ..headers.set(
           HttpHeaders.cacheControlHeader,
-          name.endsWith('.png')
+          name.endsWith('.png') || name.endsWith('.jpg')
               ? 'public, max-age=86400'
               : 'public, max-age=3600',
         );

@@ -8,8 +8,9 @@
 <meta name="keywords" content="clipboard sync, cross device clipboard, mac android clipboard, encrypted clipboard, QR pair clipboard, Clippy app">
 <meta name="author" content="Alwin Paul">
 <meta name="robots" content="index, follow, max-image-preview:large">
-<meta name="theme-color" content="#1F4B3F">
-<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#F5F4F0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F0F0E" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
 <link rel="canonical" href="https://clippy.alwinpaul.me/">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -96,300 +97,662 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..500&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+  /* Clippy's app palette: warm paper / graphite, ink primary, one signal orange. */
   :root{
-    --bg:#F4F1EA; --surface:#FFFFFF; --ink:#1E1C15; --green:#1F4B3F;
-    --green-hover:#173A31; --muted:#7A7466; --muted2:#A39C8B; --border:#E3DED2;
-    --border-strong:#CFC9BA; --blue:#29A9F4;
+    --bg:#F5F4F0; --bg2:#EFEEEA; --card:#FFFFFF; --ink:#161614; --ink2:#3A3935;
+    --muted:#55534E; --muted2:#6E6C66; --line:#E2E0DA; --line2:#D2D0C9;
+    --accent:#C2410C; --accent-text:#B93A0A; --accent-soft:rgba(194,65,12,.09);
+    --ok:#0B7A45; --ok-soft:rgba(11,122,69,.10); --on-ink:#F5F4F0; --hatch:rgba(22,22,20,.05);
+    --shadow:0 1px 2px rgba(22,22,20,.04),0 12px 32px rgba(22,22,20,.08);
+    --shadow-sm:0 1px 2px rgba(22,22,20,.05),0 4px 12px rgba(22,22,20,.05);
+    --grain-alpha:.045;
+    color-scheme:light;
   }
-  *{box-sizing:border-box}
-  html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
-  body{
-    margin:0; background:var(--bg); color:var(--ink);
-    font-family:'Instrument Sans',system-ui,sans-serif; line-height:1.5;
-    -webkit-font-smoothing:antialiased;
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0F0F0E; --bg2:#161615; --card:#1A1A18; --ink:#F3F2EE; --ink2:#D6D4CE;
+      --muted:#ABA9A2; --muted2:#8F8D87; --line:#2E2D2A; --line2:#3D3C38;
+      --accent:#FF5A1F; --accent-text:#FF7A45; --accent-soft:rgba(255,90,31,.14);
+      --ok:#4CCE8A; --ok-soft:rgba(76,206,138,.12); --on-ink:#161614; --hatch:rgba(243,242,238,.04);
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.45);
+      --shadow-sm:0 1px 2px rgba(0,0,0,.35),0 4px 12px rgba(0,0,0,.25);
+      --grain-alpha:.06;
+      color-scheme:dark;
+    }
   }
+  :root[data-theme="dark"]{
+    --bg:#0F0F0E; --bg2:#161615; --card:#1A1A18; --ink:#F3F2EE; --ink2:#D6D4CE;
+    --muted:#ABA9A2; --muted2:#8F8D87; --line:#2E2D2A; --line2:#3D3C38;
+    --accent:#FF5A1F; --accent-text:#FF7A45; --accent-soft:rgba(255,90,31,.14);
+    --ok:#4CCE8A; --ok-soft:rgba(76,206,138,.12); --on-ink:#161614; --hatch:rgba(243,242,238,.04);
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.45);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.35),0 4px 12px rgba(0,0,0,.25);
+    --grain-alpha:.06;
+    color-scheme:dark;
+  }
+
+  /* Motion tokens (beUI motion guides): ease-out for entrances, ease-in-out
+     for things already on screen, ~120ms for presses, under 300ms by default. */
+  :root{
+    --ease-out:cubic-bezier(.16,1,.3,1);
+    --ease-in-out:cubic-bezier(.77,0,.175,1);
+    --press:120ms;
+    --quick:200ms;
+    --nav-h:64px;
+  }
+
+  *,*::before,*::after{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:calc(var(--nav-h) + 16px)}
+  @media (pointer:fine){html{overscroll-behavior:none}}
+  body{margin:0;background-color:var(--bg);color:var(--ink);font:400 16px/1.6 'Instrument Sans',system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+  /* Paper grain: a tiled noise layer on the body background, so it never
+     needs to sit above anything. */
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:var(--grain-alpha);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E")}
   a{color:inherit}
-  .wrap{max-width:1000px; margin:0 auto; padding:0 24px}
+  a,button{touch-action:manipulation}
+  img{max-width:100%;height:auto;display:block}
+  h1,h2,h3,h4{text-wrap:balance}
+  p{text-wrap:pretty}
+  .mono{font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 24px}
+  @media (max-width:600px){.wrap{padding:0 16px}}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
 
-  /* Top bar */
-  .topbar{display:flex; align-items:center; gap:11px; padding:22px 0}
-  .topbar .mark{width:22px; height:31px}
-  .topbar .name{font-family:'Newsreader',serif; font-weight:500; font-size:22px; letter-spacing:-.01em}
-  .topbar .spacer{flex:1}
-  /* "Get it" — Uiverse-style ripple CTA (by mi-series), in Clippy colors */
-  .topbar .gh{
-    outline:0; display:inline-flex; align-items:center; justify-content:center;
-    position:relative;
-    background:var(--green); min-width:132px; border:0; border-radius:9px;
-    box-shadow:0 4px 12px rgba(31,28,21,.14); box-sizing:border-box;
-    padding:12px 16px; color:#F4F1EA; font-size:12px; font-weight:600;
-    letter-spacing:1.2px; text-transform:uppercase; overflow:hidden;
-    cursor:pointer; text-decoration:none;
+  /* Theme-specific images (the app renders exist in both). */
+  .only-dark{display:none}
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]) .only-dark{display:block}
+    :root:not([data-theme="light"]) .only-light{display:none}
   }
-  .topbar .gh:hover{opacity:.95}
-  .topbar .gh .animation{
-    position:absolute; left:50%; top:50%; width:0; height:0;
-    border-radius:100%; pointer-events:none;
-    animation:ripple 0.6s linear infinite;
-  }
-  @keyframes ripple{
-    0%{box-shadow:0 0 0 0 rgba(244,241,234,.1), 0 0 0 20px rgba(244,241,234,.1), 0 0 0 40px rgba(244,241,234,.1), 0 0 0 60px rgba(244,241,234,.1)}
-    100%{box-shadow:0 0 0 20px rgba(244,241,234,.1), 0 0 0 40px rgba(244,241,234,.1), 0 0 0 60px rgba(244,241,234,.1), 0 0 0 80px rgba(244,241,234,0)}
-  }
+  :root[data-theme="dark"] .only-dark{display:block}
+  :root[data-theme="dark"] .only-light{display:none}
 
-  /* Hero */
-  .hero{padding:36px 0 20px; text-align:center}
-  .hero .mascot{width:132px; height:auto; margin:0 auto 26px; display:block}
-  .hero h1{
-    font-family:'Newsreader',serif; font-weight:500; letter-spacing:-.02em;
-    font-size:clamp(44px,8vw,76px); line-height:1.02; margin:0 0 18px;
-  }
-  .hero h1 .b{color:var(--green)}
+  /* ---- buttons: explicit variants (.btn-primary / .btn-ghost), shared press */
+  .btn,.pill,.icon-btn,.os-opt,.otp-btn{transition:scale var(--press) var(--ease-out),translate var(--quick) var(--ease-out),background-color var(--quick),border-color var(--quick),color var(--quick),opacity var(--quick)}
+  .btn:active,.pill:active,.icon-btn:active,.os-opt:active,.otp-btn:active{scale:.97}
 
-  /* Download CTA — solid Clippy green */
-  .cta-row{display:flex; flex-direction:column; align-items:center; gap:14px}
-  .btn{
-    display:inline-flex; align-items:center; justify-content:center; gap:11px;
-    background:var(--green); color:#F4F1EA; text-decoration:none;
-    font-weight:500; font-size:16px; padding:16px 30px; border-radius:14px;
-    border:0; cursor:pointer;
-    box-shadow:0 8px 24px rgba(31,75,63,.18);
-    transition:background .15s ease, transform .12s ease, box-shadow .15s ease;
+  /* ---- nav: hides on scroll down, returns on scroll up or focus */
+  .nav{position:sticky;top:0;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:saturate(1.4) blur(12px);-webkit-backdrop-filter:saturate(1.4) blur(12px);border-bottom:1px solid transparent;transition:border-color .2s,transform .26s var(--ease-out)}
+  .nav.scrolled{border-bottom-color:var(--line)}
+  .nav.hidden{transform:translateY(-100%)}
+  .nav .wrap{display:flex;align-items:center;gap:24px;height:var(--nav-h)}
+  .skip{position:absolute;left:16px;top:12px;padding:10px 16px;border-radius:999px;background:var(--ink);color:var(--on-ink);font-weight:600;text-decoration:none;transform:translateY(-200%)}
+  .skip:focus{transform:none}
+  .brand{display:flex;align-items:center;gap:10px;min-height:44px;text-decoration:none;font-weight:700;font-size:20px;letter-spacing:-.02em}
+  .brand svg{width:28px;height:28px}
+  .nav-links{display:flex;gap:2px;margin-left:8px}
+  .nav-links a{text-decoration:none;color:var(--muted);font-size:14.5px;font-weight:500;padding:8px 12px;border-radius:999px;transition:color var(--quick),background-color var(--quick)}
+  .nav-links a:hover{color:var(--ink);background:var(--bg2)}
+  .nav-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .icon-btn{width:44px;height:44px;display:grid;place-items:center;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;text-decoration:none}
+  .icon-btn:hover{background:var(--bg2);border-color:var(--line2)}
+  .icon-btn svg{width:18px;height:18px}
+  .ico-sun{display:none}
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]) .ico-sun{display:block}
+    :root:not([data-theme="light"]) .ico-moon{display:none}
   }
-  .btn:hover{background:var(--green-hover); transform:translateY(-1px); box-shadow:0 12px 28px rgba(31,75,63,.22)}
-  .btn:active{transform:translateY(0)}
-  .btn:focus-visible{outline:3px solid rgba(41,169,244,.5); outline-offset:2px}
-  .btn svg{width:20px; height:20px; flex:none}
+  :root[data-theme="dark"] .ico-sun{display:block}
+  :root[data-theme="dark"] .ico-moon{display:none}
+  .pill{display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 20px;border-radius:999px;background:var(--ink);color:var(--on-ink);font-weight:600;font-size:14.5px;text-decoration:none}
+  .pill:hover{opacity:.88}
+  @media (max-width:860px){.nav-links{display:none}}
+  @media (max-width:420px){.nav .gh{display:none}}
 
-  /* Feature tips — solid white cards + 3D tilt + pointer spotlight */
-  .features{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:60px 0 72px}
-  .feature{
-    position:relative;
-    background:var(--surface); border:1px solid var(--border);
-    border-radius:16px; padding:18px 18px 16px;
-    box-shadow:0 2px 14px rgba(31,28,21,.04);
-    --mx:50%; --my:50%;
-    overflow:hidden;
-    transform-style:preserve-3d;
-    will-change:transform;
-  }
-  .feature .k{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--green); margin-bottom:8px}
-  .feature h3{font-family:'Newsreader',serif; font-weight:500; font-size:18px; margin:0 0 5px; letter-spacing:-.01em}
-  .feature p{margin:0; font-size:13.5px; color:var(--muted); line-height:1.5}
+  /* ---- hero */
+  .hero{padding:72px 0 40px;text-align:center;position:relative}
+  .hero::before{content:"";position:absolute;inset:-64px 0 auto;height:640px;background:radial-gradient(60% 55% at 50% 0%,var(--accent-soft),transparent 70%);pointer-events:none}
+  .hero .wrap{position:relative}
+  .kicker{display:inline-flex;align-items:center;gap:10px;min-height:44px;padding:4px 14px 4px 6px;border:1px solid var(--line);border-radius:999px;background:var(--card);font-size:13.5px;color:var(--muted);text-decoration:none;box-shadow:var(--shadow-sm);transition:border-color var(--quick),color var(--quick)}
+  .kicker:hover{border-color:var(--line2);color:var(--ink)}
+  .kicker b{font:500 11.5px 'IBM Plex Mono',monospace;letter-spacing:.06em;text-transform:uppercase;padding:4px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent-text)}
+  .kicker .arr{transition:translate var(--quick) var(--ease-out)}
+  .kicker:hover .arr{translate:3px 0}
+  .hero h1{margin:28px auto 0;font-size:clamp(34px,8.4vw,100px);line-height:1.02;letter-spacing:-.05em;font-weight:700}
+  .hero h1 .line{display:block;white-space:nowrap}
+  .hero h1 .dim{color:var(--muted2)}
+  .plat{display:inline-flex;align-items:center;gap:.16em;white-space:nowrap}
+  .plat svg{width:.76em;height:.76em;flex:none;transform:translateY(.02em)}
+  /* Content swap: the old word leaves faster than the new one arrives. */
+  .swap{display:inline-flex;transition:opacity .26s var(--ease-out),transform .26s var(--ease-out),filter .26s var(--ease-out)}
+  .swap.out{opacity:0;transform:translateY(-.16em);filter:blur(4px);transition-duration:.15s;transition-timing-function:ease-in}
+  .swap.pre{opacity:0;transform:translateY(.16em);filter:blur(4px);transition:none}
+  .hero p.sub{max-width:580px;margin:28px auto 0;color:var(--muted);font-size:clamp(17px,2vw,19.5px)}
+  .cta-row{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:36px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:54px;padding:0 26px;border-radius:999px;font-weight:600;font-size:16px;text-decoration:none;border:1px solid transparent;cursor:pointer}
+  .btn svg{width:20px;height:20px}
+  .btn-primary{background:var(--ink);color:var(--on-ink);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),var(--shadow)}
+  .btn-primary:hover{opacity:.92}
+  .btn-ghost{border-color:var(--line2);color:var(--ink);background:var(--card)}
+  .btn-ghost:hover{border-color:var(--muted2)}
+  /* Expanding-arrow ghost button (after beUI expanding-arrow-button). */
+  .btn-ghost .go{display:inline-grid;place-items:center;width:28px;height:28px;margin-right:-12px;border-radius:999px;background:var(--bg2);transition:background-color var(--quick),color var(--quick)}
+  .btn-ghost .go svg{width:14px;height:14px;transition:translate var(--quick) var(--ease-out)}
+  .btn-ghost:hover .go,.btn-ghost:focus-visible .go{background:var(--ink);color:var(--on-ink)}
+  .btn-ghost:hover .go svg,.btn-ghost:focus-visible .go svg{translate:0 2px}
+  .hero .links{margin-top:18px;font-size:14px;color:var(--muted2)}
+  .hero .links a{display:inline-block;padding:13px 0;margin:-13px 0;color:var(--muted);text-underline-offset:3px}
+  .hero .links a:hover{color:var(--ink)}
+  .chips{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:28px}
+  .chip{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 14px;border:1px solid var(--line);border-radius:999px;font-size:12.5px;color:var(--muted);background:var(--card)}
+  .chip .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+  .chip svg{width:14px;height:14px}
+  @media (max-width:600px){.hero{padding-top:44px}.cta-row .btn{width:100%}}
 
-  /* 3D tilt (card-7 style) + spotlight rim. Desktop only. Solid cards, not glass. */
-  @media (hover:hover) and (pointer:fine){
-    .features,.get-dl{perspective:1000px}
-    .feature,.get-card{
-      transition:
-        box-shadow 180ms ease,
-        border-color 180ms ease,
-        transform 0.4s ease-in-out;
-    }
-    .feature.is-tilting,.get-card.is-tilting{
-      transition:
-        box-shadow 180ms ease,
-        border-color 180ms ease,
-        transform 0.1s ease-out;
-    }
-    .feature:hover,.get-card:hover{
-      border-color:transparent;
-      box-shadow:
-        0 18px 40px rgba(31,28,21,.12),
-        0 0 0 1px rgba(31,75,63,.08);
-      z-index:2;
-    }
-    /* Soft green wash under the cursor */
-    .feature::after,.get-card::after{
-      content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:0;
-      background:radial-gradient(
-        220px circle at var(--mx) var(--my),
-        rgba(31,75,63,.10),
-        transparent 55%
-      );
-      opacity:0; transition:opacity 160ms ease;
-    }
-    .feature:hover::after,.get-card:hover::after{opacity:1}
-    /* Bright rim that follows the pointer */
-    .feature::before,.get-card::before{
-      content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:1;
-      padding:1.5px;
-      background:radial-gradient(
-        180px circle at var(--mx) var(--my),
-        rgba(31,75,63,.75),
-        rgba(41,169,244,.35) 35%,
-        transparent 60%
-      );
-      -webkit-mask:
-        linear-gradient(#000 0 0) content-box,
-        linear-gradient(#000 0 0);
-      -webkit-mask-composite:xor;
-      mask:
-        linear-gradient(#000 0 0) content-box,
-        linear-gradient(#000 0 0);
-      mask-composite:exclude;
-      opacity:0; transition:opacity 160ms ease;
-    }
-    .feature:hover::before,.get-card:hover::before{opacity:1}
-    .feature > *,.get-card > *{position:relative; z-index:2}
-  }
-  @media (prefers-reduced-motion:reduce){
-    .feature,.get-card{transform:none !important}
-    .feature::before,.feature::after,.get-card::before,.get-card::after{display:none}
-  }
+  /* Entry sequence: each hero part rises in once, staggered (beUI text-reveal). */
+  .js .rise{animation:rise .8s var(--ease-out) both;animation-delay:calc(var(--i,0) * 80ms + 60ms)}
+  @keyframes rise{from{opacity:0;transform:translateY(14px);filter:blur(8px)}to{opacity:1;transform:none;filter:none}}
 
-  /* Platform picker: solid card with toggle + download */
-  .platforms-h{text-align:center; margin:0 0 28px; scroll-margin-top:24px}
-  .platforms-h h2{font-family:'Newsreader',serif; font-weight:500; font-size:30px; margin:0 0 6px; letter-spacing:-.01em}
-  .platforms-h p{margin:0; color:var(--muted); font-size:15px}
-  .get-dl{
-    display:flex; justify-content:center;
-    margin:0 0 72px;
-  }
-  .get-card{
-    display:flex; flex-direction:column; align-items:center; gap:18px;
-    position:relative;
-    width:100%; max-width:440px;
-    background:var(--surface); border:1px solid var(--border);
-    border-radius:20px; padding:28px 26px 26px;
-    box-shadow:0 4px 24px rgba(31,28,21,.06);
-    --mx:50%; --my:50%;
-    overflow:hidden;
-    transform-style:preserve-3d;
-    will-change:transform;
-  }
-  .os-toggle{
-    display:flex; width:100%; padding:4px; gap:2px;
-    border-radius:14px;
-    background:var(--bg); border:1px solid var(--border);
-  }
-  .os-opt{
-    display:inline-flex; align-items:center; justify-content:center; gap:8px;
-    flex:1; border:0; background:transparent; cursor:pointer;
-    font-family:'Instrument Sans',system-ui,sans-serif;
-    font-weight:500; font-size:14.5px; color:var(--muted);
-    padding:11px 12px; border-radius:11px;
-    transition:background .15s ease, color .15s ease, box-shadow .15s ease;
-  }
-  .os-opt svg{width:16px; height:16px; flex:none}
-  @media (hover:hover) and (pointer:fine){
-    .os-opt:not([aria-selected="true"]):hover{color:var(--ink)}
-  }
-  .os-opt[aria-selected="true"]{
-    color:#F4F1EA; background:var(--green);
-    box-shadow:0 2px 10px rgba(31,75,63,.18);
-  }
-  .os-opt:focus-visible{outline:3px solid rgba(41,169,244,.45); outline-offset:2px}
-  .os-req{
-    font-family:'IBM Plex Mono',monospace; font-size:12px;
-    color:var(--muted2); margin:0; min-height:1.2em; text-align:center;
-  }
-  .get-card .btn{width:100%; max-width:100%}
+  /* ---- product shot: desktop frame with the phone laid over its corner */
+  .shot{position:relative;margin:64px auto 0;max-width:1080px;padding:clamp(16px,4vw,48px) clamp(16px,4vw,48px) 0;border-radius:28px;border:1px solid var(--line);background:
+      radial-gradient(80% 90% at 15% 0%,rgba(255,90,31,.30),transparent 60%),
+      radial-gradient(70% 80% at 100% 100%,rgba(29,95,208,.28),transparent 60%),
+      linear-gradient(160deg,#2a2622,#141312);overflow:hidden;box-shadow:var(--shadow)}
+  .shot .desk{border-radius:14px 14px 0 0;overflow:hidden;box-shadow:0 30px 60px rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.08);border-bottom:0;background:var(--bg)}
+  .shot .bar{height:28px;display:flex;align-items:center;gap:7px;padding:0 12px;background:var(--bg2);border-bottom:1px solid var(--line)}
+  .shot .bar i{width:10px;height:10px;border-radius:50%;background:var(--line2)}
+  .shot .desk img{aspect-ratio:2200/1440;object-fit:cover;object-position:top;width:100%;max-height:520px}
+  .shot .phone{position:absolute;right:clamp(12px,5vw,64px);bottom:-40px;width:clamp(120px,24%,250px);border-radius:28px;padding:7px;background:#0b0b0a;box-shadow:0 30px 60px rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.12)}
+  .shot .phone img{border-radius:22px;aspect-ratio:786/1500;object-fit:cover;object-position:top;width:100%}
 
-  footer{border-top:1px solid var(--border); padding:28px 0 44px; color:var(--muted2); font-size:13px; text-align:center}
-  footer a{color:var(--muted); text-decoration:none; border-bottom:1px solid var(--border-strong)}
-  footer .credit{margin-top:10px}
-  footer .credit .heart{color:#C96F5E}
-  footer .credit a{display:inline-flex; align-items:center; gap:5px; vertical-align:middle}
-  footer .credit a:hover{color:var(--ink)}
-  footer .credit svg{width:14px; height:14px; opacity:.75}
+  /* ---- sections */
+  section{padding:120px 0}
+  @media (max-width:600px){section{padding:80px 0}}
+  .eyebrow{display:inline-flex;align-items:center;gap:10px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-text)}
+  .eyebrow::before{content:"";width:18px;height:1px;background:currentColor}
+  h2{font-size:clamp(32px,4.8vw,56px);line-height:1.04;letter-spacing:-.04em;margin:16px 0 0;font-weight:700;max-width:22ch}
+  h2 .dim{color:var(--muted2)}
+  .lead{color:var(--muted);font-size:18px;max-width:600px;margin:20px 0 0}
 
-  /* Living mascot */
-  @keyframes bob{0%,100%{transform:translateY(0) rotate(0)}45%{transform:translateY(-6px) rotate(-3deg)}}
-  @keyframes blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
-  .mascot .body{transform-origin:50% 72%; transform-box:fill-box; animation:bob 5.5s ease-in-out infinite}
-  .mascot .eyes{transform-origin:center; transform-box:fill-box; animation:blink 4.2s linear infinite}
-  /* The tiny top-bar clip lives too (gentler bob so it doesn't jitter). */
-  @keyframes bobSmall{0%,100%{transform:translateY(0) rotate(0)}45%{transform:translateY(-1.5px) rotate(-2deg)}}
-  .topbar .mark .body{transform-origin:50% 72%; transform-box:fill-box; animation:bobSmall 5.5s ease-in-out infinite}
-  .topbar .mark .eyes{transform-origin:center; transform-box:fill-box; animation:blink 4.2s linear infinite}
+  /* ---- feature rows */
+  .rows{margin-top:80px;display:grid;gap:112px}
+  .row{display:grid;grid-template-columns:1fr 1.1fr;gap:64px;align-items:center}
+  .row:nth-child(even) .copy{order:2}
+  @media (max-width:900px){.rows{gap:80px}.row{grid-template-columns:1fr;gap:32px}.row:nth-child(even) .copy{order:0}}
+  .num{display:inline-flex;align-items:center;gap:10px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--muted2);letter-spacing:.06em;text-transform:uppercase}
+  .num b{display:inline-grid;place-items:center;min-width:32px;height:24px;padding:0 8px;border-radius:999px;border:1px solid var(--line2);color:var(--ink);font-weight:500}
+  .row h3{font-size:clamp(28px,3.2vw,38px);line-height:1.1;letter-spacing:-.035em;margin:16px 0 0;font-weight:700}
+  .row p{color:var(--muted);margin:16px 0 0;font-size:17px}
+  .steps{list-style:none;padding:0;margin:28px 0 0;display:grid;gap:0;counter-reset:s;border-top:1px solid var(--line)}
+  .steps li{counter-increment:s;display:flex;gap:16px;padding:14px 0;border-bottom:1px solid var(--line);color:var(--ink2);font-size:15.5px}
+  .steps li::before{content:counter(s,decimal-leading-zero);font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--accent-text);padding-top:3px}
 
-  @media (max-width:720px){
-    .features{grid-template-columns:1fr}
-    .get-card{padding:22px 16px 18px; max-width:100%}
-    .os-opt{padding:11px 8px; font-size:13.5px; gap:6px}
+  .panel{position:relative;border:1px solid var(--line);border-radius:24px;padding:clamp(20px,4vw,40px);background:
+      repeating-linear-gradient(135deg,var(--hatch) 0 1px,transparent 1px 10px),var(--bg2);min-height:360px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}
+
+  /* panel 1: pairing */
+  .pair{display:grid;grid-template-columns:1fr auto 1fr;gap:16px;align-items:center;width:100%;max-width:460px}
+  .dev{padding:18px;text-align:center}
+  .dev .name{font-weight:600;font-size:14.5px;margin-top:12px}
+  .dev .meta{font-size:12px;color:var(--muted2)}
+  .qr{width:96px;height:96px;margin:0 auto;display:grid;grid-template-columns:repeat(9,1fr);gap:2px;padding:8px;border-radius:12px;background:#fff;border:1px solid var(--line)}
+  .qr i{background:#161614;border-radius:1.5px}
+  .qr i.o{background:transparent}
+  .cam{position:relative;width:96px;height:96px;margin:0 auto;border-radius:12px;border:2px dashed var(--line2);display:grid;place-items:center;color:var(--muted2);overflow:hidden}
+  .cam svg{width:30px;height:30px}
+  .link{display:grid;justify-items:center;gap:6px;color:var(--accent-text);font-size:11.5px}
+  .link .wire{width:56px;height:2px;background:repeating-linear-gradient(90deg,var(--accent) 0 6px,transparent 6px 12px);background-size:24px 2px;animation:flow 1.2s linear infinite;animation-play-state:paused}
+  .is-live .link .wire{animation-play-state:running}
+  @keyframes flow{to{background-position:24px 0}}
+  @media (max-width:480px){.pair{grid-template-columns:1fr}.link .wire{width:2px;height:28px;background:repeating-linear-gradient(180deg,var(--accent) 0 6px,transparent 6px 12px)}}
+
+  /* panel 2: live encryption demo */
+  .pipe{width:100%;max-width:480px;min-width:0;display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+  .stage{position:relative;display:flex;align-items:center;gap:14px;padding:12px 16px;min-height:60px}
+  .stage .tag{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted2);width:68px;flex:none}
+  .stage .val{font-size:15px;min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .stage input{flex:1;min-width:0;height:44px;padding:0 12px;border:1px solid var(--line2);border-radius:10px;background:var(--bg);color:var(--ink);font:500 15px 'Instrument Sans',sans-serif;transition:border-color var(--quick)}
+  .stage input:hover{border-color:var(--muted2)}
+  .stage input:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+  .stage.relay{background:transparent;border-style:dashed;box-shadow:none}
+  .stage.relay .val{color:var(--muted);font-size:12.5px}
+  .stage .lock{color:var(--accent-text);flex:none}
+  .stage .lock svg{width:16px;height:16px;display:block}
+  .stage.recv::after{content:"";position:absolute;inset:-1px;border-radius:inherit;border:2px solid var(--ok);opacity:0;pointer-events:none}
+  .stage.recv.got::after{animation:got .7s var(--ease-out)}
+  @keyframes got{from{opacity:.9}to{opacity:0}}
+  .arrow{justify-self:center;color:var(--muted2);font-size:14px;line-height:1}
+  .row .demo-note{font-size:13px;color:var(--muted2);margin:6px 2px 0;text-align:center}
+
+  /* panel 3: the phone render */
+  .panel.phoneshot{padding-bottom:0;align-items:flex-end;min-height:440px}
+  .panel.phoneshot .frame{width:min(300px,80%);border-radius:30px 30px 0 0;padding:8px 8px 0;background:#0b0b0a;border:1px solid rgba(255,255,255,.1);border-bottom:0;box-shadow:var(--shadow)}
+  .panel.phoneshot img{border-radius:23px 23px 0 0;aspect-ratio:786/1180;object-fit:cover;object-position:top;width:100%}
+
+  /* ---- bento */
+  .bento{margin-top:56px;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:28px;display:flex;flex-direction:column;gap:0;min-width:0;box-shadow:var(--shadow-sm)}
+  .tile.wide{grid-column:span 2}
+  .tile h3{margin:0;font-size:20px;letter-spacing:-.02em;line-height:1.2}
+  .tile p{margin:8px 0 0;color:var(--muted);font-size:15px;max-width:52ch}
+  .tile .ui{margin-top:24px;border:1px solid var(--line);border-radius:16px;background:var(--bg2);padding:16px;min-width:0}
+  .tile .ui.grow{flex:1}
+  @media (max-width:900px){.bento{grid-template-columns:1fr 1fr}.tile.wide{grid-column:1/-1}}
+  @media (max-width:640px){.bento{grid-template-columns:1fr}.tile{padding:22px}}
+
+  /* search demo */
+  .search{display:flex;align-items:center;gap:10px;height:48px;padding:0 14px;border:1px solid var(--line2);border-radius:12px;background:var(--card);color:var(--muted2)}
+  .search:focus-within{border-color:var(--accent)}
+  .search svg{width:18px;height:18px;flex:none}
+  .search input{flex:1;min-width:0;height:100%;border:0;background:transparent;color:var(--ink);font:500 16px 'Instrument Sans',sans-serif;outline:none}
+  .results{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px;min-height:196px;align-content:start}
+  .results li{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:var(--card);border:1px solid var(--line);min-width:0;animation:pop .2s var(--ease-out) both;animation-delay:calc(var(--i,0) * 30ms)}
+  @keyframes pop{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .results .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14.5px}
+  .results mark{background:var(--accent-soft);color:var(--accent-text);border-radius:3px;padding:0}
+  .results .k,.badge{flex:none;font:500 11px 'IBM Plex Mono',monospace;letter-spacing:.04em;text-transform:uppercase;color:var(--muted2);padding:3px 8px;border:1px solid var(--line);border-radius:999px}
+  @media (max-width:520px){.results{min-height:0}.results .dv{display:none}}
+  .results .empty{justify-content:center;color:var(--muted);font-size:14px;background:transparent;border-style:dashed;white-space:normal;text-align:center}
+  .hint{margin-top:10px;font-size:12.5px;color:var(--muted2)}
+  .hint button{font:inherit;color:var(--accent-text);background:none;border:0;padding:8px 0;margin:-8px 0;cursor:pointer;text-decoration:underline;text-underline-offset:3px;min-height:44px}
+
+  /* otp tile */
+  .bubble{padding:12px 14px;border-radius:14px 14px 14px 4px;background:var(--card);border:1px solid var(--line);font-size:14.5px;color:var(--ink2)}
+  .bubble .from{display:block;font:500 11px 'IBM Plex Mono',monospace;letter-spacing:.04em;text-transform:uppercase;color:var(--muted2);margin-bottom:4px}
+  .otp-btn{margin-top:12px;width:100%;min-height:48px;display:grid;place-items:center;border-radius:12px;border:0;background:var(--ink);color:var(--on-ink);font:600 15px 'Instrument Sans',sans-serif;cursor:pointer;overflow:hidden}
+  .otp-btn:hover{opacity:.9}
+  .otp-btn > span{grid-area:1/1;display:inline-flex;align-items:center;gap:8px;transition:opacity .18s var(--ease-out),transform .18s var(--ease-out)}
+  .otp-btn .b{opacity:0;transform:translateY(8px)}
+  .otp-btn.done .a{opacity:0;transform:translateY(-8px)}
+  .otp-btn.done .b{opacity:1;transform:none}
+  .otp-btn svg{width:16px;height:16px}
+  .otp-btn .code{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;letter-spacing:.06em}
+
+  /* sensitive tile */
+  .masked{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:12px;background:var(--card);border:1px solid var(--line)}
+  .masked .n{font-family:'IBM Plex Mono',monospace;font-size:14px;letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .clock{display:inline-flex;align-items:center;gap:6px;flex:none;font:500 12.5px 'IBM Plex Mono',monospace;color:var(--accent-text);font-variant-numeric:tabular-nums}
+  .clock svg{width:14px;height:14px}
+  .seg{margin-top:10px;display:grid;grid-template-columns:repeat(3,1fr);padding:3px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-size:12.5px;color:var(--muted);text-align:center}
+  .seg span{padding:6px 0;border-radius:999px}
+  .seg .on{background:var(--ink);color:var(--on-ink);font-weight:600}
+
+  /* image search tile */
+  .imgsearch{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center}
+  .thumb{width:132px;aspect-ratio:3/4;border-radius:12px;background:var(--card);border:1px solid var(--line);padding:12px 10px;display:grid;align-content:start;gap:7px;box-shadow:var(--shadow-sm)}
+  .thumb i{display:block;height:6px;border-radius:3px;background:var(--line2)}
+  .thumb i.s{width:60%} .thumb i.m{width:82%}
+  .thumb .hit{font:600 10px 'IBM Plex Mono',monospace;color:var(--accent-text);background:var(--accent-soft);border-radius:4px;padding:3px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .imgsearch .q{display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;border-radius:10px;background:var(--card);border:1px solid var(--line2);font-size:14.5px;min-width:0}
+  .imgsearch .q svg{width:16px;height:16px;color:var(--muted2);flex:none}
+  .imgsearch .meta{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
+  @media (max-width:420px){.imgsearch{grid-template-columns:1fr}.thumb{width:110px}}
+
+  /* small facts */
+  .facts{margin-top:16px;display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:24px;background:var(--card);overflow:hidden}
+  .fact{padding:24px 26px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:flex-start;margin:0 -1px -1px 0}
+  .fact .ic{flex:none;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent-text)}
+  .fact .ic svg{width:18px;height:18px}
+  .fact h3{margin:0;font-size:16px;letter-spacing:-.01em;line-height:1.3}
+  .fact p{margin:4px 0 0;color:var(--muted);font-size:14.5px}
+  @media (max-width:900px){.facts{grid-template-columns:1fr 1fr}}
+  @media (max-width:640px){.facts{grid-template-columns:1fr}.fact{padding:20px}}
+
+  /* ---- compare */
+  .table-wrap{margin-top:56px;border:1px solid var(--line);border-radius:20px;overflow-x:auto;background:var(--card);overscroll-behavior-x:contain}
+  table{width:100%;border-collapse:separate;border-spacing:0;min-width:680px;font-size:15px}
+  th,td{padding:16px 20px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  tbody tr:last-child td{border-bottom:0}
+  thead th{font-size:13px;font-weight:600;color:var(--muted);background:var(--bg2)}
+  thead th.us{color:var(--ink)}
+  td.us,th.us{background:var(--accent-soft)}
+  td:first-child,th:first-child{color:var(--ink2);font-weight:500}
+  /* The feature column stays put while the table scrolls sideways on phones.
+     Sticky cells are positioned, so they paint over later cells by order alone. */
+  @media (max-width:760px){
+    td:first-child,th:first-child{position:sticky;left:0;background:var(--card);box-shadow:1px 0 0 var(--line);min-width:150px}
+    thead th:first-child{background:var(--bg2)}
   }
-  @media (prefers-reduced-motion:reduce){
-    .mascot .body,.mascot .eyes,
-    .topbar .mark .body,.topbar .mark .eyes,.topbar .gh .animation{animation:none}
-    .btn,.os-opt,.feature{transition:none}
+  .y,.n,.p{display:inline-flex;align-items:center;gap:6px}
+  .y{color:var(--ok)} .n{color:var(--muted2)} .p{color:var(--muted)}
+  .fine{font-size:13px;color:var(--muted2);margin-top:16px}
+
+  /* ---- faq (after beUI bouncy-accordion: icon turns, answer rises in) */
+  .faq{display:grid;grid-template-columns:1fr 1.5fr;gap:56px}
+  @media (max-width:900px){.faq{grid-template-columns:1fr;gap:32px}}
+  details{border-bottom:1px solid var(--line)}
+  details:first-child{border-top:1px solid var(--line)}
+  summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;gap:16px;align-items:center;min-height:64px;padding:16px 0;font-weight:600;font-size:17px;transition:color var(--quick)}
+  summary:hover{color:var(--accent-text)}
+  summary::-webkit-details-marker{display:none}
+  summary .pm{flex:none;width:30px;height:30px;border-radius:50%;border:1px solid var(--line2);display:grid;place-items:center;transition:transform .26s var(--ease-out),background-color var(--quick),color var(--quick),border-color var(--quick)}
+  summary .pm svg{width:14px;height:14px}
+  details[open] summary .pm{transform:rotate(45deg);background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+  details p{margin:0 0 22px;color:var(--muted);max-width:62ch}
+  details[open] p{animation:answer .26s var(--ease-out)}
+  @keyframes answer{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+
+  /* ---- closing cta */
+  #get{padding-top:0}
+  .closing{position:relative;text-align:center;border:1px solid var(--line);border-radius:32px;padding:clamp(56px,8vw,104px) 24px;background:radial-gradient(70% 90% at 50% 0%,var(--accent-soft),transparent 70%),var(--bg2);overflow:hidden}
+  .closing h2{margin:0 auto;font-size:clamp(36px,6vw,72px)}
+  .closing .lead{margin:20px auto 0}
+  /* Pill tabs with a sliding indicator (after beUI tabs). Equal-width tabs so
+     the indicator moves by transform alone. It is the tablist's ::before, and
+     the buttons are positioned after it, so they paint on top by DOM order. */
+  .os-tabs{position:relative;display:inline-grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:4px;border-radius:999px;border:1px solid var(--line);background:var(--card);margin-top:36px;--i:0}
+  .os-tabs::before{content:"";position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px) / 3);border-radius:999px;background:var(--ink);transform:translateX(calc(var(--i) * 100%))}
+  .os-tabs.ready::before{transition:transform .32s var(--ease-out)}
+  .os-opt{position:relative;min-height:44px;min-width:104px;padding:0 18px;border:0;border-radius:999px;background:transparent;color:var(--muted);font:600 14.5px 'Instrument Sans',sans-serif;cursor:pointer}
+  .os-opt:hover{color:var(--ink)}
+  .os-opt[aria-selected="true"]{color:var(--on-ink)}
+  @media (max-width:400px){.os-opt{min-width:0;padding:0 12px}}
+  .closing .btn{margin-top:20px}
+  .req{margin-top:12px;font-size:13px;color:var(--muted2)}
+
+  /* ---- footer */
+  footer{border-top:1px solid var(--line);padding:56px 0 40px;margin-top:120px}
+  .foot{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:32px}
+  @media (max-width:760px){.foot{grid-template-columns:1fr 1fr}.foot .about{grid-column:1/-1}}
+  .foot h2{margin:0 0 14px;font-size:13px;color:var(--muted2);font-weight:600;letter-spacing:0;line-height:1.4}
+  .foot ul{list-style:none;margin:0;padding:0;display:grid;gap:0;font-size:15px}
+  .foot ul a{display:inline-flex;align-items:center;min-height:44px}
+  .foot a{text-decoration:none;color:var(--ink2)}
+  .foot a:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+  .foot .about p{color:var(--muted);font-size:15px;max-width:34ch;margin:14px 0 0}
+  .copyright{margin-top:48px;padding-top:24px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;font-size:12.5px;color:var(--muted2)}
+
+  /* ---- scroll reveal (off for reduced motion and without JS) */
+  .js .reveal{opacity:0;transform:translateY(18px);transition:opacity .6s var(--ease-out),transform .6s var(--ease-out);transition-delay:calc(var(--i,0) * 60ms)}
+  .js .reveal.in{opacity:1;transform:none}
+
+  /* Theme wipe (after beUI theme-toggle): the new theme grows from the button. */
+  ::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}
+
+  /* Reduced motion is a designed state: keep opacity and colour feedback,
+     drop travel, scale, blur, parallax and loops. */
+  @media (prefers-reduced-motion: reduce){
+    html{scroll-behavior:auto}
+    .js .reveal{transform:none;transition:opacity .2s linear}
+    .js .rise{animation:fade .2s linear both}
+    @keyframes fade{from{opacity:0}to{opacity:1}}
+    .link .wire,.is-live .link .wire{animation:none}
+    .swap,.swap.out,.swap.pre{transition:none;transform:none;filter:none}
+    .btn,.pill,.icon-btn,.os-opt,.otp-btn{transition:background-color var(--quick),border-color var(--quick),color var(--quick),opacity var(--quick)}
+    .btn:active,.pill:active,.icon-btn:active,.os-opt:active,.otp-btn:active{scale:none}
+    .nav,.nav.hidden{transition:border-color .2s;transform:none}
+    .os-tabs.ready::before{transition:none}
+    .results li,details[open] p{animation:none}
+    .stage.recv.got::after{animation:none}
+    .otp-btn > span{transition:opacity .15s linear;transform:none!important}
+    summary .pm{transition:background-color var(--quick),color var(--quick)}
+    details[open] summary .pm{transform:rotate(45deg)}
+    .kicker .arr,.btn-ghost .go svg{transition:none}
   }
 </style>
+<script>document.documentElement.classList.add('js');try{var t=localStorage.getItem('clippy.theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 </head>
 <body>
+
+<header class="nav" id="nav">
+  <a class="skip" href="#main">Skip to content</a>
   <div class="wrap">
-    <header class="topbar">
-      <svg class="mark" viewBox="0 0 60 84" aria-hidden="true"><g class="body"><path d="M18,24 V58 A12,12 0 0 0 42,58 V18 A8,8 0 0 0 26,18 V56 A4,4 0 0 0 34,56 V26" fill="none" stroke="#1E1C15" stroke-width="7" stroke-linecap="round"/><circle cx="24" cy="8" r="6.5" fill="#F4F1EA" stroke="#1E1C15" stroke-width="2"/><circle cx="38" cy="8" r="6.5" fill="#F4F1EA" stroke="#1E1C15" stroke-width="2"/><g class="eyes"><circle cx="25.5" cy="9" r="3" fill="#1E1C15"/><circle cx="39.5" cy="9" r="3" fill="#1E1C15"/></g></g></svg>
-      <span class="name">Clippy</span>
-      <span class="spacer"></span>
-      <a class="gh" href="#get">Get it<span class="animation"></span></a>
-    </header>
-
-    <section class="hero">
-      <svg class="mascot" viewBox="0 0 60 92" aria-label="Clippy the paperclip">
-        <g class="body">
-          <path d="M18,32 V66 A12,12 0 0 0 42,66 V26 A8,8 0 0 0 26,26 V64 A4,4 0 0 0 34,64 V34" fill="none" stroke="#1F4B3F" stroke-width="7" stroke-linecap="round"/>
-          <circle cx="24" cy="16" r="6.5" fill="#FFFFFF" stroke="#1F4B3F" stroke-width="2"/>
-          <circle cx="38" cy="16" r="6.5" fill="#FFFFFF" stroke="#1F4B3F" stroke-width="2"/>
-          <g class="eyes"><circle cx="25.5" cy="17" r="3" fill="#1F4B3F"/><circle cx="39.5" cy="17" r="3" fill="#1F4B3F"/></g>
-        </g>
-      </svg>
-      <h1>Copy here.<br><span class="b">Paste there.</span></h1>
-      <div class="cta-row">
-        <a class="btn" id="primaryBtn" href="#get">
-          <span id="primaryIcon"></span>
-          <span id="primaryLabel">Download Clippy</span>
-        </a>
-      </div>
-    </section>
-
-    <section class="features">
-      <div class="feature"><div class="k">Instant</div><h3>The latest copy, always here</h3><p>Copy on any paired device and it lands on this one's clipboard, ready to paste.</p></div>
-      <div class="feature"><div class="k">Private</div><h3>End-to-end encrypted</h3><p>Clips are sealed with AES-256 before they leave your device. The relay only sees ciphertext.</p></div>
-      <div class="feature"><div class="k">Simple</div><h3>Pair with a QR code</h3><p>Scan once to link a device. No sign-up, no email, no password to forget.</p></div>
-    </section>
-
-    <div class="platforms-h" id="get">
-      <h2>Get Clippy</h2>
-      <p>Pick your platform — pair them and they share one clipboard.</p>
+    <a class="brand" href="/" aria-label="Clippy home" translate="no">
+      <svg viewBox="0 0 96 96" aria-hidden="true"><g transform="translate(18 8)"><path d="M18,24 V58 A12,12 0 0 0 42,58 V18 A8,8 0 0 0 26,18 V56 A4,4 0 0 0 34,56 V26" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"/><circle cx="24" cy="8" r="6.5" fill="var(--card)" stroke="currentColor" stroke-width="2"/><circle cx="38" cy="8" r="6.5" fill="var(--card)" stroke="currentColor" stroke-width="2"/><circle cx="25.5" cy="9" r="3" fill="currentColor"/><circle cx="39.5" cy="9" r="3" fill="currentColor"/></g></svg>
+      Clippy
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#more">What else</a>
+      <a href="#compare">Compare</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav-right">
+      <button class="icon-btn" id="themeBtn" type="button" aria-label="Switch to dark theme">
+        <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>
+        <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <a class="icon-btn gh" href="https://github.com/alwinpaul1/clippy" aria-label="Clippy on GitHub" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 00-3.6 22.4c.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 015.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.9 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6A11.5 11.5 0 0012 .5z"/></svg>
+      </a>
+      <a class="pill" href="#get">Install</a>
     </div>
-    <section class="get-dl" id="cards" aria-label="Download Clippy">
-      <div class="get-card">
-        <div class="os-toggle" role="tablist" aria-label="Platform">
-          <button type="button" class="os-opt" role="tab" data-os="macos" id="tab-macos" aria-selected="false">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.5 3c.1 1-.3 2-.9 2.7-.6.8-1.6 1.4-2.6 1.3-.1-1 .4-2 .9-2.6.6-.8 1.7-1.3 2.6-1.4zM19 17.2c-.5 1.1-.7 1.6-1.3 2.6-.9 1.3-2.1 3-3.6 3-1.4 0-1.7-.9-3.6-.9-1.8 0-2.2.9-3.6.9-1.5 0-2.7-1.5-3.5-2.8C1.1 16.9.8 12.6 2.3 10.4c1-1.5 2.6-2.4 4.1-2.4 1.5 0 2.5 1 3.7 1 1.2 0 1.9-1 3.7-1 1.3 0 2.7.7 3.7 2-3.2 1.8-2.7 6.4 1.8 7.2z"/></svg>
-            macOS
-          </button>
-          <button type="button" class="os-opt" role="tab" data-os="android" id="tab-android" aria-selected="false">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.6 9.5l1.4-2.4a.4.4 0 10-.7-.4l-1.4 2.5A8.7 8.7 0 0012 8c-1.8 0-3.4.5-4.9 1.2L5.7 6.7a.4.4 0 10-.7.4l1.4 2.4A8 8 0 002 16h20a8 8 0 00-4.4-6.5zM7.5 13.8a1 1 0 110-2 1 1 0 010 2zm9 0a1 1 0 110-2 1 1 0 010 2z"/></svg>
-            Android
-          </button>
-          <button type="button" class="os-opt" role="tab" data-os="windows" id="tab-windows" aria-selected="false">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.5l7.5-1v7.2H3zM11.3 4.4L21 3v9.7h-9.7zM3 12.5h7.5v7.2L3 18.6zM11.3 12.5H21V21l-9.7-1.3z"/></svg>
-            Windows
-          </button>
-        </div>
-        <p class="os-req" id="osReq"></p>
-        <a class="btn" id="getBtn" href="/download/Clippy-macOS.dmg">
-          <span id="getIcon"></span>
-          <span id="getLabel">Download for macOS</span>
-        </a>
-      </div>
-    </section>
-
-    <footer>
-      Clippy · a small clipboard that follows you
-      <div class="credit">
-        Developed with <span class="heart">♥</span> by
-        <a href="https://www.instagram.com/alwi._nn/" target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.4" cy="6.6" r="1.2" fill="currentColor" stroke="none"/></svg>
-          Alwin Paul
-        </a>
-      </div>
-    </footer>
   </div>
+</header>
+
+<main id="main">
+  <div class="hero">
+    <div class="wrap">
+      <a class="kicker rise" style="--i:0" href="https://github.com/alwinpaul1/clippy" rel="noopener"><b>Free</b>Open source, MIT licensed <span class="arr" aria-hidden="true">→</span></a>
+      <h1>
+        <span class="line rise" style="--i:1">Copy on <span class="plat swap" id="from"></span></span>
+        <span class="line dim rise" style="--i:2">paste on <span class="plat swap" id="to"></span></span>
+      </h1>
+      <p class="sub rise" style="--i:3">Clippy keeps one clipboard across your Mac, Android phone and Windows PC. You pair devices with a QR code, there is no account, and the server only ever sees ciphertext.</p>
+      <div class="cta-row rise" style="--i:4">
+        <a class="btn btn-primary" id="primaryBtn" href="/download/Clippy-macOS.dmg" data-platform="macos" data-magnetic>
+          <span id="primaryIcon" aria-hidden="true"></span><span id="primaryLabel">Download for macOS</span>
+        </a>
+        <a class="btn btn-ghost" href="#features">See how it works<span class="go" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg></span></a>
+      </div>
+      <div class="links rise" style="--i:5"><a href="#get">Other platforms</a> · macOS 12+, Android 7+, Windows 10+</div>
+      <div class="chips mono rise" style="--i:5">
+        <span class="chip"><span class="dot"></span>Mac · Android · Windows</span>
+        <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>AES-256, end to end</span>
+        <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>Pair by QR, no account</span>
+      </div>
+
+      <div class="shot reveal" id="shot" aria-label="Clippy on a Mac and an Android phone">
+        <div class="desk">
+          <div class="bar" aria-hidden="true"><i></i><i></i><i></i></div>
+          <img class="only-light" src="/shot-desktop-light.jpg" width="1600" height="1047" alt="Clippy's clip history on a Mac, with clips from three devices" fetchpriority="high">
+          <img class="only-dark" src="/shot-desktop-dark.jpg" width="1600" height="1047" alt="Clippy's clip history on a Mac, with clips from three devices" loading="lazy">
+        </div>
+        <div class="phone" id="shotPhone">
+          <img class="only-light" src="/shot-phone-light.jpg" width="501" height="1400" alt="Clippy on Android showing a pinned clip, a verification code and a hidden card number">
+          <img class="only-dark" src="/shot-phone-dark.jpg" width="501" height="1400" alt="Clippy on Android showing a pinned clip, a verification code and a hidden card number" loading="lazy">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section id="features">
+    <div class="wrap">
+      <span class="eyebrow">Features</span>
+      <h2 class="reveal">One clipboard on every device you own. <span class="dim">Private, searchable, and set up in a minute.</span></h2>
+
+      <div class="rows">
+        <div class="row reveal">
+          <div class="copy">
+            <div class="num"><b>01</b>Pairing</div>
+            <h3>Scan once, and they stay paired.</h3>
+            <p>Show a QR code on one device and scan it with the other. That's the whole setup. No account, no email, no password to forget.</p>
+            <ol class="steps">
+              <li>Install Clippy on two devices.</li>
+              <li>Tap Add device and scan the code.</li>
+              <li>Copy on either one. It shows up on the other in about a second.</li>
+            </ol>
+          </div>
+          <div class="panel" aria-hidden="true" data-live>
+            <div class="pair">
+              <div class="card dev"><div class="qr" id="qr"></div><div class="name">MacBook Pro</div><div class="meta mono">showing code</div></div>
+              <div class="link mono"><span class="wire"></span>paired</div>
+              <div class="card dev"><div class="cam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2M8 12h8"/></svg></div><div class="name">Galaxy S24</div><div class="meta mono">scanning</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row reveal">
+          <div class="copy">
+            <div class="num"><b>02</b>Encryption</div>
+            <h3>The relay only sees ciphertext.</h3>
+            <p>Every clip is sealed with AES-256-GCM on the device that copied it. The key travels inside the QR code, never through the server, so the relay can deliver your clips but cannot read them.</p>
+            <ol class="steps">
+              <li>Encrypted before it leaves your device.</li>
+              <li>The key is shared only by scanning, in person.</li>
+              <li>Decrypted only on your own devices.</li>
+            </ol>
+          </div>
+          <div class="panel">
+            <div class="pipe">
+              <div class="card stage"><label class="tag" for="demoIn">Mac</label><input id="demoIn" name="demo-clip" type="text" value="Meet at track 7, 18:40" maxlength="120" autocomplete="off" spellcheck="false"></div>
+              <div class="arrow" aria-hidden="true">↓</div>
+              <div class="card stage relay"><span class="tag">Relay</span><span class="val mono" id="cipher" translate="no">…</span><span class="lock" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg></span></div>
+              <div class="arrow" aria-hidden="true">↓</div>
+              <div class="card stage recv" id="demoRecv"><span class="tag">Android</span><span class="val" id="demoOut" aria-live="polite">Meet at track 7, 18:40</span></div>
+              <p class="demo-note">Type above. Your browser encrypts it with AES-256-GCM and a throwaway key, then decrypts it again. Nothing is sent.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="row reveal">
+          <div class="copy">
+            <div class="num"><b>03</b>Smart clips</div>
+            <h3>It knows a code from a card number.</h3>
+            <p>Clippy reads each clip on the device and offers the obvious next step. Nothing is sent anywhere to do it.</p>
+            <ol class="steps">
+              <li>Verification codes get a Copy 482913 button.</li>
+              <li>Card numbers and IBANs are hidden and wiped after a few minutes.</li>
+              <li>Search finds "hauptbanhof" even when you typed it wrong.</li>
+            </ol>
+          </div>
+          <div class="panel phoneshot">
+            <div class="frame">
+              <img class="only-light" src="/shot-phone-light.jpg" width="501" height="1400" alt="A verification code with a one-tap copy button, and an IBAN and card number hidden with a countdown" loading="lazy">
+              <img class="only-dark" src="/shot-phone-dark.jpg" width="501" height="1400" alt="A verification code with a one-tap copy button, and an IBAN and card number hidden with a countdown" loading="lazy">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="more">
+    <div class="wrap">
+      <span class="eyebrow">What else</span>
+      <h2 class="reveal">The small things that make it worth keeping.</h2>
+
+      <div class="bento">
+        <div class="tile wide reveal" style="--i:0">
+          <h3>Search that forgives typos</h3>
+          <p>Results are ranked, and a misspelling still finds the clip. Type a kind of clip, like "code" or "link", to filter by what it is. Try it on these sample clips.</p>
+          <div class="ui grow">
+            <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5"/></svg><span class="sr">Search the sample clips</span><input id="q" name="sample-search" type="search" value="hauptbanhof" placeholder="Search clips…" autocomplete="off" spellcheck="false"></label>
+            <ul class="results" id="results"></ul>
+            <div class="hint"><span id="resultCount" aria-live="polite"></span> Try <button type="button" data-q="otp">otp</button>, <button type="button" data-q="link">link</button> or <button type="button" data-q="metting">metting</button>.</div>
+          </div>
+        </div>
+
+        <div class="tile reveal" style="--i:1">
+          <h3>Codes in one tap</h3>
+          <p>A verification code gets its own copy button, so you never select six digits by hand.</p>
+          <div class="ui grow">
+            <div class="bubble"><span class="from">Messages</span>Your sign-in code is <span class="mono">482913</span>. It expires in 10 minutes.</div>
+            <button class="otp-btn" id="otpBtn" type="button"><span class="a">Copy <span class="code">482913</span></span><span class="b" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>Copied</span></button>
+            <span class="sr" id="otpStatus" aria-live="polite"></span>
+          </div>
+        </div>
+
+        <div class="tile reveal" style="--i:0" data-live id="sensTile">
+          <h3>Card numbers clear themselves</h3>
+          <p>Clippy hides card numbers and IBANs, then removes them from every device after the time you pick.</p>
+          <div class="ui grow" aria-hidden="true">
+            <div class="masked"><span class="n">•••• •••• •••• 4821</span><span class="clock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/></svg><span id="clock">4:59</span></span></div>
+            <div class="seg"><span>1 min</span><span class="on">5 min</span><span>15 min</span></div>
+          </div>
+        </div>
+
+        <div class="tile wide reveal" style="--i:1">
+          <h3>Find a screenshot by what it says</h3>
+          <p>Images and screenshots sync in their original format. Text recognition runs on your device, so search matches the words inside a picture. On Mac and Android it also matches what the picture shows.</p>
+          <div class="ui grow" aria-hidden="true">
+            <div class="imgsearch">
+              <div class="thumb"><i class="s"></i><i></i><span class="hit">Wi-Fi: Paper_5G</span><i class="m"></i><i></i><i class="s"></i><i class="m"></i></div>
+              <div>
+                <div class="q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5"/></svg>wifi</div>
+                <div class="meta"><span class="badge">Screenshot</span><span class="badge">Original PNG</span><span class="badge">From Android</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="facts reveal">
+        <div class="fact"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 17v5M9 3h6l-1 6 4 4H6l4-4z"/></svg></div><div><h3>Pin what matters</h3><p>Pinned clips stay at the top and never drop off the history.</p></div></div>
+        <div class="fact"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="2" y="4" width="13" height="10" rx="2"/><rect x="17" y="8" width="5" height="12" rx="1.5"/><path d="M6 18h6"/></svg></div><div><h3>Filter by device</h3><p>One tap shows only what came from your phone, or only from the PC.</p></div></div>
+        <div class="fact"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 01-2.2 2 19.8 19.8 0 01-8.6-3.1 19.5 19.5 0 01-6-6A19.8 19.8 0 012.1 4.2 2 2 0 014.1 2h3a2 2 0 012 1.7c.1.9.4 1.8.7 2.7a2 2 0 01-.5 2.1L8 9.8a16 16 0 006 6l1.3-1.3a2 2 0 012.1-.4c.9.3 1.8.6 2.7.7a2 2 0 011.7 2z"/></svg></div><div><h3>Act on a clip</h3><p>Call a number, open a link, email an address or map a street, straight from the clip.</p></div></div>
+        <div class="fact"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg></div><div><h3>Android quick tile</h3><p>Send what you just copied from the notification shade, even from apps that block clipboard access.</p></div></div>
+        <div class="fact"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 11-3-6.7L21 8M21 3v5h-5"/></svg></div><div><h3>Updates itself</h3><p>A card tells you when a new version is out. One tap installs it, on every platform.</p></div></div>
+        <div class="fact"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><div><h3>No account, ever</h3><p>No sign-up, no email, no tracking inside the app. Your devices are the only login.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="compare">
+    <div class="wrap">
+      <span class="eyebrow">Compare</span>
+      <h2 class="reveal">Why not Universal Clipboard? <span class="dim">Why not KDE Connect?</span></h2>
+      <p class="lead">Both are good at what they do. Clippy exists for the mix of devices most people actually have.</p>
+      <div class="table-wrap reveal" tabindex="0" role="region" aria-label="Comparison table, scrolls sideways">
+        <table>
+          <thead><tr><th scope="col"><span class="sr">Feature</span></th><th scope="col" class="us">Clippy</th><th scope="col">Apple Universal Clipboard</th><th scope="col">KDE Connect</th><th scope="col">Emailing it to yourself</th></tr></thead>
+          <tbody>
+            <tr><td>Android, Mac and Windows together</td><td class="us"><span class="y">✓ Yes</span></td><td><span class="n">Apple devices only</span></td><td><span class="p">Yes; macOS build is less mature</span></td><td><span class="y">✓ Yes</span></td></tr>
+            <tr><td>Works when devices are on different networks</td><td class="us"><span class="y">✓ Yes</span></td><td><span class="p">Devices must be near each other</span></td><td><span class="n">Same network only</span></td><td><span class="y">✓ Yes</span></td></tr>
+            <tr><td>History and search</td><td class="us"><span class="y">✓ Yes</span></td><td><span class="n">No, last item only</span></td><td><span class="n">No</span></td><td><span class="p">Your inbox, sort of</span></td></tr>
+            <tr><td>Images</td><td class="us"><span class="y">✓ Yes</span></td><td><span class="y">✓ Yes</span></td><td><span class="n">Text only</span></td><td><span class="p">As attachments</span></td></tr>
+            <tr><td>End-to-end encrypted</td><td class="us"><span class="y">✓ AES-256</span></td><td><span class="y">✓ Yes</span></td><td><span class="p">Encrypted on the local network</span></td><td><span class="n">Usually not</span></td></tr>
+            <tr><td>Account needed</td><td class="us"><span class="y">None</span></td><td><span class="p">Apple ID</span></td><td><span class="y">None</span></td><td><span class="p">Email account</span></td></tr>
+            <tr><td>Hides and auto-clears card numbers</td><td class="us"><span class="y">✓ Yes</span></td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="n">No</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="fine">Based on each product's public documentation as of October 2026. Something out of date? Open an issue on GitHub.</p>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="wrap faq">
+      <div>
+        <span class="eyebrow">FAQ</span>
+        <h2 class="reveal">Things you'll probably ask.</h2>
+      </div>
+      <div class="reveal">
+        <details><summary>Can the server read my clips?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>No. Clips are encrypted with AES-256 on your device before they are sent, and the key only exists on devices you paired by scanning the QR code. The relay stores and forwards ciphertext.</p></details>
+        <details><summary>Is there an iPhone or Linux version?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>Not yet. Clippy runs on macOS 12 or later, Android 7 or later on an ARM phone, and 64-bit Windows 10 or later.</p></details>
+        <details><summary>How long are clips kept?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>The 25 most recent clips stay in your shared history, plus anything you pin. Delete a clip on one device and it disappears from all of them. Card numbers and IBANs clear themselves after the time you choose.</p></details>
+        <details><summary>Why does Android ask for accessibility access?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>Android stops background apps from reading the clipboard. The accessibility service is how Clippy notices a copy while you're in another app. It reads nothing else. Without it you can still send clips with the quick tile.</p></details>
+        <details><summary>Why is the Android app an APK and not on Google Play?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>Clippy is a free side project and ships directly from this site. The APK is signed with one permanent key, and the app updates itself in place when a new version is out.</p></details>
+        <details><summary>Does it cost anything?<span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></summary><p>No. It's free and MIT licensed, and the source is on GitHub.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section id="get">
+    <div class="wrap">
+      <div class="closing reveal">
+        <h2>Copy here. Paste there.</h2>
+        <p class="lead">Install it on two devices and scan the code. Takes about a minute.</p>
+        <div class="os-tabs" id="osTabs" role="tablist" aria-label="Platform">
+          <button class="os-opt" role="tab" type="button" data-os="macos" aria-selected="true">macOS</button>
+          <button class="os-opt" role="tab" type="button" data-os="android" aria-selected="false" tabindex="-1">Android</button>
+          <button class="os-opt" role="tab" type="button" data-os="windows" aria-selected="false" tabindex="-1">Windows</button>
+        </div>
+        <div><a class="btn btn-primary" id="getBtn" href="/download/Clippy-macOS.dmg" data-platform="macos"><span id="getIcon" aria-hidden="true"></span><span id="getLabel">Download for macOS</span></a></div>
+        <div class="req mono" id="osReq">Apple Silicon &amp; Intel · macOS 12+</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <div class="about">
+        <a class="brand" href="/" translate="no">Clippy</a>
+        <p>Cross-device clipboard sync for Mac, Android and Windows. End-to-end encrypted, no account.</p>
+      </div>
+      <div><h2>Product</h2><ul><li><a href="#features">Features</a></li><li><a href="#compare">Compare</a></li><li><a href="#faq">FAQ</a></li><li><a href="#get">Download</a></li></ul></div>
+      <div><h2>Built with</h2><ul><li><a href="https://flutter.dev" rel="noopener">Flutter</a></li><li><a href="https://dart.dev" rel="noopener">Dart relay</a></li><li><a href="https://github.com/alwinpaul1/clippy/blob/main/LICENSE" rel="noopener">MIT licence</a></li></ul></div>
+      <div><h2>Contact</h2><ul><li><a href="https://github.com/alwinpaul1/clippy/issues" rel="noopener">Report an issue</a></li><li><a href="https://github.com/alwinpaul1/clippy" rel="noopener">GitHub</a></li><li><a href="https://www.instagram.com/alwin_p_v" rel="noopener">Instagram</a></li></ul></div>
+    </div>
+    <div class="copyright mono"><span>© 2026 Alwin Paul</span><span>clippy.alwinpaul.me</span></div>
+  </div>
+</footer>
 
 <script>
   var DL = {
@@ -399,15 +762,17 @@
   };
   var REQS = {
     macos:'Apple Silicon & Intel · macOS 12+',
-    android:'Android 6+ · sideload APK',
+    android:'Android 7+ · sideload APK',
     windows:'Windows 10+ · 64-bit'
   };
+  // currentColor, so the icons follow the button's theme colour.
   var ICON = {
-    macos:'<svg viewBox="0 0 24 24" fill="#F4F1EA" width="20" height="20"><path d="M16.5 3c.1 1-.3 2-.9 2.7-.6.8-1.6 1.4-2.6 1.3-.1-1 .4-2 .9-2.6.6-.8 1.7-1.3 2.6-1.4zM19 17.2c-.5 1.1-.7 1.6-1.3 2.6-.9 1.3-2.1 3-3.6 3-1.4 0-1.7-.9-3.6-.9-1.8 0-2.2.9-3.6.9-1.5 0-2.7-1.5-3.5-2.8C1.1 16.9.8 12.6 2.3 10.4c1-1.5 2.6-2.4 4.1-2.4 1.5 0 2.5 1 3.7 1 1.2 0 1.9-1 3.7-1 1.3 0 2.7.7 3.7 2-3.2 1.8-2.7 6.4 1.8 7.2z"/></svg>',
-    android:'<svg viewBox="0 0 24 24" fill="#F4F1EA" width="20" height="20"><path d="M17.6 9.5l1.4-2.4a.4.4 0 10-.7-.4l-1.4 2.5A8.7 8.7 0 0012 8c-1.8 0-3.4.5-4.9 1.2L5.7 6.7a.4.4 0 10-.7.4l1.4 2.4A8 8 0 002 16h20a8 8 0 00-4.4-6.5zM7.5 13.8a1 1 0 110-2 1 1 0 010 2zm9 0a1 1 0 110-2 1 1 0 010 2z"/></svg>',
-    windows:'<svg viewBox="0 0 24 24" fill="#F4F1EA" width="20" height="20"><path d="M3 5.5l7.5-1v7.2H3zM11.3 4.4L21 3v9.7h-9.7zM3 12.5h7.5v7.2L3 18.6zM11.3 12.5H21V21l-9.7-1.3z"/></svg>'
+    macos:'<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M16.5 3c.1 1-.3 2-.9 2.7-.6.8-1.6 1.4-2.6 1.3-.1-1 .4-2 .9-2.6.6-.8 1.7-1.3 2.6-1.4zM19 17.2c-.5 1.1-.7 1.6-1.3 2.6-.9 1.3-2.1 3-3.6 3-1.4 0-1.7-.9-3.6-.9-1.8 0-2.2.9-3.6.9-1.5 0-2.7-1.5-3.5-2.8C1.1 16.9.8 12.6 2.3 10.4c1-1.5 2.6-2.4 4.1-2.4 1.5 0 2.5 1 3.7 1 1.2 0 1.9-1 3.7-1 1.3 0 2.7.7 3.7 2-3.2 1.8-2.7 6.4 1.8 7.2z"/></svg>',
+    android:'<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M17.6 9.5l1.4-2.4a.4.4 0 10-.7-.4l-1.4 2.5A8.7 8.7 0 0012 8c-1.8 0-3.4.5-4.9 1.2L5.7 6.7a.4.4 0 10-.7.4l1.4 2.4A8 8 0 002 16h20a8 8 0 00-4.4-6.5zM7.5 13.8a1 1 0 110-2 1 1 0 010 2zm9 0a1 1 0 110-2 1 1 0 010 2z"/></svg>',
+    windows:'<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M3 5.5l7.5-1v7.2H3zM11.3 4.4L21 3v9.7h-9.7zM3 12.5h7.5v7.2L3 18.6zM11.3 12.5H21V21l-9.7-1.3z"/></svg>'
   };
   var ORDER = ['macos','android','windows'];
+  var NAMES = {macos:'Mac', android:'Android', windows:'Windows'};
 
   function detectOS(){
     var ua=navigator.userAgent;
@@ -456,6 +821,9 @@
     });
   }
 
+  // selectOS is the one place that changes the bottom card's platform. The
+  // tabs, their sliding indicator, the button and the requirements line all
+  // read from it, so they cannot drift apart.
   function selectOS(key){
     if(!DL[key]) return;
     selectedOS = key;
@@ -465,22 +833,30 @@
       b.setAttribute('aria-selected', on ? 'true' : 'false');
       b.tabIndex = on ? 0 : -1;
     });
+    document.getElementById('osTabs').style.setProperty('--i', ORDER.indexOf(key));
     document.getElementById('osReq').textContent = REQS[key] || '';
     var getBtn = document.getElementById('getBtn');
     getBtn.href = d.href;
     getBtn.setAttribute('data-platform', key);
     document.getElementById('getIcon').innerHTML = ICON[key];
     document.getElementById('getLabel').textContent = d.label;
-    var primary = document.getElementById('primaryBtn');
-    primary.href = d.href;
-    primary.setAttribute('data-platform', key);
-    document.getElementById('primaryIcon').innerHTML = ICON[key];
-    document.getElementById('primaryLabel').textContent = d.label;
   }
 
+  // The hero button always offers THIS device's build; the tabs below only
+  // change the bottom button.
   var os = detectOS();
   var primaryOS = (os==='macos'||os==='android'||os==='windows') ? os : 'macos';
+  (function(){
+    var primary = document.getElementById('primaryBtn');
+    primary.href = DL[primaryOS].href;
+    primary.setAttribute('data-platform', primaryOS);
+    document.getElementById('primaryIcon').innerHTML = ICON[primaryOS];
+    document.getElementById('primaryLabel').textContent = DL[primaryOS].label;
+  })();
   selectOS(primaryOS);
+  // Only animate the indicator after the first placement, so it never slides
+  // in from macOS on load.
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){ document.getElementById('osTabs').classList.add('ready'); }); });
 
   Array.prototype.forEach.call(document.querySelectorAll('.os-opt'), function(b){
     b.addEventListener('click', function(){
@@ -502,51 +878,287 @@
   });
 
   // One download event per click only.
-  function onDownloadClick(placement){
-    return function(){
-      var platform = selectedOS;
-      var d = DL[platform];
-      if(!d) return;
-      trackDownload(platform, d.href, d.label, placement);
-    };
-  }
-  var getBtnEl = document.getElementById('getBtn');
-  var primaryBtnEl = document.getElementById('primaryBtn');
-  if(getBtnEl) getBtnEl.addEventListener('click', onDownloadClick('get_card'));
-  if(primaryBtnEl) primaryBtnEl.addEventListener('click', onDownloadClick('hero'));
+  document.getElementById('getBtn').addEventListener('click', function(){
+    var d = DL[selectedOS];
+    if(d) trackDownload(selectedOS, d.href, d.label, 'get_card');
+  });
+  document.getElementById('primaryBtn').addEventListener('click', function(){
+    var d = DL[primaryOS];
+    trackDownload(primaryOS, d.href, d.label, 'hero');
+  });
 
-  // 3D tilt + spotlight on all cards (InteractiveProductCard / card-7 style).
+  var reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  var finePointer = !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
+
+  // Hero: "Copy on <A> / paste on <B>". Runs through the device pairs once and
+  // settles on the first, so the headline does not loop forever beside the copy.
   (function(){
-    if(!window.matchMedia) return;
-    var fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if(!fine || reduce) return;
-    var MAX = 8; // degrees — matches card-7
-    Array.prototype.forEach.call(
-      document.querySelectorAll('.feature, .get-card'),
-      function(card){
-        card.addEventListener('pointermove', function(e){
-          var r = card.getBoundingClientRect();
-          var px = (e.clientX - r.left) / r.width;
-          var py = (e.clientY - r.top) / r.height;
-          card.style.setProperty('--mx', (px * 100).toFixed(2) + '%');
-          card.style.setProperty('--my', (py * 100).toFixed(2) + '%');
-          var rotateY = (px - 0.5) * 2 * MAX;
-          var rotateX = (0.5 - py) * 2 * MAX;
-          card.classList.add('is-tilting');
-          card.style.transform =
-            'perspective(1000px) rotateX(' + rotateX.toFixed(2) + 'deg) rotateY(' +
-            rotateY.toFixed(2) + 'deg) scale3d(1.04, 1.04, 1.04)';
+    var pairs = [['android','macos'],['macos','windows'],['windows','android'],['macos','android'],['android','macos']];
+    var from = document.getElementById('from'), to = document.getElementById('to');
+    function paint(el, k){ el.innerHTML = ICON[k].replace('width="20" height="20"','aria-hidden="true"') + NAMES[k]; }
+    var i = 0;
+    paint(from, pairs[0][0]); paint(to, pairs[0][1]);
+    if(reduce) return;
+    var timer = setInterval(function(){
+      if(document.hidden) return;
+      i++;
+      if(i >= pairs.length - 1) clearInterval(timer);
+      [from, to].forEach(function(el){ el.classList.add('out'); });
+      setTimeout(function(){
+        [from, to].forEach(function(el, n){
+          paint(el, pairs[i][n]);
+          el.classList.remove('out'); el.classList.add('pre');
+          void el.offsetWidth;
+          el.classList.remove('pre');
         });
-        card.addEventListener('pointerleave', function(){
-          card.classList.remove('is-tilting');
-          card.style.transform =
-            'perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)';
-        });
-      }
-    );
+      }, 150);
+    }, 2600);
   })();
 
+  // Decorative QR: finder squares in three corners, noise in between.
+  (function(){
+    var qr = document.getElementById('qr'), n = 9, html = '';
+    function finder(r,c){ return (r<3&&c<3)||(r<3&&c>5)||(r>5&&c<3); }
+    for(var r=0;r<n;r++) for(var c=0;c<n;c++){
+      var on = finder(r,c) ? !(r%6===1&&c%6===1) : ((r*7+c*13+r*c)%3===0);
+      html += '<i'+(on?'':' class="o"')+'></i>';
+    }
+    qr.innerHTML = html;
+  })();
+
+  // Live encryption demo: real AES-256-GCM in the browser (the cipher the app
+  // uses), with a key that exists only in this tab. Nothing leaves the page.
+  (function(){
+    var input = document.getElementById('demoIn'), cipher = document.getElementById('cipher');
+    var out = document.getElementById('demoOut'), recv = document.getElementById('demoRecv');
+    var subtle = window.crypto && window.crypto.subtle;
+    var keyP = subtle ? subtle.generateKey({name:'AES-GCM', length:256}, false, ['encrypt','decrypt']) : null;
+    var seq = 0;
+    function b64(buf){ var s = '', b = new Uint8Array(buf); for(var i=0;i<b.length;i++) s += String.fromCharCode(b[i]); return btoa(s); }
+    function show(text){
+      out.textContent = text || 'Nothing copied yet';
+      recv.classList.remove('got'); void recv.offsetWidth; recv.classList.add('got');
+    }
+    function run(){
+      var text = input.value, my = ++seq;
+      if(!keyP){ cipher.textContent = 'Web Crypto is unavailable here'; show(text); return; }
+      keyP.then(function(key){
+        var iv = window.crypto.getRandomValues(new Uint8Array(12));
+        return subtle.encrypt({name:'AES-GCM', iv:iv}, key, new TextEncoder().encode(text)).then(function(ct){
+          if(my !== seq) return;
+          cipher.textContent = b64(ct);
+          return subtle.decrypt({name:'AES-GCM', iv:iv}, key, ct).then(function(pt){
+            if(my === seq) show(new TextDecoder().decode(pt));
+          });
+        });
+      }).catch(function(){ cipher.textContent = 'Web Crypto is unavailable here'; show(text); });
+    }
+    var t = null;
+    input.addEventListener('input', function(){ clearTimeout(t); t = setTimeout(run, 120); });
+    run();
+  })();
+
+  // Search demo over sample clips: ranked, typo-tolerant, filterable by kind.
+  // A small stand-in for the app's search, written for this page.
+  (function(){
+    var CLIPS = [
+      {t:'Hauptbahnhof, platform 7', k:'text', d:'Android'},
+      {t:'Meeting moved to 15:30, room 2.04', k:'text', d:'Windows'},
+      {t:'https://github.com/alwinpaul1/clippy', k:'link', d:'Mac'},
+      {t:'Your sign-in code is 482913', k:'code', d:'Android'},
+      {t:'hello@example.com', k:'email', d:'Windows'},
+      {t:'Meet at track 7, 18:40', k:'text', d:'Mac'},
+      {t:'https://maps.example.com/hauptbahnhof', k:'link', d:'Android'}
+    ];
+    var KINDS = {code:['otp','code','codes'], link:['link','links','url'], email:['email','mail']};
+    var LABEL = {text:'Text', link:'Link', code:'Code', email:'Email'};
+    var q = document.getElementById('q'), list = document.getElementById('results'), count = document.getElementById('resultCount');
+
+    function lev(a, b){
+      var m = a.length, n = b.length, prev = [], cur, i, j;
+      for(j=0;j<=n;j++) prev[j] = j;
+      for(i=1;i<=m;i++){
+        cur = [i];
+        for(j=1;j<=n;j++) cur[j] = Math.min(prev[j]+1, cur[j-1]+1, prev[j-1] + (a[i-1]===b[j-1]?0:1));
+        prev = cur;
+      }
+      return prev[n];
+    }
+    function words(s){ return s.toLowerCase().split(/[^a-z0-9äöüß]+/).filter(Boolean); }
+    // Score one query token against a clip; returns [score, matched word] or null.
+    function hit(tok, clip){
+      if(KINDS[clip.k] && KINDS[clip.k].indexOf(tok) >= 0) return [3, null];
+      var best = null, ws = words(clip.t);
+      for(var i=0;i<ws.length;i++){
+        var w = ws[i], s = 0;
+        if(w === tok) s = 4;
+        else if(w.indexOf(tok) === 0) s = 3;
+        else if(tok.length >= 3 && w.indexOf(tok) > 0) s = 2;
+        else {
+          var tol = tok.length >= 7 ? 2 : tok.length >= 4 ? 1 : 0;
+          if(tol && lev(tok, w) <= tol) s = 1.5;
+        }
+        if(s && (!best || s > best[0])) best = [s, w];
+      }
+      return best;
+    }
+    function render(){
+      var toks = words(q.value);
+      var rows = [];
+      CLIPS.forEach(function(c){
+        if(!toks.length){ rows.push({c:c, s:0, w:[]}); return; }
+        var total = 0, ws = [];
+        for(var i=0;i<toks.length;i++){ var h = hit(toks[i], c); if(!h) return; total += h[0]; if(h[1]) ws.push(h[1]); }
+        rows.push({c:c, s:total, w:ws});
+      });
+      rows.sort(function(a,b){ return b.s - a.s; });
+      rows = rows.slice(0, 4);
+      list.textContent = '';
+      if(!rows.length){
+        var li = document.createElement('li'); li.className = 'empty';
+        li.textContent = 'No sample clip matches that.';
+        list.appendChild(li);
+      }
+      rows.forEach(function(r, n){
+        var li = document.createElement('li'); li.style.setProperty('--i', n);
+        var t = document.createElement('span'); t.className = 't'; t.translate = false;
+        // Highlight matched words without ever treating input as HTML.
+        var parts = r.c.t.split(/([^A-Za-z0-9äöüßÄÖÜ]+)/);
+        parts.forEach(function(p){
+          if(p && r.w.indexOf(p.toLowerCase()) >= 0){ var m = document.createElement('mark'); m.textContent = p; t.appendChild(m); }
+          else t.appendChild(document.createTextNode(p));
+        });
+        var k = document.createElement('span'); k.className = 'k'; k.textContent = LABEL[r.c.k];
+        var dv = document.createElement('span'); dv.className = 'dv'; dv.textContent = ' · ' + r.c.d; k.appendChild(dv);
+        li.appendChild(t); li.appendChild(k); list.appendChild(li);
+      });
+      count.textContent = toks.length ? (rows.length === 1 ? '1 clip.' : rows.length + ' clips.') : '';
+    }
+    q.addEventListener('input', render);
+    Array.prototype.forEach.call(document.querySelectorAll('[data-q]'), function(b){
+      b.addEventListener('click', function(){ q.value = b.getAttribute('data-q'); render(); q.focus(); });
+    });
+    render();
+  })();
+
+  // One-tap code copy: really writes 482913 to the clipboard.
+  (function(){
+    var btn = document.getElementById('otpBtn'), status = document.getElementById('otpStatus'), t = null;
+    function done(ok){
+      status.textContent = ok ? 'Copied 482913 to your clipboard.' : 'Could not copy. Select the code in the message instead.';
+      if(!ok) return;
+      btn.classList.add('done'); clearTimeout(t);
+      t = setTimeout(function(){ btn.classList.remove('done'); }, 1600);
+    }
+    btn.addEventListener('click', function(){
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText('482913').then(function(){ done(true); }, function(){ done(false); });
+      } else done(false);
+    });
+  })();
+
+  // Loops (pairing wire, sensitive countdown) run only while on screen.
+  (function(){
+    var els = document.querySelectorAll('[data-live]');
+    if(!('IntersectionObserver' in window)){ Array.prototype.forEach.call(els, function(e){ e.classList.add('is-live'); }); return; }
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){ en.target.classList.toggle('is-live', en.isIntersecting); });
+    });
+    Array.prototype.forEach.call(els, function(e){ io.observe(e); });
+  })();
+  (function(){
+    if(reduce) return;
+    var tile = document.getElementById('sensTile'), el = document.getElementById('clock'), left = 299;
+    setInterval(function(){
+      if(document.hidden || !tile.classList.contains('is-live')) return;
+      left = left > 0 ? left - 1 : 299;
+      el.textContent = Math.floor(left / 60) + ':' + ('0' + left % 60).slice(-2);
+    }, 1000);
+  })();
+
+  // Magnetic hero button: a few pixels of pull toward the pointer, only with a
+  // real mouse and full motion.
+  (function(){
+    if(reduce || !finePointer) return;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-magnetic]'), function(el){
+      var r = null;
+      el.addEventListener('pointerenter', function(){ r = el.getBoundingClientRect(); });
+      el.addEventListener('pointermove', function(e){
+        if(!r) return;
+        var x = (e.clientX - (r.left + r.width / 2)) / r.width, y = (e.clientY - (r.top + r.height / 2)) / r.height;
+        el.style.translate = (x * 10).toFixed(1) + 'px ' + (y * 8).toFixed(1) + 'px';
+      });
+      el.addEventListener('pointerleave', function(){ r = null; el.style.translate = ''; });
+    });
+  })();
+
+  // Theme toggle: an explicit choice beats the system setting, remembered
+  // per browser (best effort). The new theme wipes out from the button.
+  (function(){
+    var root = document.documentElement, btn = document.getElementById('themeBtn');
+    var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+    function current(){ return root.getAttribute('data-theme') || (mq && mq.matches ? 'dark' : 'light'); }
+    function label(){ btn.setAttribute('aria-label', current()==='dark' ? 'Switch to light theme' : 'Switch to dark theme'); }
+    label();
+    if(mq && mq.addEventListener) mq.addEventListener('change', label);
+    btn.addEventListener('click', function(){
+      var next = current()==='dark' ? 'light' : 'dark';
+      function apply(){
+        root.setAttribute('data-theme', next);
+        try{ localStorage.setItem('clippy.theme', next); }catch(e){}
+        label();
+      }
+      if(reduce || !document.startViewTransition){ apply(); return; }
+      var r = btn.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      var rad = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+      var vt = document.startViewTransition(apply);
+      vt.ready.then(function(){
+        root.animate(
+          {clipPath:['circle(0px at '+x+'px '+y+'px)', 'circle('+rad+'px at '+x+'px '+y+'px)']},
+          {duration:420, easing:'cubic-bezier(.16,1,.3,1)', pseudoElement:'::view-transition-new(root)'}
+        );
+      }).catch(function(){});
+    });
+  })();
+
+  // Scroll: nav hairline, hide on the way down and return on the way up, and a
+  // little parallax on the phone in the hero shot. One rAF per frame.
+  (function(){
+    var nav = document.getElementById('nav'), shot = document.getElementById('shot'), phone = document.getElementById('shotPhone');
+    var lastY = window.scrollY, ticking = false;
+    function frame(){
+      ticking = false;
+      var y = window.scrollY;
+      nav.classList.toggle('scrolled', y > 8);
+      if(!reduce){
+        if(Math.abs(y - lastY) > 6){
+          nav.classList.toggle('hidden', y > lastY && y > 160 && !nav.contains(document.activeElement));
+          lastY = y;
+        }
+        var r = shot.getBoundingClientRect();
+        if(r.bottom > 0 && r.top < innerHeight){
+          var p = Math.max(-1, Math.min(1, (r.top + r.height / 2 - innerHeight / 2) / innerHeight));
+          phone.style.transform = 'translateY(' + (p * 32).toFixed(1) + 'px)';
+        }
+      }
+    }
+    frame();
+    window.addEventListener('scroll', function(){ if(!ticking){ ticking = true; requestAnimationFrame(frame); } }, {passive:true});
+    nav.addEventListener('focusin', function(){ nav.classList.remove('hidden'); });
+  })();
+
+  // Scroll reveal.
+  (function(){
+    var els = document.querySelectorAll('.reveal');
+    if(!('IntersectionObserver' in window)){
+      Array.prototype.forEach.call(els, function(e){ e.classList.add('in'); });
+      return;
+    }
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){ if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target); } });
+    }, {rootMargin:'0px 0px -8% 0px'});
+    Array.prototype.forEach.call(els, function(e){ io.observe(e); });
+  })();
 </script>
 </body>
 </html>
