@@ -240,15 +240,24 @@ Future<bool?> confirmDestructive(
   );
 }
 
-/// Relative age for meta lines: "now", "4 min", "2 h", then a clock time.
-String relativeAge(DateTime t) {
-  final d = DateTime.now().difference(t);
+/// Relative age for meta lines: "now", "4 min", "2 h", then "Yesterday", a
+/// weekday within the week, and a date after that. A bare clock time on an
+/// old clip (a pinned one from last month) read as "today at 4:04 PM".
+String relativeAge(DateTime t, {DateTime? now}) {
+  final n = now ?? DateTime.now();
+  final d = n.difference(t);
   if (d.inMinutes < 1) return 'now';
   if (d.inMinutes < 60) return '${d.inMinutes} min';
   if (d.inHours < 24) return '${d.inHours} h';
-  final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
-  final m = t.minute.toString().padLeft(2, '0');
-  return '$h:$m ${t.hour < 12 ? 'AM' : 'PM'}';
+  final days = DateTime(n.year, n.month, n.day)
+      .difference(DateTime(t.year, t.month, t.day))
+      .inDays;
+  if (days <= 1) return 'Yesterday';
+  const wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  if (days < 7) return wd[t.weekday - 1];
+  const mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  final date = '${mo[t.month - 1]} ${t.day}';
+  return t.year == n.year ? date : '$date, ${t.year}';
 }
 
 /// Back button + title, for pushed pages. macOS gets extra top room so the

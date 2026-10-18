@@ -258,7 +258,8 @@ class _BackgroundSyncHandler extends TaskHandler {
       _sweeper = SensitiveSweeper(
         clips: () => [
           for (final i in _textHistory)
-            (hash: i.hash, text: i.text, isImage: false, timestamp: i.timestamp)
+            if (!i.pinned)
+              (hash: i.hash, text: i.text, isImage: false, timestamp: i.timestamp)
         ],
         delete: store.deleteHashes,
         clearClipboard: (t) async => NativeClipWriter.clearIfCurrent(t),

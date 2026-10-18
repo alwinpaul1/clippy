@@ -125,6 +125,8 @@ class _HomeBodyState extends State<_HomeBody> {
   final Set<String> _selected = {};
   bool _selecting = false;
   _Filter _filter = _Filter.all;
+  String? _device; // null = every device
+  StreamSubscription<String>? _pinRejected;
   final _search = TextEditingController();
   String _query = '';
   // Ages ("4 min") are computed at build time; without a periodic rebuild they
@@ -140,6 +142,9 @@ class _HomeBodyState extends State<_HomeBody> {
       const Duration(seconds: 30),
       (_) => mounted ? setState(() {}) : null,
     );
+    _pinRejected = _ctl.pinRejected.listen((_) {
+      if (mounted) HomePage.snack(context, 'You can pin up to 25 clips');
+    });
     _search.addListener(() {
       final q = _search.text.trim().toLowerCase();
       if (q != _query) setState(() => _query = q);
@@ -149,6 +154,7 @@ class _HomeBodyState extends State<_HomeBody> {
   @override
   void dispose() {
     _agesTicker?.cancel();
+    _pinRejected?.cancel();
     _search.dispose();
     super.dispose();
   }
@@ -195,6 +201,7 @@ class _HomeBodyState extends State<_HomeBody> {
             item: item,
             onCopy: () => _copy(item),
             onDelete: () => _deleteOne(item),
+            onTogglePin: () => _togglePin(item),
           ),
         ),
       );
@@ -207,6 +214,7 @@ class _HomeBodyState extends State<_HomeBody> {
           item: item,
           onCopy: () => _copy(item),
           onDelete: () => _deleteOne(item),
+          onTogglePin: () => _togglePin(item),
           signals: _ctl.signalsOf(item),
           sensitiveLeft: _ctl.sensitiveLeft(item),
           onCopyText: _copyText,
@@ -244,8 +252,8 @@ class _HomeBodyState extends State<_HomeBody> {
       context,
       title: 'Clear all clips?',
       body:
-          'This removes every clip from all your devices. Anything not saved '
-          'elsewhere is gone for good.',
+          'This removes every clip from all your devices, except pinned ones. '
+          'Anything not saved elsewhere is gone for good.',
       action: 'Clear all',
     );
     if (ok == true) {
@@ -255,6 +263,7 @@ class _HomeBodyState extends State<_HomeBody> {
   }
 
   bool _kindOk(HistoryItem i) {
+    if (_device != null && i.device.trim() != _device) return false;
     final kind = clipKindOf(i);
     return switch (_filter) {
       _Filter.all => true,
@@ -289,6 +298,25 @@ class _HomeBodyState extends State<_HomeBody> {
     return [for (final e in scored) e.$1];
   }
 
+  Future<void> _togglePin(HistoryItem item) async {
+    Haptics.tick();
+    await _ctl.setPinned(item, !item.pinned);
+    if (mounted) {
+      HomePage.snack(context, item.pinned ? 'Unpinned' : 'Pinned to the top');
+    }
+  }
+
+  /// Pin every selected clip, or unpin them all when every one is pinned.
+  Future<void> _pinSelected(List<HistoryItem> all) async {
+    final chosen = all.where((i) => _selected.contains(i.hash)).toList();
+    final pin = !chosen.every((i) => i.pinned);
+    Haptics.tick();
+    for (final i in chosen) {
+      if (i.pinned != pin) await _ctl.setPinned(i, pin);
+    }
+    _exitSelection();
+  }
+
   Future<void> _copyText(String text, String what) async {
     await _ctl.copyText(text);
     if (mounted) HomePage.snack(context, what);
@@ -306,6 +334,13 @@ class _HomeBodyState extends State<_HomeBody> {
     final live = all.map((i) => i.hash).toSet();
     _selected.retainAll(live);
     if (_selecting && _selected.isEmpty && all.isEmpty) _selecting = false;
+    // Devices that sent a clip, most recent first, for the device chips.
+    final sources = <String>[];
+    for (final i in all) {
+      final d = i.device.trim();
+      if (d.isNotEmpty && !sources.contains(d)) sources.add(d);
+    }
+    if (_device != null && !sources.contains(_device)) _device = null;
     final shown = _visible(all);
     final devices = {
       for (final i in all)
@@ -331,6 +366,12 @@ class _HomeBodyState extends State<_HomeBody> {
                         onClose: _exitSelection,
                         onSelectAll: () => _selectAll(shown),
                         onDelete: () => _deleteSelected(all),
+                        allPinned:
+                            _selected.isNotEmpty &&
+                            all
+                                .where((i) => _selected.contains(i.hash))
+                                .every((i) => i.pinned),
+                        onPin: () => _pinSelected(all),
                       )
                     : _Header(
                         key: const ValueKey('header'),
@@ -349,6 +390,9 @@ class _HomeBodyState extends State<_HomeBody> {
                   filter: _filter,
                   onFilter: (f) => setState(() => _filter = f),
                   onClearAll: _clearAll,
+                  devices: sources,
+                  device: _device,
+                  onDevice: (d) => setState(() => _device = d),
                 ),
               ),
             Expanded(
@@ -502,7 +546,15 @@ class _Toolbar extends StatelessWidget {
   final _Filter filter;
   final ValueChanged<_Filter> onFilter;
   final VoidCallback onClearAll;
+
+  /// Devices that sent a clip, newest first; the chips show only for 2+.
+  final List<String> devices;
+  final String? device;
+  final ValueChanged<String?> onDevice;
   const _Toolbar({
+    required this.devices,
+    required this.device,
+    required this.onDevice,
     required this.search,
     required this.filter,
     required this.onFilter,
@@ -595,7 +647,83 @@ class _Toolbar extends StatelessWidget {
               ),
             ],
           ),
+          if (devices.length >= 2) ...[
+            const SizedBox(height: 8),
+            _DeviceChips(devices: devices, value: device, onChanged: onDevice),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+/// One device's clips at a time: "All devices", then every device that sent
+/// something, newest first. Lighter than the kind filter above it (outlined,
+/// not filled) so the two rows read as filter + refinement, not two equal
+/// toggles. 36dp chips with 48dp hit areas.
+class _DeviceChips extends StatelessWidget {
+  final List<String> devices;
+  final String? value;
+  final ValueChanged<String?> onChanged;
+  const _DeviceChips({
+    required this.devices,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ck;
+    final scheme = Theme.of(context).colorScheme;
+    Widget chip(String? d) {
+      final on = d == value;
+      final glyph = d == null
+          ? Icons.devices_rounded
+          : (deviceGlyph(d) ?? Icons.devices_other_rounded);
+      // Center: a horizontal ListView forces its 48dp height onto children,
+      // which would draw a 36dp chip 48 tall.
+      return Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: Center(child: TextButton.icon(
+          onPressed: () {
+            Haptics.tick();
+            onChanged(on && d != null ? null : d);
+          },
+          icon: Icon(
+            glyph,
+            size: 15,
+            color: on ? c.ink : (d == null ? c.muted2 : deviceTint(scheme, d)),
+          ),
+          label: Text(
+            d ?? 'All devices',
+            style: Ct.body(
+              13,
+              weight: FontWeight.w600,
+              color: on ? c.ink : c.muted2,
+            ),
+          ),
+          style: TextButton.styleFrom(
+            backgroundColor: on ? c.surface : Colors.transparent,
+            shape: StadiumBorder(
+              side: BorderSide(
+                color: on ? c.ink : c.border,
+                width: on ? 1.2 : 1,
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            minimumSize: const Size(0, 36),
+            tapTargetSize: MaterialTapTargetSize.padded,
+            visualDensity: VisualDensity.compact,
+          ),
+        )),
+      );
+    }
+
+    return SizedBox(
+      height: 48,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [chip(null), for (final d in devices) chip(d)],
       ),
     );
   }
@@ -609,8 +737,14 @@ class _SelectionBar extends StatelessWidget {
   final VoidCallback onClose;
   final VoidCallback onSelectAll;
   final VoidCallback onDelete;
+  final VoidCallback onPin;
+
+  /// Every selected clip is already pinned, so the action unpins.
+  final bool allPinned;
   const _SelectionBar({
     super.key,
+    required this.onPin,
+    required this.allPinned,
     required this.count,
     required this.topPad,
     required this.onClose,
@@ -666,6 +800,15 @@ class _SelectionBar extends StatelessWidget {
                 size: ClipIcons.nav,
               ),
               onPressed: onSelectAll,
+            ),
+            IconButton(
+              tooltip: allPinned ? 'Unpin selected' : 'Pin selected',
+              icon: Icon(
+                allPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                color: fg,
+                size: ClipIcons.nav,
+              ),
+              onPressed: count == 0 ? null : onPin,
             ),
             IconButton(
               tooltip: 'Delete selected',
@@ -734,9 +877,15 @@ class _Feed extends StatelessWidget {
   Widget build(BuildContext context) {
     final rows = <Widget>[];
     String? current;
-    for (final item in items) {
+    // Pinned first (newest pin-holder on top), then the day buckets.
+    final ordered = ranked
+        ? items
+        : [...items.where((i) => i.pinned), ...items.where((i) => !i.pinned)];
+    for (final item in ordered) {
       final b = ranked
           ? '${items.length} ${items.length == 1 ? 'match' : 'matches'}'
+          : item.pinned
+          ? 'Pinned'
           : _bucket(item.timestamp);
       if (b != current) {
         rows.add(
@@ -870,6 +1019,16 @@ class _ClipRow extends StatelessWidget {
                   style: Ct.meta(color: c.muted),
                 ),
               ),
+              if (item.pinned)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Icon(
+                    Icons.push_pin_rounded,
+                    size: 15,
+                    color: c.muted2,
+                    semanticLabel: 'Pinned',
+                  ),
+                ),
               if (selecting)
                 Padding(
                   padding: const EdgeInsets.all(6),

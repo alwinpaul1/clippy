@@ -188,9 +188,12 @@ class ClipController extends ChangeNotifier
     _store = WebSocketClipStore.connect(Uri.parse(relayUrl), roomToken);
     sensitiveTtl = await SensitiveTtl.read();
     _sweeper = SensitiveSweeper(
+      // Pinned clips are the user's explicit "keep this": never auto-cleared,
+      // even a card number.
       clips: () => [
         for (final i in history)
-          (hash: i.hash, text: i.text, isImage: i.isImage, timestamp: i.timestamp)
+          if (!i.pinned)
+            (hash: i.hash, text: i.text, isImage: i.isImage, timestamp: i.timestamp)
       ],
       delete: (hashes) async => _store?.deleteHashes(hashes),
       clearClipboard: SensitiveClipboard.clearIfCurrent,
@@ -215,6 +218,7 @@ class ClipController extends ChangeNotifier
                 'device': c.device,
                 'kind': c.kind,
                 'mime': c.mime,
+                if (c.pinned) 'pinned': true,
                 'ts': c.timestamp.toUtc().toIso8601String(),
               })
           .toList();
@@ -575,7 +579,16 @@ class ClipController extends ChangeNotifier
     await _store?.deleteHashes(items.map((i) => i.hash));
   }
 
-  /// Clear the whole synced history for every device.
+  /// Pin or unpin for every device. Returns at once; the relay may refuse a
+  /// pin past its cap, which arrives on [pinRejected].
+  Future<void> setPinned(HistoryItem item, bool pinned) async {
+    if (_disposed) return;
+    await _store?.setPinned(item.hash, pinned);
+  }
+
+  Stream<String> get pinRejected => _store?.pinRejected ?? const Stream.empty();
+
+  /// Clear the whole synced history for every device (pinned clips stay).
   Future<void> clearAll() async {
     if (_disposed) return;
     await _store?.clearAll();

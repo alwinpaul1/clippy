@@ -2,13 +2,16 @@
   "version": "1.8.0",
   "notes": {
     "features": [
+      "Pin clips: pinned clips stay at the top on every device, are never pushed out by new clips, and survive Clear all.",
+      "Filter by device: pills under the search bar show only the clips from one device.",
       "Card numbers and IBANs are blurred and removed from all your devices, and from the clipboard, after 5 minutes. You can pick 1, 5 or 15 minutes in Settings.",
       "One-time codes get a \"Copy\" button that copies just the code.",
       "Links, phone numbers, email addresses and street addresses get one-tap Open, Call, Email and Map buttons.",
       "Smarter search: the best matches come first, small typos are forgiven, and you can search \"code\", \"card\", \"phone\" or \"link\" to find that kind of clip."
     ],
     "improvements": [
-      "On Android 13 and later, sensitive clips are hidden in the system's own clipboard preview."
+      "On Android 13 and later, sensitive clips are hidden in the system's own clipboard preview.",
+      "Older clips show the day or date they were copied (\"Yesterday\", \"Mon\", \"Oct 9\") instead of just a time."
     ],
     "fixes": []
   }

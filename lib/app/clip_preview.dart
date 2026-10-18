@@ -58,6 +58,7 @@ class TextClipPreview extends StatefulWidget {
   final HistoryItem item;
   final VoidCallback onCopy;
   final VoidCallback onDelete;
+  final VoidCallback onTogglePin;
   final List<ClipSignal> signals;
   final Duration? sensitiveLeft;
   final void Function(String text, String what) onCopyText;
@@ -67,6 +68,7 @@ class TextClipPreview extends StatefulWidget {
     required this.item,
     required this.onCopy,
     required this.onDelete,
+    required this.onTogglePin,
     this.signals = const [],
     this.sensitiveLeft,
     required this.onCopyText,
@@ -172,6 +174,16 @@ class _TextClipPreviewState extends State<TextClipPreview> {
               ),
               const SizedBox(width: 10),
               RoundIconButton(
+                icon: item.pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                tooltip: item.pinned ? 'Unpin' : 'Pin to the top',
+                fill: Theme.of(context).colorScheme.surfaceContainerLow,
+                onTap: () {
+                  Navigator.pop(context);
+                  widget.onTogglePin();
+                },
+              ),
+              const SizedBox(width: 10),
+              RoundIconButton(
                 icon: Icons.delete_outline_rounded,
                 tooltip: 'Delete clip',
                 color: c.rust,
@@ -196,11 +208,13 @@ class ImageClipPreview extends StatelessWidget {
   final HistoryItem item;
   final VoidCallback onCopy;
   final VoidCallback onDelete;
+  final VoidCallback onTogglePin;
   const ImageClipPreview({
     super.key,
     required this.item,
     required this.onCopy,
     required this.onDelete,
+    required this.onTogglePin,
   });
 
   @override
@@ -275,6 +289,17 @@ class ImageClipPreview extends StatelessWidget {
                       icon: const Icon(Icons.copy_rounded, size: ClipIcons.inline),
                       label: const Text('Copy image'),
                     ),
+                  ),
+                  const SizedBox(width: 10),
+                  RoundIconButton(
+                    icon: item.pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                    tooltip: item.pinned ? 'Unpin' : 'Pin to the top',
+                    color: fg,
+                    fill: fg.withValues(alpha: 0.12),
+                    onTap: () {
+                      Navigator.pop(context);
+                      onTogglePin();
+                    },
                   ),
                   const SizedBox(width: 10),
                   RoundIconButton(

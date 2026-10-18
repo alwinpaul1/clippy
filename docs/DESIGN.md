@@ -187,6 +187,17 @@ must not change colour after a Dart upgrade.
   min, default 5, in Settings).
 
   `LinkOpener` opens only http(s), tel and mailto. Clip text is untrusted.
+- **Pins**: a pinned clip sits in a "Pinned" group above Today. The relay
+  stores the flag and never evicts a pinned clip to make room (pins are
+  outside the 25-clip cap; up to 25 pins), and a Clear all keeps it. Only an
+  explicit delete or an unpin removes one. Pinned clips are also exempt from
+  sensitive auto-clear, because a pin is the user's explicit "keep this".
+  You can pin from the preview's pin button or from the selection bar.
+- **Device filter**: outlined chips under the kind filter: "All devices",
+  then every device that sent a clip, most recent first. They show only when
+  2 or more devices have sent clips. They are lighter than the ink kind
+  pills, so the two rows read as a filter plus a refinement, not two equal
+  toggles.
 - **Search** (`core/search/clip_search.dart`) is ranked, not just filtered.
   - Every word must match.
   - Match quality ranks: whole word > word start > fragment > one typo (two

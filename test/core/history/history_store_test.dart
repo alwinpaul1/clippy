@@ -148,4 +148,24 @@ void main() {
     expect(counting.opens, 1);
     expect(items.single.source, 'devY');
   });
+
+  test('pinned clips do not count toward the cap and are never cut', () async {
+    final store = HistoryStore(crypto: crypto, writer: writer, capacity: 2);
+    final pinned = RemoteClip(
+      ciphertext: 'enc:keep',
+      iv: 'iv',
+      hash: 'h:keep',
+      source: 'x',
+      timestamp: base.subtract(const Duration(days: 30)),
+      pinned: true,
+    );
+    final items = await store.project([
+      pinned,
+      clip('n1', agoSeconds: 1),
+      clip('n2', agoSeconds: 2),
+      clip('n3', agoSeconds: 3),
+    ]);
+    expect(items.map((i) => i.text), ['n1', 'n2', 'keep']);
+    expect(items.last.pinned, isTrue);
+  });
 }

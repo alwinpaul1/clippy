@@ -53,8 +53,7 @@ class DevicesPage extends StatelessWidget {
                                 for (final d in others)
                                   _DeviceRow(
                                     name: d.name,
-                                    detail: 'Last clip ${relativeAge(d.last)}'
-                                        '${relativeAge(d.last) == 'now' ? '' : ' ago'}'
+                                    detail: 'Last clip ${_ago(d.last)}'
                                         ' · ${d.count} ${d.count == 1 ? 'clip' : 'clips'}',
                                   ),
                               ],
@@ -91,6 +90,13 @@ class DevicesPage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// "now", "4 min ago", "2 h ago", then "Yesterday" / "Mon" / "Oct 9" as
+  /// they are: "Mon ago" is not English.
+  static String _ago(DateTime t) {
+    final a = relativeAge(t);
+    return (a.endsWith(' min') || a.endsWith(' h')) ? '$a ago' : a;
   }
 
   static List<({String name, DateTime last, int count})> _othersFrom(
