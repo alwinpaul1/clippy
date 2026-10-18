@@ -124,7 +124,8 @@ void Classify(const imaging::BitmapDecoder& decoder, Done& done) {
   transform.ScaledWidth(kSide);
   transform.ScaledHeight(kSide);
   transform.InterpolationMode(imaging::BitmapInterpolationMode::Linear);
-  imaging::SoftwareBitmap small =
+  // Not "small": <rpcndr.h> defines it as a macro for char.
+  imaging::SoftwareBitmap scaled =
       decoder
           .GetSoftwareBitmapAsync(imaging::BitmapPixelFormat::Bgra8,
                                   imaging::BitmapAlphaMode::Ignore, transform,
@@ -134,7 +135,7 @@ void Classify(const imaging::BitmapDecoder& decoder, Done& done) {
                                       DoNotColorManage)
           .get();
   streams::Buffer buffer(kSide * kSide * 4);
-  small.CopyToBuffer(buffer);
+  scaled.CopyToBuffer(buffer);
   const uint8_t* px = buffer.data();
 
   // NCHW, RGB, ImageNet mean/std: what MobileNetV2 was trained on.
