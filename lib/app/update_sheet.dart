@@ -5,9 +5,23 @@ import '../platform/updater/platform_updater.dart';
 import 'theme.dart';
 import 'update_controller.dart';
 
+/// True while the release-notes sheet is up. The floating update card hides
+/// then: it sits above the Navigator, so the sheet cannot cover it, and the
+/// sheet already carries its own Update button.
+final updateSheetOpen = ValueNotifier<bool>(false);
+
 /// The full changelog for [info], with its own Update button. Opened from
 /// the floating update card's "See what's new".
-Future<void> showUpdateSheet(BuildContext context, UpdateInfo info) {
+Future<void> showUpdateSheet(BuildContext context, UpdateInfo info) async {
+  updateSheetOpen.value = true;
+  try {
+    await _showSheet(context, info);
+  } finally {
+    updateSheetOpen.value = false;
+  }
+}
+
+Future<void> _showSheet(BuildContext context, UpdateInfo info) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,

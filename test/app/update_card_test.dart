@@ -1,6 +1,7 @@
 import 'package:clippy/app/theme.dart';
 import 'package:clippy/app/update_card.dart';
 import 'package:clippy/app/update_controller.dart';
+import 'package:clippy/app/update_sheet.dart';
 import 'package:clippy/core/update/update_info.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,7 +21,10 @@ void main() {
   }
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
-  tearDown(() => updater.available.value = null);
+  tearDown(() {
+    updater.available.value = null;
+    updateSheetOpen.value = false;
+  });
 
   testWidgets('the card shows on ANY screen, not only home', (t) async {
     await t.pumpWidget(app(const Scaffold(body: Text('some other page'))));
@@ -41,6 +45,11 @@ void main() {
     await t.tap(find.text("See what's new"));
     await t.pumpAndSettle();
     expect(find.text('New in 9.9.9'), findsOneWidget);
+    // Only the sheet: the card hides behind it, and comes back on close.
+    expect(find.text('Update available'), findsNothing);
+    Navigator.of(t.element(find.text('New in 9.9.9'))).pop();
+    await t.pumpAndSettle();
+    expect(find.text('Update available'), findsOneWidget);
   });
 
   testWidgets('dismissing remembers the version', (t) async {
