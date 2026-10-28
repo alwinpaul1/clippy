@@ -13,9 +13,10 @@ import 'package:window_manager/window_manager.dart';
 /// you can reopen it or quit for real. The clipboard sync lives in the main
 /// isolate, which stays running as long as the process does. No-op off desktop.
 ///
-/// The tray icon bounces and winks like the download-page mascot:
-/// - bob: 5.5s ease-in-out, peak at 45% (translate + slight rotate)
-/// - blink: 4.2s linear, closed eyes around 95% of the cycle
+/// The tray icon bounces and winks like the download-page mascot, but only
+/// briefly when a clip syncs (event-driven, not continuous). At idle the icon
+/// is static — a 90ms timer running 24/7 burned noticeable CPU on a laptop
+/// that also runs other heavy processes.
 class DesktopTray with TrayListener, WindowListener {
   DesktopTray._();
   static final DesktopTray instance = DesktopTray._();
@@ -30,7 +31,10 @@ class DesktopTray with TrayListener, WindowListener {
   static const _blinkMs = 4200;
   static const _tickMs = 90; // ~11 fps; enough for a soft bob without thrashing
 
+  static const _pulseDuration = Duration(seconds: 4);
+
   Timer? _anim;
+  Timer? _pulseStop;
   String? _lastIcon;
   bool _setting = false;
 
@@ -61,8 +65,6 @@ class DesktopTray with TrayListener, WindowListener {
         MenuItem(key: 'quit', label: 'Quit Clippy'),
       ]),
     );
-
-    _startAnim();
   }
 
   Future<void> _show() async {
@@ -119,6 +121,18 @@ class DesktopTray with TrayListener, WindowListener {
   void _stopAnim() {
     _anim?.cancel();
     _anim = null;
+    _pulseStop?.cancel();
+    _pulseStop = null;
+    _setIcon(_framePath(0, closed: false));
+  }
+
+  /// Animate the tray icon briefly (a clip just synced). Restarts the timer
+  /// if already pulsing; returns to the static icon after [_pulseDuration].
+  void pulse() {
+    if (!isDesktop) return;
+    _startAnim();
+    _pulseStop?.cancel();
+    _pulseStop = Timer(_pulseDuration, _stopAnim);
   }
 
   // --- window close -> hide, don't quit ---

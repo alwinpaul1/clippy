@@ -3,10 +3,8 @@
   "notes": {
     "features": [],
     "improvements": [
-      "Settings is shorter: the explanations under Appearance and Background sync are gone, and so is the Sensitive clips note."
+      "Tray icon animates only when a clip syncs, not continuously"
     ],
-    "fixes": [
-      "Opening the release notes no longer leaves the update card floating on top of them."
-    ]
+    "fixes": []
   }
 }

@@ -22,6 +22,7 @@ import '../core/state/prefs_state_store.dart';
 import '../core/sync/sync_action.dart';
 import '../core/sync/sync_engine.dart';
 import '../core/vision/image_index.dart';
+import '../platform/desktop_tray.dart';
 import '../platform/device_name.dart';
 import '../platform/flutter_clipboard_writer.dart';
 import '../platform/foreground_service.dart';
@@ -250,6 +251,7 @@ class ClipController extends ChangeNotifier
       // copied first (a rare edge; copying anything else resets the guard).
     });
     _incomingSub = _store!.incoming.listen((clip) async {
+      DesktopTray.instance.pulse();
       final actions = await _engine!.onRemoteSnapshot(clip);
       for (final a in actions) {
         // Auto-place the latest clip on the system clipboard so it can be
@@ -533,6 +535,7 @@ class ClipController extends ChangeNotifier
     final actions = await engine.onLocalImage(base64Encode(bytes), mime: outMime);
     for (final a in actions) {
       if (a is UploadClip) {
+        DesktopTray.instance.pulse();
         await store.append(a.clip.copyWith(device: _deviceName));
       }
     }
@@ -548,6 +551,7 @@ class ClipController extends ChangeNotifier
     );
     for (final a in actions) {
       if (a is UploadClip) {
+        DesktopTray.instance.pulse();
         await store.append(a.clip.copyWith(device: _deviceName));
       }
     }
